@@ -37,6 +37,11 @@ export default defineConfig({
           { label: 'Tool pages', link: '/tools/' },
           { label: 'SSL Certificate Checker', link: '/tools/ssl-checker/' },
           { label: 'DKIM Record Checker', link: '/tools/dkim-checker/' },
+          { label: 'SPF Checker', link: '/tools/spf-checker/' },
+          { label: 'DMARC Checker & Generator', link: '/tools/dmarc-checker/' },
+          { label: 'MTA-STS & TLS-RPT Checker', link: '/tools/mta-sts-checker/' },
+          { label: 'BIMI Record Checker', link: '/tools/bimi-checker/' },
+          { label: 'Email Header Analyzer', link: '/tools/email-header-analyzer/' },
         ] },
         { label: 'MCP server', items: [
           { label: 'Overview', link: '/mcp/' },

@@ -1,0 +1,200 @@
+---
+title: BIMI Record Checker
+description: How the checker reads a BIMI record, fetches and inspects the logo and the mark certificate, checks the DMARC policy BIMI depends on, every rule it applies, what each finding means for logo display, and how to fix each one.
+updated: 2026-10-19
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and repair guide for the Tamperbox BIMI Record Checker, which reads the default._bimi and _dmarc records through public DNS, fetches the logo and certificate the record names, checks the SVG as text against the Tiny Portable/Secure profile, reads the certificate's logotype extension, validity and names, and requires DMARC enforcement.
+prerequisites:
+  - A domain, or a BIMI record, an SVG logo or a PEM certificate to paste
+outputs:
+  - A verdict with PASS, CHECK and FAIL chips, the logo previewed on light and dark inboxes, the readiness steps, the SVG checks, the certificate as rows, and the findings with their fixes
+limitations:
+  - Full SVG conformance, certificate trust, revocation and logo hash matching are not verified; only the default selector is looked up; each mailbox provider decides whether to show a logo
+---
+
+The tool page is [tamperbox.dev/bimi-checker](https://tamperbox.dev/bimi-checker). It opens on a working example whose logo and certificate are ready while DMARC is still `p=none`, the most common reason a logo does not appear. This page is the long version: what is fetched and how, every rule applied to the record, the logo, the certificate and the DMARC policy, what each finding means, and how to fix each one.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> a domain is sent to the Tamperbox server, which asks public DNS for the <code>default._bimi</code> and <code>_dmarc</code> records and fetches the logo and the certificate the record names. A pasted record, SVG or PEM is read in your browser; the logo is drawn as an image, so nothing in it runs. Nothing is stored.</div>
+
+## What the tool answers
+
+BIMI lets a domain publish a logo that supporting mailbox providers show next to its messages, on top of DMARC enforcement. The tool answers:
+
+1. **Is there a record, and does it point at a logo?** The `default._bimi` TXT record with its `l=` and `a=` tags.
+2. **Does the logo meet the profile?** The SVG as text against the Tiny Portable/Secure rules, with a preview on light and dark inboxes.
+3. **Is there a usable mark certificate?** The PEM's logotype extension, validity window and the domains it names.
+4. **Does DMARC enforce?** Quarantine or reject at 100%, without `sp=none`.
+
+It does not verify certificate trust, revocation or the hash of the embedded logo, and no provider's display decision is predicted.
+
+## Inputs
+
+### A domain
+
+`example.com`. When you stop typing, or on Enter, the server reads the two DNS records, then fetches the logo and the certificate named in the record. When both lookups fail because the lookup service is unavailable, the page reports an error.
+
+### A BIMI record
+
+Paste `v=BIMI1; l=https://…; a=https://…`. Its syntax is checked in the browser; the logo, certificate and DMARC policy are not fetched for a pasted record.
+
+### An SVG logo
+
+Paste the SVG text or drop the `.svg` file. It is checked as text against the profile and previewed as an image. Heal it offers the attribute repairs.
+
+### A PEM certificate
+
+Paste the PEM text or drop the `.pem` or `.crt` file. The first certificate in it is decoded. A pasted certificate is not compared with any domain.
+
+## Reading the result
+
+### Verdict and chips
+
+For a domain, the verdict names the blocker: the DMARC policy when it is the only failure, otherwise the first failure, or "BIMI inspected" when every part passes. For a pasted logo or certificate it says whether the basic checks passed. The chips show the SVG result, the certificate, the DMARC state and the number of findings; each is a button that scrolls to the section that explains it.
+
+### Findings
+
+Everything found, worst first; passes fold into one line. A DMARC finding carries an "Open the DMARC checker" button that hands the domain over. The [finding reference](#finding-reference) lists them all.
+
+### Take it further
+
+Links that carry a derived value into another tool: the TLS certificate of the host that serves the logo, the mark certificate's expiry as a Unix timestamp, and DNSSEC on the zone. Each opens the destination with the value already in its box; nothing is put in the URL.
+
+### History and Heal it
+
+History logs every Break it and Heal it change with what it replaced; Revert undoes the newest, Reset input returns to what you entered. Heal it offers repairs for a pasted SVG: pad the viewBox to a square without stretching the artwork, set the Tiny PS profile attributes, add a title, remove scripts and event handlers.
+
+### Logo preview
+
+The logo drawn as an image on a light and a dark inbox, as a large avatar and in two message rows, so nothing in the SVG runs. The note says whether it is square.
+
+### Basic readiness
+
+The four parts in order, each with its status: the record, the logo, the certificate, DMARC.
+
+### SVG Tiny PS profile
+
+Every profile check with its status and the file's size.
+
+### Mark certificate
+
+The certificate as rows: subject, valid until, logotype extension, the domains it names, and how many certificates the file holds.
+
+## Method
+
+### The record
+
+The server reads TXT records at `default._bimi.<domain>`; other selectors are not looked up. Exactly one must start with `v=BIMI1`, with `v` first; malformed or repeated tags fail. `l=` must be an `https://` URL, otherwise FAIL, "No logo URL". A record without `a=` is CHECK, "No certificate (a=)".
+
+### Fetching the logo and the certificate
+
+The server fetches a URL only if it is exactly the `l=` or `a=` value of the domain's single record. The URL must be HTTPS on the default port without credentials or fragment, the host must resolve to public addresses only, redirects are not followed, the logo must be served as `image/svg+xml`, each file is limited to 256 KiB, and the certificate must contain a PEM `BEGIN CERTIFICATE` block. A failed fetch is FAIL, "Logo not checked" or "Certificate not checked", with the reason.
+
+### SVG Tiny PS checks
+
+The logo is checked as text; nothing is rendered for the checks.
+
+| Check | PASS title | FAIL title |
+| --- | --- | --- |
+| Root `svg` element present | | Not an SVG document |
+| `baseProfile="tiny-ps"` | baseProfile="tiny-ps" | baseProfile is not tiny-ps |
+| `version="1.2"` | version="1.2" | version="…" |
+| A `title` element with text | Has a `<title>` | No `<title>` |
+| Square `viewBox`, width equal to height, over zero | Square viewBox | viewBox is not square |
+| No `x` or `y` on the root | | x or y on `<svg>` |
+| No `script`, `foreignObject`, `image`, animation elements, event attributes, or `href` not starting with `#` | | Contains `<script>`, embedded images, animation, event handlers, external references |
+| At most 32 KiB in UTF-8 | N KiB | N KiB |
+
+### Mark certificate
+
+The first certificate in the PEM is decoded. Checks: the logotype extension (OID 1.3.6.1.5.5.7.1.12) must be present, otherwise FAIL, "No logotype extension"; the validity window: FAIL when expired or not yet valid, CHECK "Valid until …" when under 30 days remain, PASS otherwise; for a domain lookup, the domain must appear exactly among the DNS subject alternative names, otherwise FAIL, "Does not name X". Every inspected certificate also carries CHECK, "Certificate trust not verified": the chain, revocation, mark authorisation and the embedded logo's hash are not checked.
+
+### DMARC enforcement
+
+The exact `_dmarc` name is read, without parent-domain fallback. It needs exactly one `v=DMARC1` record with no syntax failures, and the policy passes only when `p` is `quarantine` or `reject`, `pct` is 100 or absent, and `sp` is not `none`, compared without regard to case. A non-enforcing policy is FAIL, "DMARC p=none blocks the logo", "DMARC pct=25 blocks the logo" or "DMARC sp=none blocks the logo", naming the condition that blocks. Missing, multiple and invalid records are FAIL with their own titles; a failed lookup is CHECK, "DMARC not checked", and never claims enforcement.
+
+## Finding reference
+
+| Finding | Severity | What it means for the logo | Fix |
+| --- | --- | --- | --- |
+| No BIMI record | FAIL | Providers have nothing to fetch | Publish the record |
+| Publish exactly one BIMI record., The version tag must be first., A BIMI record starts with v=BIMI1., Malformed tag: X, X appears twice | FAIL | The record is unreadable | Publish one valid record |
+| No logo URL | FAIL | Nothing to fetch | Set l= to an https:// URL |
+| Logo not checked | FAIL | Providers cannot fetch the logo either | Serve it at the URL, over HTTPS, as image/svg+xml, without redirect |
+| Published resources not checked | CHECK | Only a pasted record was checked | Enter the domain |
+| Not an SVG document, baseProfile is not tiny-ps, version="…", No `<title>`, viewBox is not square, x or y on `<svg>`, Contains …, N KiB (over 32) | FAIL | Providers refuse the logo | Export as SVG Tiny PS; Heal it fixes attributes |
+| Certificate not checked | FAIL | Providers that require a certificate show nothing | Serve the PEM at the URL |
+| No logotype extension | FAIL | Not a mark certificate | Publish a VMC or CMC |
+| Expired …, Not valid until … | FAIL | Providers stop showing the logo | Renew |
+| Does not name X | FAIL | The certificate is for another domain | Request one that names the domain |
+| Certificate validity dates are missing or invalid, No PEM certificate found…, The certificate could not be read. | FAIL | The file is not a readable certificate | Publish the issued PEM |
+| Valid until … (under 30 days) | CHECK | Expires soon | Renew now |
+| Certificate trust not verified | CHECK | Trust, revocation and logo hash are outside this check | Nothing here |
+| No certificate (a=) | CHECK | Some providers require one | Add a mark certificate |
+| DMARC p=…, pct=…, sp=none blocks the logo | FAIL | Providers show logos only on top of enforcement | Enforce DMARC |
+| No DMARC record, Multiple DMARC records, Invalid DMARC record | FAIL | BIMI needs a valid, enforcing record | Fix DMARC first |
+| DMARC not checked | CHECK | The lookup failed | Retry |
+| Nothing to fix | PASS | Every part checked passes | |
+
+## Guide
+
+### The logo does not appear
+
+1. Reach DMARC enforcement first: quarantine or reject at 100%, with `sp` unset or matching. The DMARC checker's path to enforcement writes each step.
+2. Publish the logo as SVG Tiny PS at a stable HTTPS URL, served as `image/svg+xml` without redirects, and the certificate as a PEM at another.
+3. Publish `default._bimi.<domain> TXT "v=BIMI1; l=<logo URL>; a=<certificate URL>"`.
+4. Check the domain here. Every step in Basic readiness should pass; then allow a few days for providers to pick up the change, and remember that each one applies its own rules.
+
+### Exporting the logo
+
+Design tools export SVG 1.1 by default. Export as SVG Tiny 1.2, set `baseProfile="tiny-ps"`, give the artwork a square artboard, add a `title` with the brand name, and remove embedded raster images, scripts and animation. Paste the file here to confirm it passes; Heal it fixes the root attributes, pads the viewBox and adds a placeholder title that you should replace with the brand name.
+
+### The logo or certificate cannot be fetched
+
+Serve each file at exactly the URL in the record, over HTTPS on the default port, without redirects. A CDN that redirects to a versioned asset, an SVG served as `text/plain`, and a certificate URL that returns an HTML error page are the usual causes.
+
+### The certificate
+
+Obtain a Verified Mark Certificate or a Common Mark Certificate from an issuing authority; it carries the logotype extension and names your domain. Put its expiry in a calendar and renew before it.
+
+### Break it cases
+
+Each case is built from the logo or record you pasted or the domain publishes.
+
+| Case | What it does | Heal it offers (pasted SVG) |
+| --- | --- | --- |
+| Not Tiny PS | Removes baseProfile and sets version 1.1 | Set the Tiny PS profile on `<svg>` |
+| Has a script | Inserts a script element | Remove scripts and handlers |
+| Not square | Doubles the viewBox width | Pad the viewBox to a square |
+| No title | Removes the title element | Add a `<title>` |
+| Record without a logo | Empties `l=` in the record | Nothing: set the URL yourself |
+
+## Worked example
+
+The page opens on `harbor-supply.example`, a sample domain on the reserved `.example` zone, answered in the browser so the example costs nothing and never changes. Its record names a square SVG Tiny PS logo and a mark certificate, both of which pass; its DMARC record is `p=none`.
+
+**DMARC p=none blocks the logo: this DMARC policy requirement is not met.** The findings are the DMARC blocker (FAIL, with a button to the DMARC checker) and "Certificate trust not verified" (CHECK). Replace the sample with your own domain and every section, card and link is rewritten for it.
+
+## For agents
+
+The Tamperbox MCP server runs the same checks. Search its catalog for the BIMI operation, inspect the input schema, and call it with the domain. Keep the warning block with any conclusion:
+
+- Certificate trust, revocation and the embedded logo's hash are not verified; the SVG checks are text checks, not schema validation.
+- Only the default selector is looked up; the exact `_dmarc` name is read without inheritance.
+- Each mailbox provider decides whether to show a logo; passing every check does not guarantee display.
+
+See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for the calling pattern, and [Security and privacy](/reference/security/) for where the domain travels.
+
+## Limits
+
+- Text checks of the SVG; no rendering-based validation.
+- Certificate fields only; no chain, revocation or logo hash.
+- Default selector only; exact `_dmarc` name only.
+- One DNS answer and one fetch per file, at one moment.
+- Nothing is stored.
+
+## References
+
+- [BIMI Group implementation guide](https://bimigroup.org/implementation-guide/)
+- [SVG Tiny Portable/Secure profile](https://bimigroup.org/resources/), published by the BIMI Group
+- [RFC 7489, DMARC](https://www.rfc-editor.org/rfc/rfc7489), the enforcement BIMI depends on
+- [DMARC Checker & Generator](/tools/dmarc-checker/), for the path to enforcement

@@ -12,7 +12,7 @@ limitations:
   - One connection from one location at one moment; revocation (OCSP and CRL) is not checked; a pasted chain is read, not verified against any root store
 ---
 
-The tool page is [tamperbox.dev/ssl-checker](https://tamperbox.dev/ssl-checker). It opens on a working example, answers in one sentence, and shows the evidence under it. This page is the long version: what the probe does, every rule it applies, what each finding means, and how to fix and verify each one.
+The tool page is [tamperbox.dev/ssl-checker](https://tamperbox.dev/ssl-checker). It opens by checking `tamperbox.dev` live, answers in one sentence, and shows the evidence under it. This page is the long version: what the probe does, every rule it applies, what each finding means, and how to fix and verify each one.
 
 <div class="tb-callout"><strong>Where processing happens:</strong> a host name is sent to the Tamperbox server, which opens one TLS connection and returns what the server sent. Pasted certificates and openssl output are read in your browser and never uploaded. Nothing is stored.</div>
 
@@ -324,15 +324,14 @@ Heal it after a break offers "Restore input before this break", or "Put the chai
 
 ## Worked example
 
-The page opens on `www.harbor-supply.example`, a sample shop on the reserved `.example` zone, answered in the browser so the example costs nothing and never changes. Checked on 12 October 2026, it shows:
+The page opens on `tamperbox.dev` and runs the same live server-side check used for any host you enter. The certificate, chain, address, negotiated cipher and expiry change over time, so the opening result is deliberately not a frozen fixture. Read it like any other result:
 
-- **Verified by the probe. Renew soon: 22 days left.** The chain verifies, the name matches, and the certificate has 22 of its 90 days left: inside the renewal window, so renewal should already have run.
-- Three certificates on the axis: the shop's ECDSA P-256 certificate, the Harbor Sample CA E2 intermediate (151 days left), and the Harbor Sample Root X1 marked Not needed.
-- Two names covered; `www.harbor-supply.example` matches.
-- TLS 1.3, `TLS_AES_128_GCM_SHA256`, X25519 (classical), HTTP/2 over ALPN.
-- Findings: Renew soon (CHECK), Root certificate sent (INFO), and three passes.
+- The verdict reports whether the probe verified the current chain.
+- The certificate axis shows exactly what `tamperbox.dev` served during that connection.
+- The names section marks the DNS name that covers `tamperbox.dev`.
+- The Connection section records the protocol, cipher, key exchange, address and check time observed by the probe.
 
-Replace the sample with your own host in the box on the left and every section, card and link is rewritten for it.
+Replace `tamperbox.dev` with your own host in the box on the left and every section, card and link is rewritten for it. Reserved `harbor-supply.example` fixtures remain in the mail-oriented tools and deliberate Break it cases, where a stable synthetic record or failure is more useful than a live lookup.
 
 ## For agents
 

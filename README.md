@@ -30,6 +30,12 @@ npm run build
 npm run deploy:dry-run
 ```
 
+`npm run build` also runs the generated-site link gate. It checks internal routes and
+fragments, Markdown mirrors, required tool-documentation anchors, and reciprocal
+tool links. When the sibling `toolkit-apps` checkout is present, it also checks the
+website's `site/pages.json` declarations; run `npm run check:links` to repeat the
+gate without rebuilding.
+
 ## Documentation architecture
 
 - MDX pages live in `src/content/docs`.

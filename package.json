@@ -9,7 +9,8 @@
   "scripts": {
     "dev": "ASTRO_TELEMETRY_DISABLED=1 astro dev",
     "dev:worker": "npm run build && wrangler dev --local --port 8787",
-    "build": "ASTRO_TELEMETRY_DISABLED=1 astro build",
+    "build": "ASTRO_TELEMETRY_DISABLED=1 astro build && npm run check:links",
+    "check:links": "node scripts/check-links.mjs",
     "check": "ASTRO_TELEMETRY_DISABLED=1 astro check",
     "preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview",
     "deploy:dry-run": "npm run build && wrangler deploy --env production --dry-run",

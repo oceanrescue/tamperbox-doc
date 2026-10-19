@@ -1,0 +1,194 @@
+---
+title: Email Header Analyzer
+description: How the analyzer turns raw message headers into a route with delays and TLS per hop, reads the receiver's authentication results, compares the From, Return-Path and DKIM domains, every rule it applies, what each finding means, and what to do about it.
+updated: 2026-10-19
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and guide for the Tamperbox Email Header Analyzer, which parses a message's header block in the browser, orders the Received hops oldest first with the delay each server added and whether the hop was encrypted, reads the topmost Authentication-Results header, compares identities for exact alignment, and looks up hop addresses only on request.
+prerequisites:
+  - The raw headers of a message, or an .eml file
+outputs:
+  - A verdict with PASS, CHECK and FAIL chips, the route hop by hop, the authentication results and identities, the message summary, every header, and the findings
+limitations:
+  - Results are what the receiving server recorded, not fresh verification; headers below your own receiver can be forged; alignment is an exact domain match; delays depend on each server's clock
+---
+
+The tool page is [tamperbox.dev/email-header-analyzer](https://tamperbox.dev/email-header-analyzer). It opens on a working example: an order confirmation sent through a mail service, held for 38 seconds at one hop, with SPF passing for the service rather than the brand. This page is the long version: how the header block is read, every rule applied to the route, the authentication results and the identities, what each finding means, and what to do about it.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> the whole header block is parsed in your browser and never uploaded. Only when you choose Look up hop addresses are the public IP addresses of the hops, and nothing else, sent to the Tamperbox server for public DNS and network registry lookups. Nothing is stored.</div>
+
+## What the tool answers
+
+Every server that handles a message adds a Received header on top; the receiving server adds an Authentication-Results header with what it verified. The tool answers:
+
+1. **Which route did the message take, and where did it wait?** The Received hops, oldest first, with delays and TLS.
+2. **Did the sender prove who they are?** SPF, DKIM and DMARC as the receiver recorded them.
+3. **Do the identities line up?** From, Return-Path and the DKIM signing domain compared exactly; Reply-To checked against From.
+4. **Who owns the sending addresses?** On request only, through public DNS and the network registry.
+
+It does not verify any signature; it reads what the receiver wrote.
+
+## Inputs
+
+### Raw headers
+
+Paste the header block of a message: Gmail, open the message, the three-dot menu, "Show original"; Outlook on the web, the three-dot menu, "View message source"; Apple Mail, View, Message, All Headers. Parsing starts as soon as the text changes. Everything after the first blank line is treated as the body and ignored; folded continuation lines are joined back onto their field. Text with no `Name: value` lines is refused with "No headers found".
+
+### An .eml file
+
+Drop the file anywhere on the page, or use Open file, up to 5 MiB. Only the header block is read into the field; the body never reaches the page.
+
+## Reading the result
+
+### Verdict and chips
+
+The verdict leads with what the receiver reports: DMARC passed (through DKIM or SPF when one aligns) or failed for the From domain, raised to a CHECK when Reply-To points elsewhere; without a DMARC result it names the first failure, the Reply-To difference, clock skew, or simply that the route was traced. The detail gives the hop count, the end-to-end time and the longest wait. The chips show each recorded result, the hops with their time, and a Reply-To warning; each is a button that scrolls to the section that explains it.
+
+### Findings
+
+Everything found, worst first; passes fold into one line. An INFO finding always reminds you that these are reported results. The [finding reference](#finding-reference) lists them all.
+
+### Take it further
+
+Links that carry a value derived from the message into another tool: the DKIM key that signed it (selector and domain from the signature), SPF for the bounce domain, the DMARC policy of the From domain, the network behind the first public hop address, and the Date header as a Unix timestamp. Each opens the destination with the value already in its box; nothing is put in the URL.
+
+### History
+
+History logs every Break it change with the headers it replaced; Revert undoes the newest, Reset input returns to what you entered. There are no Heal it repairs: headers are evidence, not something to fix.
+
+### Route
+
+One row per hop, oldest first: the servers it went from and to, the address with its kind (sample, non-public), the protocol, a TLS badge, and the delay the previous server added, drawn as a bar. The longest wait over 30 seconds is marked. Under the route, Look up hop addresses sends the public addresses to the server and writes the network, registry country, AS number and reverse name next to each hop.
+
+### Authentication
+
+The three results as the receiver recorded them, with the identity each one checked, and a table comparing the From domain with the Return-Path domain and every DKIM signing domain.
+
+### Message and every header
+
+The identity fields with what each one means, and the complete header list with a filter.
+
+## Method
+
+### Reading the header block
+
+The text is cut at the first blank line. Lines starting with a space or tab are joined to the field above. A field is `name: value`; with no fields at all, the input is refused.
+
+### Route and timing
+
+Received headers are reversed, so the first hop is the oldest. From each one the tool takes the `from`, `by` and `with` clauses, the timestamp after the last semicolon, and an address: the first IPv4 address in the `from` clause, else a bracketed IPv6 address there, else any IPv4 address in the header. An address outside public ranges is labelled non-public. A hop's delay is its timestamp minus the previous hop's: how long the earlier server held the message.
+
+| Rule | Severity | Title |
+| --- | --- | --- |
+| The longest delay exceeds 30 seconds | CHECK | N s at server (the server that held the message) |
+| A hop is stamped more than 2 seconds before the hop before it | INFO | Clock skew at hop N |
+| A hop has a `from` clause, no TLS marker, and a public address | CHECK | No TLS into server |
+
+A hop counts as encrypted when its header mentions `ESMTPS`, `ESMTPSA`, `TLS` or `version=TLS`. The end-to-end time runs from the oldest stamp to the newest.
+
+### Authentication results
+
+The topmost `Authentication-Results` header is read, or `ARC-Authentication-Results` when there is none: the reporting server, then every `method=result` entry with its properties (`smtp.mailfrom`, `header.i`, `header.d`, `header.s`, `header.from`). When a method appears more than once, a passing entry is preferred.
+
+| Rule | Severity | Title |
+| --- | --- | --- |
+| Always | INFO | Reported results, not independent verification |
+| No Authentication-Results header | INFO | No Authentication-Results header |
+| DMARC pass | PASS | DMARC passed |
+| DMARC any other result | FAIL | DMARC result |
+| SPF pass for a Return-Path domain that is not the From domain | INFO | SPF passed but is not aligned |
+| SPF other than pass or none | FAIL | SPF result |
+| DKIM none | CHECK | DKIM none |
+| DKIM other than pass or none | FAIL | DKIM result |
+
+### Alignment and reply identity
+
+Alignment is an exact domain match; no public suffix list is used, so relaxed alignment is not evaluated. The Return-Path domain is compared with the From domain, and every `d=` of a DKIM-Signature header is compared with From. A DMARC pass is attributed to DKIM or SPF only when one of them matches exactly; a DKIM domain that is a parent or subdomain of From is labelled as a domain relationship.
+
+A Reply-To domain that is neither the From domain nor one of its subdomains is CHECK, "Replies go to X". With a DMARC pass, the verdict keeps the pass and is raised to a CHECK.
+
+### Hop address lookup
+
+Nothing leaves the browser until you choose Look up hop addresses. Then up to 50 unique public addresses are sent to the server, three at a time, which returns the autonomous system, organisation and registry country from the network registry and the reverse name from public DNS. Documentation ranges are answered on the page without a request. Partial answers are counted and can be retried.
+
+## Finding reference
+
+| Finding | Severity | What it means | What to do |
+| --- | --- | --- | --- |
+| Reported results, not independent verification | INFO | The receiver's word, not a re-check | Confirm the reporting server is yours |
+| No Authentication-Results header | INFO | Nothing was recorded, or the headers came from the sender's side | Copy from the received message |
+| DMARC passed | PASS | The From domain was proven by aligned SPF or DKIM | |
+| DMARC fail (or other) | FAIL | The From domain was not proven | Treat as unverified; if yours, fix SPF or DKIM alignment |
+| SPF passed but is not aligned | INFO | Normal for a mail service; DMARC relies on DKIM | Nothing |
+| SPF softfail, fail, neutral, temperror, permerror | FAIL | The sending server is not in the bounce domain's SPF record | Add it, if the message is yours |
+| DKIM none | CHECK | The message was not signed | Sign outgoing mail |
+| DKIM fail (or other) | FAIL | The signature did not verify | Check the key; look for a forwarder that altered the message |
+| Replies go to X | CHECK | Answers leave the From domain | Verify the sender before replying |
+| N s at server | CHECK | The longest wait on the route | Nothing, unless it repeats |
+| Clock skew at hop N | INFO | Server clocks disagree | Fix the clock if the server is yours |
+| No TLS into server | CHECK | The hop was not recorded as encrypted | Enable STARTTLS; publish MTA-STS |
+| Nothing unusual | PASS | Authentication, identity and route look normal | |
+
+## Guide
+
+### Is this message genuine?
+
+1. Confirm that the server named in Authentication-Results is your own receiving server; everything below it was written by the sender.
+2. Read the DMARC result. A pass means the From domain was proven; a fail means it was not.
+3. Check Reply-To and Return-Path. A reply address on another domain is the common shape of phishing that asks you to answer.
+4. If in doubt, contact the supposed sender through a channel you already have.
+
+### My own mail fails DMARC
+
+1. Open the DKIM key that signed it (Take it further) and confirm it is published and strong enough.
+2. Open SPF for the bounce domain and confirm the sending service is listed.
+3. Make the service sign with your domain, not its own, so DKIM aligns even when the bounce domain does not.
+
+### A long delay
+
+A wait over 30 seconds at one server is usually a queue, a content filter or a greylisting retry. If it repeats, ask the operator of that server. The route names the server that held the message.
+
+### Clock skew
+
+A hop stamped before the one under it means a server's clock is wrong. The order of the headers is what counts. Fix the clock with NTP if the server is yours.
+
+### Break it cases
+
+Each case is built from the headers you pasted, keeping every other line.
+
+| Case | What it does to the headers |
+| --- | --- |
+| Reply-To elsewhere | Sets Reply-To to a look-alike domain |
+| All checks fail | Replaces Authentication-Results with spf=fail, dkim=none, dmarc=fail and a look-alike Return-Path |
+| Clock skew | Restamps the newest Received header 70 seconds before the one under it |
+| Not headers | Loads a sentence that is not a header block |
+
+## Worked example
+
+The page opens on an order confirmation sent through a mail service, built from documentation addresses and the reserved `.example` zone. Four hops: the sender's laptop to `out.harbor-supply.example`, to the mail service `mail-sor-f17.inboxcloud.example`, to `mx.receiver.example`, to the mailbox store, 41 seconds end to end, 38 of them at the mail service.
+
+**Receiver reports: DMARC passed through DKIM.** SPF passed for `send.bulkpost.example`, the mail service's bounce domain, so the only aligned identity is the DKIM signature `d=harbor-supply.example; s=google`. The findings are the 38-second wait (CHECK), two INFO notes, and the DMARC pass. Look up hop addresses answers from local sample data, so nothing is sent. Replace the sample with your own headers and every section, card and link is rewritten for them.
+
+## For agents
+
+The Tamperbox MCP server runs the same analysis. Search its catalog for the header operation, inspect the input schema, and call it with the header block. Keep the warning block with any conclusion:
+
+- Results are what the receiving server recorded; nothing is re-verified.
+- Headers below the trusted receiver can be forged.
+- Alignment is an exact domain match; delays depend on each server's clock.
+
+See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for the calling pattern, and [Security and privacy](/reference/security/) for what travels when addresses are looked up.
+
+## Limits
+
+- No signature or ARC verification; no DNS lookup for the authentication section.
+- Exact alignment only.
+- The topmost Authentication-Results header only.
+- Hop lookups: up to 50 public addresses, only on request; country is registry data, not location.
+- Nothing is stored.
+
+## References
+
+- [RFC 8601, Message Header Field for Indicating Message Authentication Status](https://www.rfc-editor.org/rfc/rfc8601)
+- [RFC 5321, Simple Mail Transfer Protocol](https://www.rfc-editor.org/rfc/rfc5321), section 4.4 for the Received header
+- [RFC 7489, DMARC](https://www.rfc-editor.org/rfc/rfc7489), section 3.1 for alignment
+- [DKIM Record Checker](/tools/dkim-checker/), for the key behind a message's signature
