@@ -1,0 +1,250 @@
+---
+title: SPF Checker
+description: How the checker expands an SPF record through every include and redirect, counts the DNS lookups receivers allow, grades every term, and builds a flattening plan that replaces only the includes it must.
+updated: 2026-10-19
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and repair guide for the Tamperbox SPF Checker, which expands an SPF record through public DNS, counts lookup-causing terms against the limit of 10, reports syntax and hygiene problems, and proposes a flattening plan built from the include tree.
+prerequisites:
+  - A domain, or an SPF record to paste
+outputs:
+  - A verdict with PASS, CHECK and FAIL chips, the lookup budget numbered in evaluation order, the include tree, the flattening plan with the flattened record, every term explained, and the findings with their fixes
+limitations:
+  - The count is a bounded static expansion, not an SPF evaluation for a sender address; a, mx and exists targets are not resolved, macros are not expanded, and flattened ranges go stale when a provider changes them
+---
+
+The tool page is [tamperbox.dev/spf-checker](https://tamperbox.dev/spf-checker). It opens on a working example whose record is one lookup over the limit, so the flattening plan is visible at once. This page is the long version: how the record is expanded, every rule applied to it, what each finding means for mail delivery, and how to fix and verify each one.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> a domain is sent to the Tamperbox server, which asks public DNS for its TXT records and follows every include and redirect the same way, one lookup each. A pasted record is parsed in your browser; only the include and redirect names it contains are looked up. Nothing is stored.</div>
+
+## What the tool answers
+
+SPF lets a domain publish which servers may send mail for it. Receivers read the record, follow its includes, and allow at most 10 DNS lookups while doing so. The tool answers:
+
+1. **How many lookups does this record cost?** Every include, redirect, a, mx, ptr and exists counts, through every nested include.
+2. **Is the record valid?** Every term is parsed against RFC 7208; one unknown term makes the whole record a permanent error.
+3. **Which includes could be flattened, and what would the record look like?** Only includes that publish plain address ranges are candidates.
+4. **What else is wrong with it?** A missing or permissive all, ptr, duplicates, void lookups, a record over 255 characters.
+
+It does not evaluate a sender address. A real receiver stops at the first matching mechanism, so mail matched early can still pass a record that is over the limit.
+
+## Inputs
+
+### A domain
+
+`example.com`. When you stop typing, or on Enter, the server reads the TXT records at the domain and keeps the ones that start with `v=spf1`. Each include and redirect target is looked up the same way, ten levels deep at most and 100 names in total.
+
+### An SPF record
+
+Paste the record itself, with or without the quotes DNS tools print: `v=spf1 include:_spf.example.net ~all`. It is parsed in the browser as the root of the tree, shown as "Your record". Its includes are still looked up through the server, so the count covers what a receiver would read. Two records on two lines are treated as two published records, which is itself a finding.
+
+### Files
+
+Drop a `.txt` file anywhere on the page, or use Open file. It is read in the browser.
+
+## Reading the result
+
+### Verdict and chips
+
+The verdict names the outcome: the budget exceeded, the record broken, something to check, or the record checked. The line under it carries the count and, when the record is over the limit, how far the flattening plan brings it. The chips show the count against the limit, the all mechanism, whether every include was looked up, and the number of findings; each one is a button that scrolls to the section that explains it.
+
+### Findings
+
+Everything found, worst first. Two or more passes fold into one line. A budget finding carries a "See the plan" button. The [finding reference](#finding-reference) lists them all.
+
+### Take it further
+
+Links that carry a value derived from this result into another tool: the biggest include on its own (this page again, with that domain), the DMARC policy that uses the record, who receives mail for the domain, and the network behind the first address the record lists. Each link opens the destination with the value already in its box; nothing is put in the URL.
+
+### History and Heal it
+
+History logs every Break it and Heal it change with what it replaced; Revert undoes the newest, Reset input returns to what you entered. Heal it offers the repairs the tool found: the flattened record, merging two records into one, changing +all to ~all, adding ~all, removing ptr, removing an invalid address mechanism, correcting a misspelt include, removing duplicates.
+
+### Lookup budget
+
+The count against the limit, and one slot per lookup in the order a receiver makes them, each slot named by the term and the record it came from. The tenth slot is marked; anything beyond it is red. The note under the slots says how many lookups are left, or that an evaluation reaching the eleventh stops there.
+
+### Include tree
+
+The record and every include and redirect under it, each with the record it publishes and how many lookups it costs with everything beneath it. A branch that could not be evaluated shows the reason in red.
+
+### Flattening plan
+
+Shown only when the record is over the limit. Each top-level include is marked Flatten or Keep with the reason, the flattened record is shown split into 255-character strings with a copy button, and the note says how many characters and strings it has.
+
+### The record, term by term
+
+Every term with its meaning and whether it costs a lookup; an unknown term is marked.
+
+## Method
+
+### Term syntax
+
+The record must start with `v=spf1`. Each term after it is a mechanism (`all`, `include`, `a`, `mx`, `ptr`, `ip4`, `ip6`, `exists`) with an optional `+`, `-`, `~` or `?` qualifier, or a `name=value` modifier. These are FAIL:
+
+- an unrecognised mechanism, "Unknown term X": one unknown mechanism is a permanent error for the whole record
+- an `ip4` value that is not four octets from 0 to 255, or an `ip6` value that does not parse: "Invalid IPv4 address in X", "Invalid IPv6 address in X"
+- an IPv4 prefix over /32, "Prefix too long in X"; any other bad prefix, "Invalid prefix in X" (IPv4 /0 to /32, IPv6 /0 to /128; the dual `/n//n` form only on `a` and `mx`)
+- `include` or `exists` without a domain, `redirect` or `exp` with an empty value, a value attached to `all`
+- the same modifier twice, "Duplicate X modifier"
+
+An unknown modifier is CHECK, "Unknown modifier X", because receivers skip modifiers they do not know.
+
+### Which terms are evaluated
+
+Receivers stop at the first `all`. Terms after it are not evaluated and not counted. `redirect` is followed only when the record has no `all`. The tool follows the same order.
+
+### The lookup budget
+
+`include`, `a`, `mx`, `ptr`, `exists` and `redirect` each cost one lookup; `ip4`, `ip6`, `all` and `exp` cost nothing. Each include and redirect target is expanded recursively and its cost added. The total is compared with the limit of 10:
+
+| Total | Severity | Title |
+| --- | --- | --- |
+| 11 or more | FAIL | N of 10 DNS lookups |
+| 9 or 10 | CHECK | N of 10 DNS lookups |
+| 8 or fewer | PASS | N of 10 DNS lookups |
+
+### Branches that cannot be evaluated
+
+For each include or redirect target the server asks public DNS for TXT records and keeps the ones starting with `v=spf1`.
+
+- A target with no SPF record fails with "No SPF record at the include or redirect target: permerror." It counts as a void lookup only when DNS returned no TXT records at all.
+- Two or more SPF records at one name: "N SPF records: receivers return permerror."
+- A name already being expanded higher in the same branch: "Include loop".
+- A name containing `%`: macros need a sender identity and are not expanded; the branch is marked incomplete.
+- More than ten levels of nesting, or more than 100 names in total: "Expansion limit reached", incomplete.
+- A lookup that errors rather than returning empty marks the tree incomplete.
+
+A branch error appears in the findings as "domain: reason", FAIL when the branch was evaluated and found broken, CHECK when it could not be evaluated. An incomplete tree adds "Incomplete lookup tree" (CHECK) and the counts are shown as "at least N". More than two void lookups is FAIL, "N void lookups".
+
+### The all mechanism and record hygiene
+
+| Finding | Severity | Rule |
+| --- | --- | --- |
+| No all mechanism | CHECK | No `all` and no `redirect`: unlisted servers get neutral |
+| +all allows every server on the internet | FAIL | `+all` or bare `all` |
+| ?all makes SPF neutral | CHECK | |
+| Ends in ~all, Ends in -all | PASS | |
+| Mechanisms after all are ignored | CHECK | A mechanism follows `all` |
+| redirect is ignored when all is present | CHECK | |
+| ptr is deprecated | CHECK | |
+| Duplicate X | CHECK | The same term twice; a leading `+` is ignored when comparing |
+| N characters | INFO | The record is longer than one 255-character TXT string |
+
+### Flattening plan
+
+The plan appears when the total is over 10. Candidates are the root record's top-level includes with a pass qualifier. An include is flattenable only when its whole subtree holds nothing but pass-qualified `ip4` and `ip6` terms, pass-qualified nested includes and a non-pass `all`, every lookup in it succeeded, and it has no failing problems; everything else is marked Keep with the reason (uses a, mx or exists; not looked up). Candidates are taken in order of savings (the include plus everything beneath it) until the total is 10 or lower. No plan is chosen when the root record has failures or the tree is incomplete.
+
+Each chosen include is replaced in place by its ranges, so the ranges stay ahead of any `-` or `~` mechanism that follows. The flattened record is split into 255-character strings. If every candidate flattened still leaves the record over 10, the plan says so and suggests moving a sender to a subdomain.
+
+## Finding reference
+
+| Finding | Severity | What it means for mail | Fix |
+| --- | --- | --- | --- |
+| N of 10 DNS lookups (11 or more) | FAIL | Evaluations reaching the eleventh lookup return permerror; under DMARC that mail can fail | Remove unused includes, flatten, or move a sender to a subdomain |
+| N of 10 DNS lookups (9 or 10) | CHECK | The next include breaks the record | Make room before adding a service |
+| N of 10 DNS lookups (8 or fewer) | PASS | Within the limit | |
+| N void lookups | FAIL | More than two empty answers is a permanent error | Remove includes whose target has no record |
+| No SPF record at this name. | FAIL | SPF never passes; DMARC relies on DKIM alone | Publish one record |
+| An SPF record starts with v=spf1. | FAIL | The text is not an SPF record | Start with v=spf1 |
+| N SPF records: receivers return permerror. | FAIL | Every message fails SPF | Merge into one record |
+| Unknown term X | FAIL | Permanent error for every receiver | Correct the term |
+| Invalid IPv4 address in X, Invalid IPv6 address in X | FAIL | Permanent error | Correct or remove the term |
+| Prefix too long in X, Invalid prefix in X | FAIL | Permanent error | Use a valid prefix |
+| include needs a domain, exists needs a domain, redirect needs a domain, exp needs a domain | FAIL | Permanent error | Add the domain |
+| Invalid all mechanism X | FAIL | `all` takes no value | Remove the value |
+| Duplicate X modifier | FAIL | A modifier may appear once | Remove one |
+| Unknown modifier X | CHECK | Receivers ignore it | Remove it |
+| No all mechanism | CHECK | Unlisted servers get neutral; SPF never fails | Add ~all or -all |
+| +all allows every server on the internet | FAIL | Anyone passes SPF for the domain | Use ~all or -all |
+| ?all makes SPF neutral | CHECK | Unlisted servers are neither allowed nor refused | Use ~all or -all |
+| Ends in ~all, Ends in -all | PASS | Unlisted servers soft-fail or fail | |
+| Mechanisms after all are ignored | CHECK | Those senders are not allowed | Move all to the end |
+| redirect is ignored when all is present | CHECK | The redirect never runs | Remove one |
+| ptr is deprecated | CHECK | Slow, unreliable, skipped by some receivers | Replace with ip4/ip6 |
+| Duplicate X | CHECK | The copy costs a lookup | Remove one |
+| N characters | INFO | Longer than one TXT string | Publish as several quoted strings |
+| Incomplete lookup tree | CHECK | Counts are a lower bound | Retry before changing DNS |
+| domain: No SPF record at the include or redirect target: permerror. | FAIL | The include breaks the record | Remove the include |
+| domain: Include loop | FAIL | The include refers back to a record above it | Break the loop |
+| domain: Expansion limit reached | CHECK | Too deep or too many names to inspect | Simplify the record |
+| domain: SPF macros need a sender IP and envelope identity | CHECK | The branch is not expanded | Nothing; evaluate with a real sender |
+
+## Guide
+
+### Too many DNS lookups
+
+1. Open the include tree and find the branches that cost the most; the lookup budget numbers them in order.
+2. Remove the includes of services that no longer send for you. This alone fixes most records.
+3. If the record is still over 10, open the flattening plan. Heal it loads the flattened record; copy it from the Flattened record box.
+4. Publish the new record as the only `v=spf1` TXT record at the domain, then check the domain again. The count should be 10 or lower.
+5. Put a reminder in the calendar: flattened ranges are a snapshot. Check the flattened includes on their own page every few months, or after the provider announces a change.
+
+A sender on a subdomain with its own SPF record never counts against the main domain; that is the lasting fix for a bulk mailer.
+
+### +all, no all, ?all
+
+End the record in `~all` while DMARC is being rolled out and in `-all` once every sender is listed. Heal it changes `+all` to `~all` and adds `~all` to a record that has none; publish the result.
+
+### A typo or an invalid address
+
+One unknown mechanism or one bad address fails the whole record for every receiver. Heal it corrects common misspellings of `include` and removes an invalid `ip4` or `ip6` mechanism while keeping the valid ones; check the result and publish it.
+
+### ptr
+
+Replace `ptr` with the `ip4` and `ip6` ranges of the servers it covered. Heal it removes `ptr`; add the ranges before publishing.
+
+### Two SPF records
+
+Heal it merges them: `v=spf1` once, every term from both, and `-all` if either record had it, `~all` otherwise. Publish the merged record and delete the others.
+
+### An include that cannot be evaluated
+
+Open the include on its own (Take it further) to see what it publishes. If the service no longer sends for you, remove the include; if it does, ask the provider to fix its record.
+
+### Break it cases
+
+Each case is built from the record you entered or looked up, so the finding looks the way it would for you.
+
+| Case | What it does to your record | Heal it offers |
+| --- | --- | --- |
+| Two SPF records | Adds a second `v=spf1` record | Merge into one record |
+| +all | Replaces the all mechanism with `+all` | Change +all to ~all |
+| No all at the end | Removes the all mechanism | Add ~all at the end |
+| Invalid address | Inserts `ip4:198.51.100.300` | Remove invalid address mechanism |
+| ptr mechanism | Inserts `ptr` | Remove ptr |
+| Duplicate include | Repeats the first include | Remove 1 duplicate |
+| Typo in a mechanism | Misspells the first include as `inlcude:` | Fix inlcude to include |
+
+## Worked example
+
+The page opens on `harbor-supply.example`, a sample domain on the reserved `.example` zone, answered in the browser so the example costs nothing and never changes. Its record includes four mail services:
+
+```text
+v=spf1 include:_spf.inboxcloud.example include:send.bulkpost.example include:mail.ticketdesk.example include:spf.officesuite.example ip4:198.51.100.24 ~all
+```
+
+The expansion costs 11 lookups: the first include nests three more, the second one more, the third uses `a` and `mx`, the fourth nests one. **SPF lookup budget exceeded: 11 of 10 DNS lookups.** The plan flattens `_spf.inboxcloud.example` (saves 4, 6 ranges) and keeps the rest: `mail.ticketdesk.example` because it uses `a` and `mx`, the other two because flattening them is not needed. The flattened record costs 7 lookups and fits in one TXT string. Heal it loads it; replace the sample with your own domain and every section, card and link is rewritten for it.
+
+## For agents
+
+The Tamperbox MCP server runs the same checks. Search its catalog for the SPF operation, inspect the input schema, and call it with the domain or the record. Keep the warning block with any conclusion:
+
+- The count is a static expansion, not an evaluation for a sender address; mail matched by an earlier term can pass a record that is over the limit.
+- `a`, `mx` and `exists` targets are not resolved; macros are not expanded.
+- Flattened ranges are a snapshot of what a provider publishes today.
+
+See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for the calling pattern, and [Security and privacy](/reference/security/) for where the domain travels.
+
+## Limits
+
+- A bounded static expansion: ten levels, 100 names, no sender address, no macros, no `a`, `mx` or `exists` resolution.
+- Void lookups are counted only for the TXT queries the tool makes.
+- Duplicate detection compares whole terms; an explicit `+` is treated as the default qualifier.
+- One DNS answer, from one public resolver, at one moment.
+- Nothing is stored.
+
+## References
+
+- [RFC 7208, Sender Policy Framework](https://www.rfc-editor.org/rfc/rfc7208), section 4.6.4 for the lookup and void limits
+- [RFC 7489, DMARC](https://www.rfc-editor.org/rfc/rfc7489), for how SPF alignment feeds DMARC
+- Tamperbox guides: [Fix SPF PermError: too many DNS lookups](https://tamperbox.dev/guides/fix-spf-too-many-dns-lookups) and [DMARC rollout: from p=none to reject](https://tamperbox.dev/guides/dmarc-monitoring-to-reject)

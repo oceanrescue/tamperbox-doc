@@ -1,0 +1,224 @@
+---
+title: DMARC Checker & Generator
+description: How the checker finds and grades a DMARC record, every rule applied to its tags, what each finding means for spoofed and legitimate mail, and how the builder and the path to enforcement write the next record.
+updated: 2026-10-19
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and repair guide for the Tamperbox DMARC Checker & Generator, which reads the _dmarc record through public DNS or parses a pasted one, grades policy, percentage, subdomain policy, report addresses and alignment, and drafts the next record on the path from p=none to p=reject.
+prerequisites:
+  - A domain, or a DMARC record to paste
+outputs:
+  - A verdict with PASS, CHECK and FAIL chips, the findings with their fixes, the path to enforcement, the builder, the record to publish, and the record tag by tag
+limitations:
+  - The tool reads the policy, not the aggregate reports, so it cannot tell whether legitimate mail already passes; the exact _dmarc name is looked up without parent-domain inheritance, and external report authorisation records are named but not looked up
+---
+
+The tool page is [tamperbox.dev/dmarc-checker](https://tamperbox.dev/dmarc-checker). It opens on a working example that monitors with `p=none`, the most common place to get stuck. This page is the long version: how the record is found and read, every rule applied to it, what each finding means, and how the builder and the path to enforcement write the next record.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> a domain is sent to the Tamperbox server, which asks public DNS for the TXT record at <code>_dmarc.&lt;domain&gt;</code>. A pasted record is parsed and graded in your browser, and every draft you build stays on the page. Nothing is stored, and copying a draft does not publish it.</div>
+
+## What the tool answers
+
+DMARC tells receivers what to do with mail that fails both aligned SPF and aligned DKIM, and where to send reports about it. The tool answers:
+
+1. **Is there a valid record, and what does it say?** One record at the exact name, every tag explained.
+2. **How much does it protect?** The policy, the percentage it applies to, and the subdomain policy.
+3. **Will you hear about failures?** Aggregate report addresses, their format, and whether an outside receiver needs to authorise them.
+4. **What is the next safe step?** A draft record for each step from monitoring to reject, with every change kept in History.
+
+It does not read aggregate reports, so it cannot say whether your legitimate mail already passes.
+
+## Inputs
+
+### A domain
+
+`example.com`. When you stop typing, or on Enter, the server reads the TXT records at `_dmarc.example.com` and keeps the ones that begin with `v=DMARC1`. Two or more is a finding; none shows a starting draft.
+
+### A DMARC record
+
+Paste the record itself, with or without quotes: `v=DMARC1; p=none; rua=mailto:dmarc@example.com`. It is parsed in the browser and shown as "Pasted record". Publication, and the policy a parent domain may publish, are not checked.
+
+### Files
+
+Drop a `.txt` file anywhere on the page, or use Open file. It is read in the browser.
+
+## Reading the result
+
+### Verdict and chips
+
+The verdict names the policy's effect: no policy, monitoring only, quarantining or rejecting a share or all of failing mail, or an invalid record, followed by where the record came from (published, pasted, or a draft). The chips show the policy with its percentage, whether reports are on, and whether you are looking at the published record, a pasted one, or a draft; each one is a button that scrolls to the section that explains it.
+
+### Findings
+
+Everything found, worst first; passes fold into one line. The `p=none` finding carries a button that moves the draft one step forward. The [finding reference](#finding-reference) lists them all.
+
+### Take it further
+
+Links that carry a derived value into another tool: the mail route of the report mailbox's domain, BIMI readiness for the domain once the policy enforces, and DNSSEC on the zone. Each opens the destination with the value already in its box; nothing is put in the URL.
+
+### History and Heal it
+
+History logs every change: a rollout step, a builder edit, a Break it case or a Heal it repair, each with the record it replaced. Revert undoes the newest change and returns the draft to the record before it; Reset input returns to the published or pasted record. Heal it offers the repairs the tool found: add `p=none`, correct a misspelt policy, remove an out-of-range `pct`, make `rua` a `mailto:` address, choose which value to keep when a tag is duplicated, move a misplaced version tag to the front.
+
+### Path to enforcement
+
+Four targets, each a complete record built from the current tags: Monitor (`p=none`), Quarantine a quarter (`p=quarantine; pct=25`), Quarantine all (`p=quarantine`), Reject (`p=reject`). The current step is marked "You are here". Choosing a target applies it as a draft.
+
+### Build the record
+
+Policy, subdomain policy, percentage, aggregate and failure report addresses, DKIM and SPF alignment, and failure options. Every change applies at once and is graded like a published record.
+
+### Publish this record
+
+The draft as one TXT record, with the name to publish it at and a copy button. Copying does not publish.
+
+### The record, tag by tag
+
+Every tag with its label and meaning; unknown tags are marked as ignored by receivers.
+
+## Method
+
+### Finding the record
+
+The server asks public DNS for TXT records at exactly `_dmarc.<domain>` and keeps the ones that begin with `v=DMARC1`. The lookup never moves up to a parent domain; a subdomain without its own record may still be covered by its organisational domain's policy, so a miss is not proof that no policy applies.
+
+- Two or more records: FAIL, "N DMARC records". Receivers ignore DMARC entirely in that case. The first record is shown.
+- No record: the verdict is "No DMARC record" and a starting draft, `v=DMARC1; p=none`, is prepared for the builder.
+
+### Tag syntax
+
+The record is split on semicolons; each part must be `name=value`.
+
+- The first tag must be exactly `v=DMARC1`, case-sensitive. Otherwise the record is not read at all: "Not a DMARC record". A misplaced `v=DMARC1` can be moved to the front by Heal it.
+- A part without `=`: FAIL, "Not a tag: X".
+- A tag that appears twice: FAIL, "name appears twice". Identical duplicates can be removed; conflicting values get one repair per value ("Keep p=none", "Keep p=reject"). While duplicates remain, the policy is not graded and the builder, the path to enforcement and the record to publish are hidden.
+- `p`, `sp` and `np` accept only `none`, `quarantine` or `reject`; `adkim` and `aspf` only `r` or `s`. Anything else: FAIL, "name=value is not valid".
+- No `p`: FAIL, "No p= policy".
+- `pct` must be a whole number from 0 to 100: FAIL, "pct=X is not 0 to 100".
+- A tag outside `v`, `p`, `sp`, `np`, `pct`, `rua`, `ruf`, `adkim`, `aspf`, `fo`, `rf`, `ri`: CHECK, "Unknown tag X".
+
+### Policy strength
+
+A missing `pct` counts as 100.
+
+| Record | Severity | Title |
+| --- | --- | --- |
+| `p=reject`, pct 100 | PASS | p=reject |
+| `p=quarantine`, pct 100 | PASS | p=quarantine |
+| `p=quarantine`, pct under 100 | CHECK | p=quarantine at N% |
+| `p=reject`, pct under 100 | CHECK | p=reject at N% |
+| `p=none` | CHECK | p=none only monitors |
+| `sp=none` with an enforcing `p` | CHECK | sp=none on subdomains |
+| `adkim=s` or `aspf=s` | INFO | Strict alignment |
+
+### Report addresses
+
+- No `rua`: CHECK, "No rua reports".
+- Each comma-separated `rua` entry must be a `mailto:` URI with one `@`, optionally followed by a size limit such as `!10m`. Anything else: FAIL, "Invalid report address X".
+- An address on a domain that is neither the checked domain nor one of its subdomains: INFO, "Reports go to X", naming the authorisation record the receiving domain must publish, `<domain>._report._dmarc.<receiving-domain>`. That record is not looked up. For a pasted record the domain is unknown, so no authorisation note is made.
+- Otherwise: PASS, "N report addresses".
+
+`ruf`, `fo`, `rf` and `ri` are explained but not validated.
+
+### The builder and the drafts
+
+The builder writes tags in a fixed order (`v`, `p`, `sp`, `np`, `pct`, `rua`, `ruf`, `adkim`, `aspf`, `fo`, `rf`, `ri`), keeps unknown tags at the end, and leaves out tags that only repeat a default (`pct=100`, `adkim=r`, `aspf=r`, `fo=0`, `rf=afrf`, `ri=86400`). A draft is graded by the same rules as a published record; the problems of the published record (duplicates, multiple records) are not carried into the draft's findings, except the multiple-records finding, which the draft cannot fix.
+
+## Finding reference
+
+| Finding | Severity | What it means for mail | Fix |
+| --- | --- | --- | --- |
+| No DMARC record (verdict) | FAIL | Receivers apply no policy and send no reports | Publish the starting draft |
+| N DMARC records | FAIL | Receivers ignore DMARC entirely | Delete all but one |
+| Not a DMARC record (verdict) | FAIL | The text does not begin with v=DMARC1 | Put v=DMARC1 first |
+| Not a tag: X | FAIL | Receivers may reject the record | Write name=value |
+| name appears twice | FAIL | Receivers may reject the record; the policy is not graded | Keep one value |
+| name=value is not valid | FAIL | Receivers treat the record as invalid | Use a valid value |
+| No p= policy | FAIL | Receivers ignore the record | Add p=none |
+| pct=X is not 0 to 100 | FAIL | Receivers treat the record as invalid | Remove pct or use 0 to 100 |
+| Invalid report address X | FAIL | No aggregate reports are sent | Use mailto: |
+| Unknown tag X | CHECK | Receivers ignore it | Remove it |
+| p=none only monitors | CHECK | Spoofed mail is still delivered | Move to quarantine when reports are clean |
+| p=quarantine at N%, p=reject at N% | CHECK | Only part of failing mail is acted on | Raise pct to 100 |
+| sp=none on subdomains | CHECK | Subdomains can be spoofed | Remove sp or match p |
+| No rua reports | CHECK | You cannot see who sends as the domain | Add rua=mailto:… |
+| Reports go to X | INFO | The receiving domain must authorise the reports | Publish the authorisation record there |
+| Strict alignment | INFO | Subdomain-signed or subdomain-bounced mail fails | Relaxed is usually enough |
+| p=reject, p=quarantine | PASS | Failing mail is refused or quarantined | |
+| N report addresses | PASS | Aggregate reports are on | |
+
+## Guide
+
+### From p=none to reject
+
+1. Make sure `rua` points at a mailbox or a reporting service you read. Raw aggregate reports are XML; a parsing service makes them readable.
+2. Read a few weeks of reports. List every source that sends as the domain: your mail host, newsletter tool, ticketing, invoicing, and anything you forgot.
+3. Make each one pass SPF or DKIM with a domain aligned with the From domain. Check their records with the SPF and DKIM checkers.
+4. Choose Quarantine a quarter in the path to enforcement, copy the draft, publish it at `_dmarc.<domain>`, and check the domain again.
+5. When the reports stay clean, move to Quarantine all, then Reject, the same way.
+
+### No DMARC record
+
+Publish the starting draft shown on the page, `v=DMARC1; p=none; rua=mailto:dmarc@<domain>`, at `_dmarc.<domain>` as a TXT record. Then follow the rollout above.
+
+### Two records at the _dmarc name
+
+A provider migration usually leaves the old record beside the new one. Delete every record but one, then check the domain again.
+
+### A misspelt policy, a missing p, a bad percentage
+
+Heal it offers the exact repair: the closest valid policy for a misspelling, `p=none` for a missing policy, removing `pct` for an out-of-range value. Each repair is a draft; copy and publish it.
+
+### Report addresses
+
+Write each address as `mailto:name@domain`; separate several with commas. If the reports go to a domain other than yours (a reporting service), that domain must publish `<yourdomain>._report._dmarc.<their-domain>`; the service's documentation says what to publish, and the INFO finding names the record.
+
+### Subdomains
+
+Leave `sp` unset so subdomains follow `p`, or set it to the same policy. `sp=none` on an enforcing domain leaves every subdomain open to spoofing.
+
+### Break it cases
+
+Each case is built from the record you entered or looked up.
+
+| Case | What it does to your record | Heal it offers |
+| --- | --- | --- |
+| No policy | Removes `p=` | Add p=none |
+| Policy typo | Misspells the policy (`rejected`, `quarantined`, `nnone`) | Change p=… to the valid value |
+| Version not first | Moves `v=DMARC1` after the first tag | Put corrected v=DMARC1 first |
+| Bad report address | Strips `mailto:` from rua | Make rua a mailto: address |
+| pct out of range | Sets `pct=150` | Apply to 100% of failing mail |
+| Duplicate tag | Adds a second, conflicting `p=` | Keep p=none, Keep p=reject |
+
+## Worked example
+
+The page opens on `harbor-supply.example`, a sample domain on the reserved `.example` zone, answered in the browser so the example costs nothing and never changes. Its record:
+
+```text
+v=DMARC1; p=none; rua=mailto:dmarc@harbor-supply.example; ruf=mailto:forensics@harbor-supply.example; fo=1
+```
+
+**Monitoring only: p=none delivers spoofed mail.** The findings are "p=none only monitors" (CHECK, with a button to the next step) and "1 report address" (PASS). Choose Quarantine a quarter: the draft becomes `v=DMARC1; p=quarantine; pct=25; rua=…; ruf=…; fo=1`, History logs the change with Revert, and the record to publish shows the draft at `_dmarc.harbor-supply.example`. Replace the sample with your own domain and every section, card and link is rewritten for it.
+
+## For agents
+
+The Tamperbox MCP server runs the same checks. Search its catalog for the DMARC operation, inspect the input schema, and call it with the domain or the record. Keep the warning block with any conclusion:
+
+- The tool grades the policy text; whether legitimate mail passes is in the aggregate reports.
+- The exact `_dmarc` name is looked up; a parent domain's policy is not resolved.
+- External report authorisation records are named, not looked up.
+
+See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for the calling pattern, and [Security and privacy](/reference/security/) for where the domain travels.
+
+## Limits
+
+- The policy, not the reports: enforcement readiness is not assessed.
+- Exact name only; no parent-domain inheritance.
+- `ruf`, `fo`, `rf` and `ri` are explained, not validated.
+- One DNS answer, from one public resolver, at one moment.
+- Nothing is stored; copying a draft does not publish it.
+
+## References
+
+- [RFC 7489, DMARC](https://www.rfc-editor.org/rfc/rfc7489), section 6 for the tags and the external report authorisation record
+- [RFC 7208, Sender Policy Framework](https://www.rfc-editor.org/rfc/rfc7208) and [RFC 6376, DKIM](https://www.rfc-editor.org/rfc/rfc6376), the two mechanisms DMARC aligns
+- Tamperbox guide: [DMARC rollout: from p=none to reject](https://tamperbox.dev/guides/dmarc-monitoring-to-reject)

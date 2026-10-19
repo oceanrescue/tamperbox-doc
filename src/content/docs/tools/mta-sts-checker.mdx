@@ -1,0 +1,211 @@
+---
+title: MTA-STS & TLS-RPT Checker
+description: How the checker follows what a sending server does, from the _mta-sts record to the policy file, MX coverage and TLS-RPT, every rule applied along the way, what each finding means for mail in transit, and how to fix and verify each one.
+updated: 2026-10-19
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and repair guide for the Tamperbox MTA-STS & TLS-RPT Checker, which reads the _mta-sts and _smtp._tls records and the MX records through public DNS, fetches the policy file over HTTPS, checks the file's syntax and mode, compares every MX host with the policy's mx lines, and suggests an enforcing policy that covers every server.
+prerequisites:
+  - A domain, or an MTA-STS policy file to paste
+outputs:
+  - A verdict with PASS, CHECK and FAIL chips, the chain of checks a sender makes, the MX coverage table, a suggested policy file in enforce mode, and the findings with their fixes
+limitations:
+  - No connection is made to any mail server, so STARTTLS support and MX certificates are not tested; senders cache a policy for max_age seconds, so changes take effect slowly
+---
+
+The tool page is [tamperbox.dev/mta-sts-checker](https://tamperbox.dev/mta-sts-checker). It opens on a working example whose policy is still in testing mode with one backup MX server missing from it. This page is the long version: what a sending server checks, every rule the tool applies at each step, what each finding means, and how to fix and verify each one.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> a domain is sent to the Tamperbox server, which asks public DNS for the <code>_mta-sts</code> record, the MX records and the <code>_smtp._tls</code> record, and fetches one URL over HTTPS: <code>https://mta-sts.&lt;domain&gt;/.well-known/mta-sts.txt</code>. A pasted policy file is read line by line in your browser. Nothing is stored.</div>
+
+## What the tool answers
+
+MTA-STS lets a receiving domain tell sending servers: deliver only to these mail servers, and only over TLS with a valid certificate. TLS-RPT lets senders report when they could not. The tool answers:
+
+1. **Is a policy announced?** The `_mta-sts` TXT record with its id.
+2. **Can the policy be fetched, and is it valid?** The file at the well-known URL, its version, mode, mx lines and max_age.
+3. **Does the policy cover every mail server?** Each MX host against the policy's mx lines.
+4. **Will you hear about failures?** The `_smtp._tls` TLS-RPT record and its report addresses.
+5. **What should the policy say?** A suggested file in enforce mode that covers every MX host.
+
+It does not connect to any mail server, so STARTTLS support and MX certificates are not tested.
+
+## Inputs
+
+### A domain
+
+`example.com`. When you stop typing, or on Enter, the server makes the three DNS lookups and the one fetch in parallel. When all four fail because the lookup service is unavailable, the page reports an error rather than a missing policy.
+
+### A policy file
+
+Paste the contents of `mta-sts.txt` (`version: STSv1`, `mode: enforce`, `mx: …`, `max_age: …`). It is checked in the browser, shown as "Policy file (pasted)". Publication, HTTPS hosting, MX coverage and TLS-RPT are not checked for a pasted file.
+
+### An _mta-sts record
+
+Paste `v=STSv1; id=…` and only the record is checked, with a reminder that the policy itself lives in a file on HTTPS.
+
+### Files
+
+Drop a `.txt` file anywhere on the page, or use Open file. It is read in the browser.
+
+## Reading the result
+
+### Verdict and chips
+
+The verdict names the outcome: no record, not protected (the file could not be fetched), the check failed with the first failure, policy withdrawn, testing only, enforced, or, for a pasted file, policy file checked. The chips show the mode, how many MX servers the policy covers, and the number of findings; each one is a button that scrolls to the section that explains it.
+
+### Findings
+
+Everything found, worst first; passes fold into one line. The [finding reference](#finding-reference) lists them all.
+
+### Take it further
+
+Links that carry a derived value into another tool: the TLS certificate of the primary MX server on port 25, DANE records for the same host and port, and DNSSEC on the zone. Each opens the destination with the value already in its box; nothing is put in the URL.
+
+### History and Heal it
+
+History logs every Break it and Heal it change with what it replaced; Revert undoes the newest, Reset input returns to what you entered. Heal it offers the repairs the tool found for a pasted file: add the version line, correct a misspelt mode, set `max_age` to one week.
+
+### The chain
+
+The four steps a sending server takes, in order, each with its status, what it found and the record or file it read: the policy record, the policy file, MX coverage, TLS reports.
+
+### MX coverage
+
+One row per MX host with its preference, the policy line that covers it or "No matching line", and Covered or Not covered.
+
+### Suggested policy file
+
+A policy in enforce mode built from the current one: existing mx lines that still match an MX host, every uncovered host added by name, and a `max_age` of a week or the current value when it is longer and valid. Hidden when no mx line can be derived. The note under it says to serve the file over HTTPS and change the id in the record afterwards.
+
+## Method
+
+### The _mta-sts record
+
+Exactly one TXT record at `_mta-sts.<domain>` may start with `v=STSv1`; zero or two gives "Publish exactly one MTA-STS record." Within it, `v` must be the first tag and `id` must be 1 to 32 letters or digits, so an id written with dashes fails. A missing record is FAIL, `No record at _mta-sts.<domain>`, with a suggested record whose id is today's date followed by `01`. A lookup that could not be made (as opposed to one that returned nothing) is reported as unavailable and produces no finding.
+
+### Fetching the policy file
+
+The server fetches one URL only, `https://mta-sts.<domain>/.well-known/mta-sts.txt`, and refuses or reports a failure when the host resolves to a non-public address or to none, the response is a redirect (redirects are not followed), the status is not a success, the Content-Type is not `text/plain`, the body exceeds 64 KiB, or the whole lookup takes longer than eight seconds. No cookies, credentials or visitor headers are forwarded. A failed fetch gives FAIL, "No policy file", with the reason in the chain, and the verdict "Not protected".
+
+### Policy file rules
+
+Each line must be `key: value`; any other line is FAIL, "Not a key: value line: X".
+
+| Rule | Severity | Title |
+| --- | --- | --- |
+| `version: STSv1` required | FAIL | version: STSv1 is missing |
+| `mode` must be `enforce`, `testing` or `none` | FAIL | mode: X |
+| `mode: testing` | CHECK | mode: testing |
+| `mode: enforce` with no other problem | PASS | mode: enforce |
+| At least one `mx:` line unless the mode is `none` | FAIL | No mx: lines |
+| Each `mx:` a host name or `*.` plus a host name, at most 253 characters | FAIL | Invalid MX pattern X |
+| `max_age` a whole number of seconds from 0 to 31557600 | FAIL | max_age is missing or out of range |
+| `max_age` under 86400 | CHECK | max_age N s |
+| `version`, `mode` and `max_age` at most once | FAIL | Duplicate X field |
+
+### MX coverage
+
+Every MX host is compared with the policy's mx patterns. Following RFC 8461, `*.mx.example.net` matches exactly one extra label: `a.mx.example.net`, never `mx.example.net` or `b.a.mx.example.net`. An uncovered host is FAIL under `mode: enforce` ("X is not in the policy": senders refuse to deliver to it) and CHECK otherwise (it would be refused once the policy enforces). A domain with no MX records, a null MX or a failed MX lookup is FAIL, "MX coverage not established".
+
+### TLS-RPT
+
+Exactly one record at `_smtp._tls.<domain>` may start with `v=TLSRPTv1`, with `v` first and at least one `rua` destination; each destination must be a `mailto:` or `https:` URI. A missing record is CHECK, "No TLS-RPT record", with a suggested record; a bad destination is FAIL, "Invalid report address X"; a valid record is PASS, "TLS reports on".
+
+### The suggested policy
+
+Built only when at least one mx line can be derived. It uses `mode: enforce`, keeps the existing mx lines that still match an MX host (all of them when no MX hosts were read), adds every uncovered host by name, and sets `max_age` to the current value when it is valid and longer than a week, 604800 otherwise.
+
+## Finding reference
+
+| Finding | Severity | What it means for mail | Fix |
+| --- | --- | --- | --- |
+| No record at _mta-sts.domain | FAIL | Senders never look for a policy | Publish v=STSv1; id=… |
+| Publish exactly one MTA-STS record. | FAIL | Senders cannot pick one | Keep one record |
+| The version tag must be first., An MTA-STS record starts with v=STSv1., id= must be 1 to 32 letters or digits. | FAIL | Senders ignore the record | Correct the record |
+| No policy file | FAIL | Senders treat the domain as having no policy | Serve the file at the well-known URL over HTTPS as text/plain |
+| version: STSv1 is missing | FAIL | Senders discard the policy | Add the line |
+| mode: X (invalid) | FAIL | Senders discard the policy | Use enforce, testing or none |
+| mode: testing | CHECK | Failures are reported but mail still delivers over plain text | Switch to enforce when reports are clean |
+| mode: enforce | PASS | Senders require TLS to a listed server | |
+| No mx: lines | FAIL | No server would be allowed | Add one mx line per host |
+| Invalid MX pattern X | FAIL | Senders discard the policy | Fix the line |
+| max_age is missing or out of range | FAIL | Senders discard the policy | Use seconds up to one year |
+| max_age N s | CHECK | Protection lapses quickly | Use a week or more |
+| Not a key: value line: X, Duplicate X field | FAIL | Senders discard the policy | Fix the line |
+| X is not in the policy | FAIL (enforce) or CHECK | Senders refuse that server, or will once enforced | Add mx: X |
+| MX coverage not established | FAIL | No usable MX servers | Publish MX records |
+| No TLS-RPT record | CHECK | You will not hear about failed connections | Publish v=TLSRPTv1; rua=mailto:… |
+| Invalid report address X | FAIL | Senders skip the address | Use mailto: or https: |
+| TLS reports on | PASS | Daily reports go to the listed addresses | |
+| id=X (pasted record) | PASS | The record is valid | Change the id when the file changes |
+
+## Guide
+
+### Setting up MTA-STS from scratch
+
+1. Publish a TLS-RPT record first: `_smtp._tls.<domain> TXT "v=TLSRPTv1; rua=mailto:tls-reports@<domain>"`, so you hear about problems from day one.
+2. Create the host `mta-sts.<domain>` and serve `/.well-known/mta-sts.txt` over HTTPS with a certificate valid for that host, as `text/plain`, with no redirect. Start with `mode: testing`, one `mx:` line per MX host, and `max_age: 604800`.
+3. Publish `_mta-sts.<domain> TXT "v=STSv1; id=<date>01"`.
+4. Check the domain here: every step in the chain should pass, with "mode: testing" as the only CHECK.
+5. After a week of clean TLS reports, change the mode to enforce, change the id, and check again.
+
+### The policy file cannot be fetched
+
+The chain names the reason. The usual causes: the `mta-sts` host does not exist; the web server redirects every path to `www`; a static host serves `.txt` as `application/octet-stream`; the certificate does not cover the `mta-sts` host. Fix the one named, then check again.
+
+### An MX server is not in the policy
+
+Add `mx: <host>` to the file; the suggested policy already includes every uncovered host. Change the id in the record so senders fetch the new file. When a wildcard covers a provider's servers, remember it covers one label only.
+
+### Testing to enforce
+
+Read the TLS reports until they show no failures for every MX host, then change `mode: testing` to `mode: enforce` and the id. The suggested policy on the page is that file.
+
+### Short or invalid max_age
+
+Use a week or more once the policy is stable; Heal it sets 604800 on a pasted file. Values above one year are invalid.
+
+### Withdrawing a policy
+
+Publish `mode: none` with a new id and wait for the longest `max_age` you ever published before removing the record and the file.
+
+### Break it cases
+
+Each case is built from the policy you pasted or the domain serves.
+
+| Case | What it does to the file | Heal it offers (pasted file) |
+| --- | --- | --- |
+| Missing version line | Removes `version:` | Add version: STSv1 |
+| No mx lines | Removes every `mx:` line | Nothing: add the lines yourself |
+| Unknown mode | Misspells the mode (`enforced`, `test`, `off`) | Change mode to enforce or testing |
+| max_age too short | Sets `max_age: 300` | Set max_age to one week |
+| max_age too long | Sets `max_age: 99999999` | Set max_age to one week |
+
+## Worked example
+
+The page opens on `harbor-supply.example`, a sample domain on the reserved `.example` zone, answered in the browser so the example costs nothing and never changes. Its record announces a policy (`v=STSv1; id=20261001T0000`), the file is in testing mode with `mx: mx1.inboxcloud.example`, `mx: *.mx.inboxcloud.example` and `max_age: 86400`, the MX records name `mx1.inboxcloud.example`, `alt1.mx.inboxcloud.example` and `backup.harbor-supply.example`, and TLS-RPT reports go to `tls-reports@harbor-supply.example`.
+
+**Testing only: senders report failures but still deliver over plain text.** Two of three MX servers are covered; the backup is not and would be refused once the policy enforces. The suggested policy adds `mx: backup.harbor-supply.example`, switches to enforce and raises `max_age` to a week. Replace the sample with your own domain and every section, card and link is rewritten for it.
+
+## For agents
+
+The Tamperbox MCP server runs the same checks. Search its catalog for the MTA-STS operation, inspect the input schema, and call it with the domain. Keep the warning block with any conclusion:
+
+- No connection is made to any mail server; STARTTLS and MX certificates are not tested.
+- Senders cache a policy for `max_age` seconds; a change takes effect slowly, and a cached policy may still apply to a domain whose record has gone.
+- A wildcard mx line covers exactly one label.
+
+See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for the calling pattern, and [Security and privacy](/reference/security/) for where the domain travels.
+
+## Limits
+
+- DNS and HTTPS only; no SMTP connection.
+- One fetch of one URL, without following redirects.
+- A pasted file is checked for syntax; coverage and publication need the domain.
+- One DNS answer, from one public resolver, at one moment.
+- Nothing is stored.
+
+## References
+
+- [RFC 8461, SMTP MTA Strict Transport Security](https://www.rfc-editor.org/rfc/rfc8461), section 3 for the policy file and the one-label wildcard
+- [RFC 8460, SMTP TLS Reporting](https://www.rfc-editor.org/rfc/rfc8460)
+- [DANE checker](https://tamperbox.dev/dane-checker), the DNSSEC-based alternative for pinning MX certificates
