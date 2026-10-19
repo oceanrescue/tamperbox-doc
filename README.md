@@ -40,7 +40,6 @@ npm run deploy:dry-run
 - `/llms-full.txt` provides the complete public documentation corpus.
 - Cloudflare Worker environments and static-asset routing are defined in `wrangler.jsonc`.
 - Production deployment is defined in `.github/workflows/deploy.yml`.
-- `public/CNAME` records the canonical documentation hostname for static-hosting compatibility.
 
 ## Cloudflare deployment
 
