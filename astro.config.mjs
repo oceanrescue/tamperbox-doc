@@ -3,7 +3,7 @@ import starlight from '@astrojs/starlight';
 import { defineConfig } from 'astro/config';
 
 export default defineConfig({
-  site: 'https://docs.tamperbox.com',
+  site: 'https://docs.tamperbox.dev',
   output: 'static',
   integrations: [
     starlight({
@@ -32,6 +32,11 @@ export default defineConfig({
         { label: 'Overview', items: [
           { label: 'Documentation home', link: '/' },
           { label: 'Getting started', link: '/getting-started/' },
+        ] },
+        { label: 'Tools', items: [
+          { label: 'Tool pages', link: '/tools/' },
+          { label: 'SSL Certificate Checker', link: '/tools/ssl-checker/' },
+          { label: 'DKIM Record Checker', link: '/tools/dkim-checker/' },
         ] },
         { label: 'MCP server', items: [
           { label: 'Overview', link: '/mcp/' },

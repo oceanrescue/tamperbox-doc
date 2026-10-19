@@ -24,8 +24,8 @@ Use synthetic examples for evaluation. Prefer browser-local tools for sensitive 
 ## Evidence boundaries
 
 - JWT decoding does not verify signature authenticity or issuer trust.
-- DNS evidence does not prove email delivery or mailbox existence.
-- HTTP headers do not establish the complete security of a site.
+- DNS evidence does not prove email delivery or mailbox existence. A published DKIM key, for example, does not prove any message is signed with it ([why](/tools/dkim-checker/#limits)).
+- HTTP headers do not establish the complete security of a site, and one TLS handshake from one location does not establish what every client negotiates ([why](/tools/ssl-checker/#limits)).
 - A failed probe is not the same as a negative result.
 - Caller-context checks can observe a proxy, shared gateway, or MCP host.
 

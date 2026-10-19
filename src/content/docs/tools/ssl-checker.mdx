@@ -1,0 +1,363 @@
+---
+title: SSL Certificate Checker
+description: What the certificate checker connects to, every rule it applies to a chain, what each finding means for the people behind the host, and how to fix and verify each one.
+updated: 2026-10-19
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and repair guide for the Tamperbox SSL Certificate Checker, which probes one TLS connection from the Tamperbox server or reads a pasted PEM chain in the browser and reports trust, names, expiry, chain order, keys and the negotiated protocol.
+prerequisites:
+  - A host name the server can reach on port 443 or a mail port, or a PEM chain or openssl s_client output to paste
+outputs:
+  - A verdict with PASS, CHECK and FAIL chips, the chain on one time axis, the names covered, the connection negotiated and the chain as PEM
+limitations:
+  - One connection from one location at one moment; revocation (OCSP and CRL) is not checked; a pasted chain is read, not verified against any root store
+---
+
+The tool page is [tamperbox.dev/ssl-checker](https://tamperbox.dev/ssl-checker). It opens on a working example, answers in one sentence, and shows the evidence under it. This page is the long version: what the probe does, every rule it applies, what each finding means, and how to fix and verify each one.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> a host name is sent to the Tamperbox server, which opens one TLS connection and returns what the server sent. Pasted certificates and openssl output are read in your browser and never uploaded. Nothing is stored.</div>
+
+## What the tool answers
+
+Four questions, in the order a browser asks them:
+
+1. **Is the chain trusted?** Does it verify against a public root store, with the host name checked?
+2. **Does it name this host?** Is the host covered by the certificate's DNS names?
+3. **Is it in date, and for how long?** Not expired, not valid-yet, and not inside the last third of its lifetime, where renewal should already have happened.
+4. **Is the rest sound?** The chain in order and complete, keys and signatures strong enough, a current TLS version negotiated.
+
+The verdict sentence answers the worst of these. The chips repeat the three that matter most (trust, name, expiry) and any failure beyond them. Findings under the verdict list everything, worst first.
+
+## Inputs
+
+### A host name
+
+`example.com` or `www.example.com`. The check runs on port 443 when you stop typing, or on Enter. A scheme or a path is ignored: `https://example.com/login` checks `example.com`.
+
+### A host name with a mail port
+
+Add `:25`, `:465`, `:587`, `:993`, `:995` or `:853` to check a mail server or a DNS-over-TLS resolver. On 25 and 587 the probe speaks SMTP first (reads the greeting, sends EHLO, requires STARTTLS to be advertised) and then upgrades the connection. The other ports start in TLS. Any other port is refused with a note, because the probe knows how to talk only to these services.
+
+| Port | Service | How the probe connects |
+| --- | --- | --- |
+| 443 | HTTPS | TLS at once, SNI set to the host, ALPN offers h2 and http/1.1 |
+| 25, 587 | SMTP | Plain SMTP, EHLO, STARTTLS, then TLS |
+| 465 | SMTPS | TLS at once |
+| 993 | IMAPS | TLS at once |
+| 995 | POP3S | TLS at once |
+| 853 | DNS over TLS | TLS at once |
+
+The key exchange group, the ALPN result and the post-quantum link are reported for port 443 only.
+
+### A pasted chain
+
+Paste one or more PEM blocks (`-----BEGIN CERTIFICATE-----` …), or the output of:
+
+```sh
+openssl s_client -connect example.com:443 -servername example.com -showcerts </dev/null
+```
+
+Pasted input is read in the browser. Two reading options appear in the rail:
+
+- **Host name to match.** The host to check the certificate's names against. The page guesses it from a `-servername` or `-connect` argument in openssl output. Leave it empty to list the names without matching.
+- **Check dates on.** The day to judge validity on, at noon UTC. Defaults to today. Break it uses it to show "the day after it expires".
+
+If the openssl output contains a `Verify return code` line, the page shows that result as reported by whoever ran openssl, marked "Pasted verification result". It is not confirmed by the tool. Pasted chains without such a line are marked "Trust not checked".
+
+### Files
+
+Drop a `.pem`, `.crt`, `.cer` or `.txt` file anywhere on the page, or use Open file. Files up to 128 KiB are read in the browser.
+
+## Reading the result
+
+### Verdict and chips
+
+The verdict names the outcome and the worst finding, then one line of facts: the host, the port, the address the probe connected to and the moment it did so. For a pasted chain the line says how many certificates were read, the date judged on and the host matched against.
+
+The chips are buttons. A CHECK or FAIL chip scrolls to the section that explains it.
+
+### Findings
+
+Every finding, worst first: FAIL, then CHECK, then INFO. Passes fold into one line, "n checks passed", that opens on click. Each finding has a title, one sentence on what it means for whoever receives the output, and the fix where there is one. The [finding reference](#finding-reference) below lists them all.
+
+### Certificate chain
+
+The signature section. Every certificate the server sent, in the order it sent them, on one time axis:
+
+- The bar is the certificate's validity. The vertical mark is the moment of the check.
+- On your certificate, the hatched last third of the bar is the renewal window: ACME clients normally renew before it starts.
+- The right column shows days left, or "Expired" with how long ago.
+- Labels under the name say what the certificate is (yours, intermediate, root), who issued it, its key and signature algorithm. "Not needed" marks a root the server sends but clients already have. "Self-signed" marks a certificate that signs itself in first position.
+- A missing intermediate is drawn as a dashed ghost row where it should be, marked "Not sent".
+- A broken link ("X, sent next, did not issue this certificate") is printed under the certificate it breaks from.
+
+### Names it covers
+
+Every DNS name in the certificate's Subject Alternative Names, the one that covers the checked host outlined and marked "matches" (or "covers host" for a wildcard). A certificate with no DNS names shows its common name instead, and gets a finding, because browsers ignore the common name.
+
+### Connection
+
+What this one handshake negotiated: protocol, cipher, key exchange group (with a note on whether it is post-quantum), ALPN, the address connected to, and the moment. Only the values this connection negotiated are known, not every version or cipher the server allows.
+
+### Certificate details and Chain as PEM
+
+Every certificate's subject, issuer, serial, dates, key, signature algorithm, SHA-256 fingerprint and CA flag, each with a Copy PEM button. Under it, the whole chain as PEM, exactly as the server sent it, to copy or download. Certificates are public data: they contain no private keys.
+
+### History
+
+Every Break it and Heal it change, newest first, with what it replaced. Revert undoes the newest change; Reset input returns to what you entered.
+
+### Take it further
+
+Links that carry a value from this result into another tool: the host to the post-quantum checker and the security.txt checker, the host and port to the DANE checker, and the certificate's expiry as a Unix timestamp to the timestamp converter. Each opens the other tool with the value already in its box; nothing is put in a URL.
+
+## Method
+
+The same rules read a live chain and a pasted one. The difference is that a live chain also has a trust result from the probe, while a pasted chain is judged against the host name and date you choose.
+
+Findings come in three severities:
+
+| Severity | Shown as | Meaning |
+| --- | --- | --- |
+| Problem | FAIL | A browser or client refuses the connection or warns |
+| Warning | CHECK | Works today; needs attention before it stops working or is refused by strict clients |
+| Information | INFO | Worth knowing; nothing to change |
+
+### Trust and the verification result
+
+On port 443 the probe connects to the first public address the host resolves to, sends the host name as SNI, offers HTTP/2 and HTTP/1.1 through ALPN, and verifies the chain against its trust store with the host name checked. Up to ten certificates are kept from what the server sends. Verification is OpenSSL's; its result code becomes a plain-language finding:
+
+| Code | Finding | Fix offered |
+| --- | --- | --- |
+| 0 | Verified by the probe (PASS) | |
+| 2 | The issuer certificate is missing | Serve the full chain: your certificate followed by its intermediates |
+| 9 | Not valid yet | Check the server clock, or wait for the start date |
+| 10 | The certificate has expired | Renew the certificate and reload the server |
+| 18 | Self-signed certificate | Use a certificate from a public authority, such as a free ACME one |
+| 19 | Self-signed root in the chain is not trusted | Use a certificate from a public authority |
+| 20 | The chain does not reach a trusted root | Serve the full chain |
+| 21 | The first certificate could not be verified | Serve the full chain |
+| 62 | The certificate does not name this host | Add this host name to the certificate, or use the certificate issued for it |
+| 66 | The certificate key is too weak | Reissue with a 2048-bit RSA or a P-256 key |
+| 68 | A certificate in the chain uses a weak key | Reissue the chain with stronger keys |
+| other | The chain did not verify | Check the chain the server sends |
+
+Browser trust stores and policies differ from the probe's. A chain the probe verifies can still be refused by a browser that distrusts the authority, and the reverse.
+
+Mail ports use a separate connection and report trust the same way. Pasted certificates are marked "Trust not checked" (INFO) unless the pasted openssl output carries a `Verify return code` line, in which case that code is reported as "Pasted verification result" (INFO) without confirmation.
+
+### Name coverage
+
+The host is matched against the certificate's DNS Subject Alternative Names, case-insensitively, with a trailing dot ignored.
+
+- A wildcard covers exactly one left-most label: `*.example.com` covers `www.example.com`, not `example.com` and not `a.b.example.com`.
+- The subject common name is used only when the certificate has no DNS names at all. Such a certificate gets its own FAIL, "No DNS names", because browsers require Subject Alternative Names.
+- No match is FAIL, "Does not name host", unless the probe already reported code 62 for the same reason.
+
+Typical causes: a certificate issued for `www` served on the bare domain, a second-level subdomain under a wildcard, or a server returning its default certificate because no virtual host matched the SNI name.
+
+### Expiry and the renewal window
+
+No fixed day count is used. The warning point depends on how long the certificate was issued for:
+
+| State | Severity | Title |
+| --- | --- | --- |
+| Past its end date | FAIL | Expired N days ago (or Expired today) |
+| Before its start date | FAIL | Not valid yet |
+| Less than a third of its lifetime left | CHECK | Renew soon: N days left |
+| Otherwise | PASS | N days left |
+
+For a 90-day certificate the warning starts under 30 days. ACME clients renew at about two thirds of the lifetime, so a CHECK here almost always means renewal has failed, or ran and the server never reloaded the new file.
+
+An intermediate that ends before your certificate gets its own CHECK, "X expires first", because the chain will break on the intermediate's date even though yours is still valid.
+
+The total lifetime is compared with the public TLS limit that applied on the certificate's start date, used as an estimate of the issuance date:
+
+| Issued on or after | Maximum lifetime |
+| --- | --- |
+| before 15 March 2026 | 398 days |
+| 15 March 2026 | 200 days |
+| 15 March 2027 | 100 days |
+| 15 March 2029 | 47 days |
+
+A longer lifetime is CHECK, "Valid for N days": public authorities no longer issue it, so the certificate is almost certainly from a private authority and trusted only where that root is installed.
+
+### Chain order and completeness
+
+Each certificate's issuer should be the subject of the certificate after it.
+
+- **Out of order** (CHECK): every certificate is present but not each followed by its issuer. Most clients cope; some strict ones do not. A pasted chain can be reordered with Heal it.
+- **Gap** (FAIL): a link is missing altogether; "Certificate 3 did not sign certificate 2".
+- **Intermediate not sent**: the server sent only its own certificate, which is not self-signed. CHECK when the live chain still verified (the probe filled the gap from its store), FAIL otherwise. Browsers may fill the gap from cache; API clients and phones often cannot. The fix is nearly always to point the server at the full-chain file instead of the certificate alone.
+- **Root certificate sent** (INFO): the chain ends in a self-signed root. Clients already have it; sending it adds bytes to every handshake.
+- **Your certificate was not first** (CHECK, pasted only): the first non-CA certificate is read as yours and the chain reordered for reading.
+
+### Keys, signatures and protocol
+
+- An RSA key under 2048 bits anywhere below the root is FAIL. RSA of 2048 bits or more, ECDSA on P-256, P-384 or P-521, Ed25519 and Ed448 pass. If the probe already refused the key (codes 66 and 68) the finding is not repeated.
+- A SHA-1 or MD5 signature on any certificate other than the root is FAIL; browsers stopped accepting SHA-1 in 2017.
+- TLS 1.0 or 1.1 negotiated is FAIL; browsers removed both in 2020. TLS 1.2 and 1.3 pass, with a note that 1.3 is needed for post-quantum key exchange.
+- The key exchange group is INFO: "Classical key exchange" (secure today, but recorded traffic could be decrypted by a future quantum computer), PASS for a post-quantum hybrid such as X25519MLKEM768, CHECK for an obsolete pre-standard Kyber draft, INFO for an unrecognised group. The connection table links to the post-quantum checker for the full picture.
+
+## Finding reference
+
+Every finding the tool can emit, by its id, with what it means for the people who connect to the host.
+
+| Id | Severity | Title | What it means | Fix |
+| --- | --- | --- | --- | --- |
+| trust | PASS | Verified by the probe | The chain verifies against the probe's trust store | |
+| trust | FAIL | One of the verification titles above | Browsers warn or refuse | See the table above |
+| trust | INFO | Trust not checked, Trust not established, or Pasted verification result | No trust verdict is available for a pasted chain, or the probe did not report success | Check the host name live |
+| name | PASS | Names host | One of the certificate's names covers the host | |
+| name | FAIL | Does not name host | Browsers warn that the connection is not private | Add the name, or serve the certificate issued for it |
+| san | FAIL | No DNS names | Browsers ignore the common name | Reissue with Subject Alternative Names |
+| expiry | FAIL | Expired N days ago | Full-page warning; API clients refuse | Renew and reload |
+| expiry | FAIL | Not valid yet | Refused until the start date, or the server clock is wrong | Check the clock or wait |
+| expiry | CHECK | Renew soon: N days left | Inside the last third; renewal should have run | Check the renewal job and the reload |
+| expiry | PASS | N days left | | |
+| lifetime | CHECK | Valid for N days | Longer than the public limit for its issue date; private authority | Use a public authority, or install the private root everywhere |
+| first | CHECK | Your certificate was not first | Pasted chain started with an issuer | Serve your certificate first |
+| order | CHECK | Chain is out of order | Present but misordered | Serve your certificate, then each issuer in turn |
+| order | FAIL | Chain has a gap | A link is missing | Serve the full chain |
+| incomplete | CHECK or FAIL | Intermediate not sent | Only the server's own certificate was sent | Serve the full-chain file |
+| root | INFO | Root certificate sent | Extra bytes per handshake | Remove the root from the chain file |
+| ca-expiry-n | CHECK | X expires first | An intermediate ends before your certificate | Renew onto the issuer's current chain |
+| key | FAIL | N-bit RSA key | Current clients refuse RSA under 2048 bits | Reissue with 2048-bit RSA or P-256 |
+| key | PASS | The key, by type | Meets current recommendations | |
+| key | INFO | The key, by type | Key strength could not be established | |
+| signature | FAIL | Signed with SHA-1 or MD5 | Refused since 2017 | Reissue; every current authority signs with SHA-256 or stronger |
+| protocol | FAIL | TLS 1.0 or 1.1 negotiated | Removed from browsers in 2020 | Enable 1.2 and 1.3, disable the rest |
+| protocol | PASS | TLS 1.2 or 1.3 negotiated | | |
+| group | PASS, CHECK or INFO | The key exchange group | Post-quantum hybrid, obsolete draft, or classical | See the post-quantum checker |
+| none | FAIL | No certificate | The server presented none | Configure TLS on this port |
+
+## Guide
+
+Each situation the tool can put you in, with the steps and how to confirm the fix. After every fix, check the host again: the chain section should show the new certificate's dates, and the finding should be gone.
+
+### Renew soon
+
+The certificate works, but renewal did not replace it when it should have.
+
+1. Check the renewal job. For certbot: `certbot renew --dry-run`. For acme.sh: `acme.sh --cron --force`. For a hosting panel: its certificate page shows the last attempt and its error.
+2. If a new certificate was issued but the page still shows the old dates, the server has not reloaded it. Reload or restart the service and check again.
+3. If renewal fails, read the error. The usual causes: the DNS for the host changed, `/.well-known/acme-challenge/` is blocked or redirected, the DNS API token for a DNS-01 challenge expired, or the port used by the challenge is closed.
+4. If the authority rate-limited you after repeated failures, wait the stated period before retrying.
+
+Confirm: the time axis shows a bar that ends well after today, with the vertical mark outside the hatched renewal window.
+
+### Expired, or not valid yet
+
+Every visitor is affected until a valid certificate is served.
+
+1. Issue a new certificate and install it with its intermediates (the "fullchain" file).
+2. Reload the server. Check the host: the chain should show today inside the new validity window.
+3. Then fix the renewal job so it does not happen again (previous section).
+
+"Not valid yet" with a start date in the past hours usually means the server's clock is behind. Fix the clock, not the certificate.
+
+### Intermediate not sent
+
+The site looks fine in a desktop browser and fails in a phone, a script or a mail server.
+
+1. Find the chain file your issuer or ACME client wrote: `fullchain.pem` (certbot), `fullchain.cer` (acme.sh), or the bundle your authority sent with the certificate.
+2. Point the server at it. nginx: `ssl_certificate /path/fullchain.pem;`. Apache: `SSLCertificateFile` with the full chain, or `SSLCertificateChainFile` for the intermediates. HAProxy: concatenate certificate, intermediates and key into one file.
+3. Reload. The chain section should now show two or three certificates with no ghost row.
+
+Verify from the command line: `openssl s_client -connect host:443 -servername host -showcerts </dev/null` prints every certificate the server sent; a complete chain has more than one.
+
+### Does not name this host
+
+The certificate is valid but was issued for other names.
+
+1. Open Names it covers. If the name you need is missing, reissue the certificate with that name added, or serve the certificate that was issued for it.
+2. If the name is present under a wildcard but still not covered, remember that `*.example.com` covers one label: `app.eu.example.com` needs its own name.
+3. If the names look right but the probe still gets a different certificate, the server is picking its default virtual host because no server block matches the SNI name. Check the `server_name` or `ServerName` for this host.
+
+### Self-signed, or an untrusted root
+
+No public authority vouches for the certificate. Browsers warn; clients connect only when told to trust this exact certificate.
+
+- For a public host: replace it with a certificate from a public authority. ACME authorities issue them free.
+- For an internal host: this is expected. Install the private root on every client that connects, and ignore the trust finding here; the rest of the findings still apply.
+
+### Weak key, weak signature
+
+- An RSA key under 2048 bits, or a SHA-1 signature: generate a new key (2048-bit RSA or, better, ECDSA P-256) and reissue. Never reuse the old key. Every current authority signs with SHA-256 or stronger, so a fresh issuance fixes the signature as well.
+- A weak key in an intermediate: reissue onto the authority's current chain.
+
+### TLS 1.0 or 1.1 negotiated
+
+The server offers only old protocol versions, or the probe was steered to one.
+
+1. Enable TLS 1.2 and 1.3 and disable 1.0 and 1.1. nginx: `ssl_protocols TLSv1.2 TLSv1.3;`. Apache: `SSLProtocol -all +TLSv1.2 +TLSv1.3`. HAProxy: `ssl-default-bind-options ssl-min-ver TLSv1.2`.
+2. Restart and check again. Connection should show TLS 1.3, or 1.2.
+
+### Checking a mail server
+
+Add the port: `mail.example.com:25` for inbound SMTP with STARTTLS, `:465` or `:587` for submission, `:993` for IMAP. Mail certificates fail in the same ways as web ones, with one difference: the name to cover is the host in the MX record or the client configuration, not the mail domain. `mail.example.com` must be in the certificate even when the domain is `example.com`.
+
+A mail server's certificate is one of three things a sending domain gets judged on; the other two are its [DKIM keys](/tools/dkim-checker/) and its DMARC policy ([DMARC checker](https://tamperbox.dev/dmarc-checker)).
+
+### Reading a pasted chain
+
+To judge a chain without connecting (a file from a colleague, a chain from an internal host, a certificate before deployment):
+
+1. Paste the PEM blocks, or openssl output with `-showcerts`.
+2. Set Host name to match to the host it will serve, so the name finding is real.
+3. Set Check dates on to the day you care about: deployment day, or the day after expiry to see what breaks.
+4. Trust is not checked for pasted chains. Check the host live once it is deployed.
+
+### Break it cases
+
+Each case is built from your own input where that is possible, so the finding looks the way it would for you.
+
+| Case | What it loads | What to look at |
+| --- | --- | --- |
+| Wrong host name | Your chain, matched against `beta.app.` + your host | Names it covers, with no match |
+| The day after it expires | Your chain, judged the day after its end date | The time axis with the mark past the bar; Expired finding |
+| Intermediate left out | Your certificate alone | The ghost row; Intermediate not sent |
+| Chain out of order | Your chain with the issuers reversed | Chain is out of order; Heal it offers to reorder |
+| Self-signed | The sample's self-signed certificate | Self-signed label; trust finding |
+| Weak key, TLS 1.2 | The sample's legacy host: 1024-bit RSA over TLS 1.2 | Key finding; Connection |
+
+Heal it after a break offers "Restore input before this break", or "Put the chain in order" for the misordered case. History records each step with Revert.
+
+## Worked example
+
+The page opens on `www.harbor-supply.example`, a sample shop on the reserved `.example` zone, answered in the browser so the example costs nothing and never changes. Checked on 12 October 2026, it shows:
+
+- **Verified by the probe. Renew soon: 22 days left.** The chain verifies, the name matches, and the certificate has 22 of its 90 days left: inside the renewal window, so renewal should already have run.
+- Three certificates on the axis: the shop's ECDSA P-256 certificate, the Harbor Sample CA E2 intermediate (151 days left), and the Harbor Sample Root X1 marked Not needed.
+- Two names covered; `www.harbor-supply.example` matches.
+- TLS 1.3, `TLS_AES_128_GCM_SHA256`, X25519 (classical), HTTP/2 over ALPN.
+- Findings: Renew soon (CHECK), Root certificate sent (INFO), and three passes.
+
+Replace the sample with your own host in the box on the left and every section, card and link is rewritten for it.
+
+## For agents
+
+The Tamperbox MCP server runs the same checks. Search its catalog for the certificate or TLS operation, inspect the input schema, and call it with the host name. The result carries the findings with their ids and severities as listed in the [finding reference](#finding-reference), and a warning block that must be kept with any conclusion drawn from it:
+
+- The probe observed one connection from one location. It does not prove what another client, in another region, negotiates.
+- Trust is the probe's trust store, not a browser's.
+- Revocation is not checked.
+
+See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for the calling pattern, and [Security and privacy](/reference/security/) for where the host name travels.
+
+## Limits
+
+- One connection, from one location, at one moment. Other servers behind the same name, other regions and other moments can differ.
+- Only the protocol, cipher and group this connection negotiated are known, not everything the server allows.
+- Revocation (OCSP and CRL) is not checked.
+- Pasted certificates and pasted verification codes are reported as supplied, not independently verified.
+- Lifetime guidance uses the start date as an estimate of the issuance date; the actual issuance time is not recorded in a certificate.
+- The key exchange group, ALPN and the post-quantum link are reported for port 443 only.
+- Nothing is stored.
+
+## References
+
+- [RFC 8446, TLS 1.3](https://www.rfc-editor.org/rfc/rfc8446)
+- [RFC 5280, X.509 certificates and CRLs](https://www.rfc-editor.org/rfc/rfc5280)
+- [RFC 6125, host name verification](https://www.rfc-editor.org/rfc/rfc6125)
+- [CA/Browser Forum TLS Baseline Requirements, section 6.3.2, certificate operational periods](https://cabforum.org/working-groups/server/baseline-requirements/requirements/#632-certificate-operational-periods-and-key-pair-usage-periods)
+- [RFC 8555, ACME](https://www.rfc-editor.org/rfc/rfc8555)

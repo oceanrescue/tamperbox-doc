@@ -1,6 +1,8 @@
 # Tamperbox documentation
 
-Public Astro and Starlight documentation for [Tamperbox](https://tamperbox.dev), intended for `https://docs.tamperbox.com`.
+Public Astro and Starlight documentation for [Tamperbox](https://tamperbox.dev), published at [docs.tamperbox.dev](https://docs.tamperbox.dev).
+
+Start at [Getting started](https://docs.tamperbox.dev/getting-started/), connect an agent with the [MCP guide](https://docs.tamperbox.dev/mcp/), or read a tool's method and repair guide under [Tool pages](https://docs.tamperbox.dev/tools/). Every page is also served as Markdown (add `.md` to its path) and listed in [llms.txt](https://docs.tamperbox.dev/llms.txt).
 
 ## Local development
 

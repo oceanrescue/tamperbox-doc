@@ -1,6 +1,6 @@
 import type { CollectionEntry } from 'astro:content';
 
-export const siteUrl = 'https://docs.tamperbox.com';
+export const siteUrl = 'https://docs.tamperbox.dev';
 export const repositoryUrl = 'https://github.com/oceanrescue/tamperbox-doc';
 
 export function isPublished(entry: CollectionEntry<'docs'>): boolean {
