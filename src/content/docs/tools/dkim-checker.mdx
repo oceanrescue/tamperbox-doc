@@ -1,0 +1,298 @@
+---
+title: DKIM Record Checker
+description: How the checker finds every DKIM key a domain publishes without asking for a selector, every rule it applies to a key record, what each finding means for mail delivery, and how to fix and verify each one.
+updated: 2026-10-19
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and repair guide for the Tamperbox DKIM Record Checker, which probes 24 common selectors from the Tamperbox server, reads a pasted DKIM-Signature header to find the exact key behind a message, measures key length from the key bytes, and reports flags, revocation and fingerprints.
+prerequisites:
+  - A domain, the DKIM-Signature header of a message it sent, or a DKIM key record to paste
+outputs:
+  - A verdict for the inspected key with PASS, CHECK and FAIL chips, every key the domain publishes, the key as rows with a SHA-256 fingerprint, and the record tag by tag
+limitations:
+  - Selectors are not discoverable from DNS, so a domain that signs under a selector of its own shows no key until you paste a message header; a valid key does not prove that any message is signed with it
+---
+
+The tool page is [tamperbox.dev/dkim-checker](https://tamperbox.dev/dkim-checker). It opens on a working example and never asks for a selector: enter a domain and it finds the keys for you. This page is the long version: how discovery works, every rule applied to a key record, what each finding means, and how to fix and verify each one.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> a domain or a message header is sent to the Tamperbox server, which asks public DNS once per selector and returns the records. A pasted key record is decoded and measured in your browser and never uploaded. Nothing is stored.</div>
+
+## What the tool answers
+
+DKIM lets a receiver check that a message was signed by the domain that claims to have sent it. The signature is in the message; the public key that verifies it is in DNS, under a name called a selector: `<selector>._domainkey.<domain>`. The tool answers:
+
+1. **Which keys does this domain publish?** Under the selectors mail services commonly use.
+2. **Is the inspected key usable?** Readable, not revoked, not in testing mode, strong enough.
+3. **Which key signed this message?** When you paste the message's DKIM-Signature header.
+4. **Does DNS hold the key my mail service thinks it does?** By comparing the SHA-256 fingerprint.
+
+It does not verify a message. For that you need the signature, the signed headers and the body: use the [email header analyzer](https://tamperbox.dev/email-header-analyzer).
+
+## Inputs
+
+### A domain
+
+`example.com`. When you stop typing, the server probes the 24 common selectors, five lookups at a time. The page inspects the strongest key it finds and lists the rest under "Keys this domain publishes"; click any of them to inspect it.
+
+### The DKIM-Signature header of a sent message
+
+Paste the header line from a message the domain sent. The page reads its `d=` tag (the signing domain) and `s=` tag (the selector), looks up exactly that key, and still probes the common selectors so you see the rest. This is the only way to be sure which key a message used.
+
+```text
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=example.com; s=selector1;
+  h=from:to:subject:date; bh=…; b=…
+```
+
+Where to find it: Gmail, open the message, the three-dot menu, "Show original"; Outlook on the web, the three-dot menu, "View message source"; Apple Mail, View, Message, All Headers. Copy the `DKIM-Signature:` line, including its continuation lines.
+
+### A key by name
+
+`selector1._domainkey.example.com` inspects that one key, for people who already know the selector.
+
+### A key record
+
+Paste the TXT record itself, `v=DKIM1; k=rsa; p=…`, with or without the quotes DNS tools print. It is read in the browser and shown as "Pasted record": the tool cannot know which selector it belongs to, so the verdict is about the key alone.
+
+### Files
+
+Drop a `.txt` file anywhere on the page, or use Open file. It is read in the browser.
+
+## Reading the result
+
+### Verdict and chips
+
+The verdict is about the inspected key: its type and length, and whether it is valid, revoked, in testing mode or broken. The line under it says where the key was published and, for a pasted header, that it is the key named in the message. The chips repeat the key's state, then one chip per other key found, each a button that scrolls to the list.
+
+### Findings
+
+Everything found on the inspected key, worst first, and one entry per other key the domain publishes, so a weak or testing-mode second key is never hidden by a strong first one. The [finding reference](#finding-reference) lists them all.
+
+### The key
+
+The inspected key as rows: type, length measured from the key bytes, public exponent, allowed hashes, and the SHA-256 fingerprint of the key bytes in groups of eight hex characters. Compare the fingerprint with the one your mail service shows to confirm that DNS holds the key you expect.
+
+### Keys this domain publishes
+
+One row per selector that answered, with the key's status and length; the inspected one is marked. Under the rows, the selectors with no key, and the count probed. "Probe again" repeats the lookups, for a temporary DNS failure or a record you just published.
+
+### The record, tag by tag
+
+Every tag in the inspected record with its meaning: `v`, `k`, `p`, `h`, `t`, `s`, `n`. Unknown tags are listed and marked as ignored by receivers.
+
+### History, Heal it, Take it further
+
+History logs every Break it and Heal it change with Revert and Reset input. Heal it offers the repairs the tool found: remove the testing flag, allow sha256, set the key type to RSA, correct the version tag, or restore the input before a break. Take it further carries the domain to the DMARC checker, the DANE checker and the DNSSEC checker.
+
+## Method
+
+### Selector discovery
+
+DNS has no way to list a domain's selectors. The tool probes these 24 names, which cover the common mail services:
+
+| Selector | Used by |
+| --- | --- |
+| `google` | Google Workspace |
+| `20230601`, `20221208`, `20210112` | Google's own domains, rotated by date |
+| `selector1`, `selector2` | Microsoft 365 (published as CNAME aliases) |
+| `k1`, `k2`, `k3` | Mailchimp, Mandrill |
+| `s1`, `s2` | SendGrid |
+| `default`, `dkim`, `mail`, `smtp` | Self-hosted servers, OpenDKIM defaults |
+| `mandrill` | Mandrill |
+| `mxvault` | MXroute and similar |
+| `zendesk1`, `zendesk2` | Zendesk |
+| `pm` | Postmark |
+| `fm1`, `fm2` | Fastmail |
+| `protonmail` | Proton |
+| `everlytickey1` | Everlytic |
+
+Lookups run five at a time. Each selector found gets a row with its key type, length and flags. A selector whose lookup failed (not "no record", but no answer) is counted separately, so a temporary DNS error is never reported as a missing key. When every lookup fails the page reports an error, not a domain without keys.
+
+The server queries public DNS and follows CNAME aliases, so keys that a mail service hosts on its own zone through a CNAME (Microsoft 365, Amazon SES) are found.
+
+### Choosing the key to inspect
+
+With no selector named, the page inspects the best key found: a passing key before a key to check, a non-revoked key before a revoked one, a longer key before a shorter one. With a pasted header or a key by name, it inspects that key. Clicking a row in the list inspects that key instead.
+
+### Wildcard and multiple records
+
+- A domain whose every selector answers with the same record has a wildcard, `*._domainkey.example.com`. The page reports one key, not 24. A wildcard with an empty `p=` is the standard way to say "this domain signs no mail": a CHECK, with the explanation.
+- A selector with two or more TXT records is FAIL, "Two or more records": receivers cannot pick one. The usual cause is a rotated key added without removing the old one.
+
+### Tag rules
+
+The record is split on semicolons into `name=value` tags. A malformed tag, or a tag that appears twice, is FAIL.
+
+- `v`, when present, must be the first tag and exactly `DKIM1`. Any other value is FAIL; Heal it can correct it.
+- `k` must be `rsa` or `ed25519`, in lower case. `k=RSA` is reported as an unsupported key type (FAIL) with a correction hint; no key assessment is made for an unsupported type.
+- `s`, when present, must include `email` or `*`; otherwise FAIL, "Key is not enabled for email".
+- A record without `p` is FAIL: no signature could ever verify.
+- An empty `p=` is CHECK, "Key revoked": the standard way to retire a selector.
+- `t=y` is CHECK, "Testing mode": receivers may treat failures as unsigned mail, so the key protects less than it could. Heal it removes the flag.
+- `t=s` is INFO: the signing identity must exactly match the signing domain. The tool has no message identity to compare, so it reports the flag without verifying it. Whitespace around the colon-separated flags is allowed.
+- An `h=` list naming `sha1` without `sha256` is FAIL, "Only sha1 allowed": receivers reject sha1 signatures. Heal it removes `h=` so the default applies.
+
+### Decoding the key bytes
+
+Key length is never estimated from the length of the text. The `p` value is base64-decoded after whitespace is removed; characters outside the base64 alphabet, or a length that cannot be valid base64, fail with "The key is not valid base64".
+
+For RSA, the bytes are read as DER. Both a SubjectPublicKeyInfo structure (with the rsaEncryption identifier) and a bare PKCS#1 key are accepted. The modulus is measured to the exact bit, leading zero bytes ignored, and the public exponent is shown. Structural errors are reported directly: "The key data is truncated", "Invalid DER length", or "The key is not an RSA key; set k= to its type" when the algorithm identifier is something else. For `k=ed25519` the decoded key must be exactly 32 bytes.
+
+Truncated keys are the most common real-world failure. They come from a control panel that cut a long value at 255 characters, or dropped one of the quoted strings a long TXT record is split into. Another frequent cause is `k=ed25519` on a key that is really RSA: when the key text starts with `MI`, the usual opening of DER, Heal it offers `k=rsa`.
+
+### Key strength
+
+| Key | Severity | Title |
+| --- | --- | --- |
+| RSA under 1024 bits | FAIL | N-bit RSA key: receivers ignore it |
+| RSA 1024 to 2047 bits | CHECK | N-bit RSA key: accepted, but 2048 is the recommendation |
+| RSA 2048 bits or more | PASS | N-bit RSA key |
+| Ed25519 | PASS | Ed25519 key, with a note to sign with RSA as well, because not every receiver verifies Ed25519 yet |
+
+### Fingerprint
+
+The page computes a SHA-256 digest of the decoded key bytes in the browser and shows it in groups of eight hex characters. Compare it with the fingerprint your mail service shows to confirm that DNS holds the key you expect. It says nothing about whether outgoing mail is signed with it.
+
+## Finding reference
+
+| Finding | Severity | What it means for mail delivery | Fix |
+| --- | --- | --- | --- |
+| N-bit RSA key (2048 or more) | PASS | Receivers can verify signatures made with it | |
+| Ed25519 key | PASS | Strong; some receivers cannot verify it yet | Also sign with RSA under a second selector |
+| N-bit RSA key (1024 to 2047) | CHECK | Still accepted; scored down by some receivers | Rotate to a 2048-bit key under a new selector |
+| N-bit RSA key (under 1024) | FAIL | Receivers ignore the key; mail is treated as unsigned | Rotate to a 2048-bit key |
+| Key revoked (empty p=) | CHECK | Signatures with this selector fail on purpose | Fine if retired; republish the key if mail still uses it |
+| Testing mode (t=y) | CHECK | Failures may be treated as unsigned; weaker protection | Remove t=y once signing works |
+| Strict DKIM identity domain (t=s) | INFO | The signing identity must match the signing domain exactly | Nothing, unless subdomains sign with this key |
+| Only sha1 allowed | FAIL | Receivers reject sha1 signatures | Allow sha256, or remove h= |
+| No p= key | FAIL | No signature can verify | Publish the public key |
+| The key is not valid base64 | FAIL | Receivers cannot load the key | Re-copy the record from your mail service |
+| The key data is truncated | FAIL | Receivers cannot load the key | Publish the full value; split it into quoted strings if your DNS panel limits a string to 255 characters |
+| The key is not an RSA key; set k= to its type | FAIL | The k= tag and the bytes disagree | Set k= to the real type |
+| An Ed25519 key is 32 bytes | FAIL | The bytes are not an Ed25519 key | Set k=rsa, or publish the right key |
+| Unsupported key type | FAIL | Case-sensitive: `k=RSA` is not `k=rsa` | Use rsa or ed25519 in lower case |
+| v=DKIM1 must be first | FAIL | Receivers ignore the record | Move v= to the front |
+| v= other than DKIM1 | FAIL | Only DKIM1 is defined | Set v=DKIM1 |
+| Key is not enabled for email | FAIL | s= excludes email | Set s=email, or remove s= |
+| Two or more records at the selector | FAIL | Receivers cannot pick one | Remove the old record |
+| No record at the selector | FAIL | Mail signed with this selector fails at every receiver | Publish the key, or sign with the right selector |
+| No key under the common selectors | FAIL | The domain sends unsigned mail, or signs under its own selector | Paste a message header to check the exact key |
+| selector: key (another key found) | INFO, CHECK or FAIL | Another service signs for the domain with this key | Inspect it; each key needs the same attention |
+
+## Guide
+
+### Finding the key behind a message
+
+When someone says "your mail fails DKIM", the key that matters is the one named in that message.
+
+1. Open the message's source (Gmail: Show original; Outlook: View message source; Apple Mail: All Headers).
+2. Copy the `DKIM-Signature:` line with its continuation lines and paste it into the box. The page inspects exactly that key.
+3. If the verdict is "No DKIM key", the selector in the message has no record: the service is signing with a key that is not in DNS. Publish the record your service gave you under that exact selector.
+4. If the key is there but weak, revoked or in testing mode, follow the section for that finding below.
+
+### Rotating to a 2048-bit key
+
+Never replace a key in place: mail signed with the old key is still in transit.
+
+1. In your mail service, generate a new 2048-bit key. It gives you a new selector and a TXT record.
+2. Publish the record. Check the domain here: the new selector appears in the list with a PASS.
+3. Switch signing to the new selector in the service.
+4. After a few days, revoke the old selector by publishing `v=DKIM1; p=` under it. Check: the old key shows "Key revoked".
+5. After a few weeks, delete the old record.
+
+Confirm the switch by pasting the header of a freshly sent message: the `s=` tag should be the new selector.
+
+### A revoked key
+
+An empty `p=` means someone retired this selector on purpose. If no mail uses it, nothing to do: delete the record when convenient. If mail still uses it, your service is signing with a key receivers refuse: republish the current public key under that selector, or switch the service to a selector that has one.
+
+### Testing mode
+
+`t=y` belongs to the first days of a rollout. Once a few messages verify (paste their headers to see the key inspected, then confirm with your receiver's reports), remove the flag. Heal it shows the corrected record; publish it in DNS.
+
+### Only sha1 allowed
+
+Remove the `h=` tag, or make it `h=sha256` or `h=sha1:sha256`. Heal it shows the corrected record. Nothing changes in the mail service; the record only declares what receivers may accept.
+
+### Truncated or unreadable key
+
+1. Copy the record again from your mail service and compare it character by character with what DNS returns (The record, tag by tag shows the published `p=`).
+2. If your DNS panel limits a TXT string to 255 characters, split the value into two quoted strings: `"v=DKIM1; k=rsa; p=MIIBIjAN…" "…IDAQAB"`. Receivers join them.
+3. If `k=ed25519` and the key starts with `MI`, the key is RSA: set `k=rsa` (Heal it offers it).
+4. Publish, then Probe again.
+
+### Two records at one selector
+
+A rotated key was added without removing the old one. Delete the old record so exactly one remains, then Probe again.
+
+### No key under the common selectors
+
+Either the domain sends no mail, or it signs under a selector the probe does not try.
+
+- If the domain sends mail, paste the header of a message it sent: the exact selector is in it. Many services use dated or random selectors.
+- If it sends no mail, publish `*._domainkey.example.com TXT "v=DKIM1; p="` and a DMARC policy with `p=reject`, so nobody can sign as the domain.
+
+### Google Workspace, Microsoft 365, and the rest
+
+| Service | Selector | How the record is published |
+| --- | --- | --- |
+| Google Workspace | `google` | TXT record the admin console gives you |
+| Microsoft 365 | `selector1`, `selector2` | Two CNAME records pointing into `onmicrosoft.com`; the key lives there |
+| Mailchimp | `k1`, `k2`, `k3` | CNAME to Mailchimp |
+| SendGrid | `s1`, `s2` | CNAME to SendGrid |
+| Postmark | `pm` | TXT |
+| Fastmail | `fm1`, `fm2` | CNAME to Fastmail |
+| Proton | `protonmail` | CNAME to Proton |
+| Amazon SES | three random selectors | CNAME to SES; not in the common list, so paste a header |
+
+Because the probe follows CNAME aliases, a CNAME-published key appears like any other.
+
+### The mail server's own certificate
+
+DKIM protects the message; the connection that carries it is protected by the mail server's TLS certificate, which fails in its own ways. Check it with the [SSL Certificate Checker on a mail port](/tools/ssl-checker/#a-host-name-with-a-mail-port), and the TLSA records that pin it with the [DANE checker](https://tamperbox.dev/dane-checker).
+
+### Break it cases
+
+Each case is built from the key you entered or looked up, so the finding looks the way it would for you.
+
+| Case | What it does to your record | Heal it offers |
+| --- | --- | --- |
+| 1024-bit key | Loads a 1024-bit sample key | Restore input before this break |
+| Revoked key | Empties `p=` | Restore |
+| Testing flag | Adds `t=y` | Remove testing mode (t=y) |
+| Truncated key | Cuts the key in half | Restore |
+| Only sha1 | Adds `h=sha1` | Allow sha256 |
+| Wrong key type | Sets `k=ed25519` on an RSA key | Set k=rsa (the key is RSA) |
+
+## Worked example
+
+The page opens on `harbor-supply.example`, a sample domain on the reserved `.example` zone, answered in the browser so the example costs nothing and never changes. It publishes:
+
+- `google`: a 2048-bit RSA key, inspected. **2048-bit RSA key: valid and strong enough.**
+- `s1`: a 1024-bit RSA key in testing mode, listed beside it and reported as a CHECK finding ("s1: 1024-bit RSA, testing"), because a second service signs for the domain with a weaker key.
+
+Click `s1` to inspect it: the verdict becomes "1024-bit RSA key: rotate when you can", with Testing mode as a second finding and Heal it offering to remove the flag. Replace the sample with your own domain and every section, card and link is rewritten for it.
+
+## For agents
+
+The Tamperbox MCP server runs the same checks. Search its catalog for the DKIM operation, inspect the input schema, and call it with the domain and, when known, the selector. Keep the warning block with any conclusion:
+
+- A valid key does not prove that any message is signed with it. Message verification needs the signature and the signed content.
+- Discovery tries the 24 common selectors; a domain can publish others.
+- DNS evidence is one answer from one public resolver at one moment.
+
+See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for the calling pattern, and [Security and privacy](/reference/security/) for where the domain travels.
+
+## Limits
+
+- Selectors are not discoverable from DNS; discovery finds the common ones only.
+- A valid key does not prove that mail is signed with it, or that a message passes.
+- A pasted record is measured in the browser and says nothing about what DNS serves.
+- One DNS answer, from one public resolver, at one moment.
+- Nothing is stored.
+
+## References
+
+- [RFC 6376, DomainKeys Identified Mail signatures](https://www.rfc-editor.org/rfc/rfc6376)
+- [RFC 8301, cryptographic algorithm and key usage update to DKIM](https://www.rfc-editor.org/rfc/rfc8301)
+- [RFC 8463, Ed25519 for DKIM](https://www.rfc-editor.org/rfc/rfc8463)
+- [RFC 7489, DMARC](https://www.rfc-editor.org/rfc/rfc7489)
+- Tamperbox guides: [Why is my DKIM key failing?](https://tamperbox.dev/guides/fix-dkim-key-failures) and [DMARC rollout: from p=none to reject](https://tamperbox.dev/guides/dmarc-monitoring-to-reject)

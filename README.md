@@ -1,6 +1,8 @@
 # Tamperbox documentation
 
-Public Astro and Starlight documentation for [Tamperbox](https://tamperbox.dev), intended for `https://docs.tamperbox.com`.
+Public Astro and Starlight documentation for [Tamperbox](https://tamperbox.dev), published at [docs.tamperbox.dev](https://docs.tamperbox.dev).
+
+Start at [Getting started](https://docs.tamperbox.dev/getting-started/), connect an agent with the [MCP guide](https://docs.tamperbox.dev/mcp/), or read a tool's method and repair guide under [Tool pages](https://docs.tamperbox.dev/tools/). Every page is also served as Markdown (add `.md` to its path) and listed in [llms.txt](https://docs.tamperbox.dev/llms.txt).
 
 ## Local development
 
@@ -11,11 +13,21 @@ npm ci
 npm run dev
 ```
 
+`npm run dev` is the fast Astro development server with hot reload. To verify the
+compiled site through the same Cloudflare static-asset routing used in production:
+
+```sh
+npm run dev:worker
+```
+
+The Worker preview is available at `http://localhost:8787`.
+
 ## Verify
 
 ```sh
 npm run check
 npm run build
+npm run deploy:dry-run
 ```
 
 ## Documentation architecture
@@ -26,12 +38,30 @@ npm run build
 - Every published page has a generated Markdown mirror.
 - `/llms.txt` provides a compact agent index.
 - `/llms-full.txt` provides the complete public documentation corpus.
-- GitHub Pages deployment is defined in `.github/workflows/deploy.yml`.
-- `public/CNAME` targets `docs.tamperbox.com`.
+- Cloudflare Worker environments and static-asset routing are defined in `wrangler.jsonc`.
+- Production deployment is defined in `.github/workflows/deploy.yml`.
+- `public/CNAME` records the canonical documentation hostname for static-hosting compatibility.
+
+## Cloudflare deployment
+
+The production environment deploys the static Astro build as the `tamperbox-doc`
+Worker and attaches the `docs.tamperbox.dev` custom domain. No Worker entrypoint is
+needed because Cloudflare serves the generated assets directly.
+
+For a manual deployment after authenticating Wrangler:
+
+```sh
+npm run deploy:production
+```
+
+For GitHub Actions, add these repository secrets:
+
+- `CLOUDFLARE_API_TOKEN`: a scoped token that can edit Workers Scripts and Workers Routes.
+- `CLOUDFLARE_ACCOUNT_ID`: the Cloudflare account containing the `tamperbox.dev` zone.
 
 ## Public repository setup
 
-Create `oceanrescue/tamperbox-doc` as a public GitHub repository, then add it as the local `origin` and push `main`. In the repository settings, select GitHub Actions as the Pages source. Configure DNS for `docs.tamperbox.com` after the Pages deployment is available.
+Create `oceanrescue/tamperbox-doc` as a public GitHub repository, then add it as the local `origin` and push `main`. Add the Cloudflare secrets above and create a protected `production` environment if deployment approvals are desired. The first production deployment creates or updates the `docs.tamperbox.dev` custom domain in Cloudflare.
 
 ## License
 
