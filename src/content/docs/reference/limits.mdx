@@ -1,0 +1,40 @@
+---
+title: Limits
+description: Execution, request, result, and concurrency limits for Tamperbox MCP code mode.
+updated: 2026-10-19
+productVersion: "MCP 0.2.0"
+agentSummary: Review the default Tamperbox MCP execution budgets and the behavior that occurs when a limit is reached.
+prerequisites: []
+outputs:
+  - Constraints for planning a bounded MCP execution
+limitations:
+  - Hosted infrastructure can add limits outside the package defaults.
+---
+
+## Default budgets
+
+| Resource | Default |
+| --- | --- |
+| Code | 64 KiB UTF-8 |
+| Input to each API call | 1 MiB UTF-8 |
+| Result from each API response | 2 MiB serialized JSON |
+| JSON nesting | 40 levels |
+| Execution time | 15 seconds, selectable from 1-30 seconds |
+| Upstream request time | 30 seconds, bounded by the execution deadline |
+| API calls per execution | 20 |
+| Parallel API calls | 4 |
+| Active executions per process | 4 |
+| QuickJS allocator budget | 32 MiB |
+| WebAssembly linear memory | 64 MiB |
+
+## Counting API calls
+
+`apiCalls` counts bridge calls attempted, including host-validation failures. Guest serialization failures happen before dispatch and do not consume the call budget.
+
+## Execution completion
+
+Await every API request. Calls still running when the submitted function completes are cancelled. Responses do not retry or follow redirects unless the documented operation itself defines that behavior.
+
+## Result serialization
+
+Return JSON-compatible values. BigInt values, cyclic objects, functions, symbols, and non-finite numbers are rejected. `undefined` becomes `null` at the top level and is omitted from object properties under normal JSON rules.

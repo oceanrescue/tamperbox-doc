@@ -1,0 +1,39 @@
+---
+title: Tamperbox documentation
+description: Inspect public network evidence, transform structured text, and compose supported checks with Tamperbox.
+updated: 2026-10-19
+productVersion: "MCP 0.2.0"
+agentSummary: Start here for the Tamperbox documentation map, product boundaries, and the shortest path to a working integration.
+prerequisites: []
+outputs:
+  - A path to the relevant Tamperbox tool, API operation, or MCP workflow
+limitations:
+  - This documentation base does not replace the operation schemas bundled with the MCP server.
+---
+
+Tamperbox gives developers browser tools and server-side diagnostics with explicit data-handling labels. Its MCP server lets an agent search the exact API contract, then run a small JavaScript workflow against documented operations.
+
+<div class="tb-doc-grid">
+  <a class="tb-doc-card" href="/getting-started/"><strong>Start with one check</strong><span>Choose the browser, API, or MCP path and verify a small result.</span></a>
+  <a class="tb-doc-card" href="/mcp/"><strong>Connect an agent</strong><span>Use the two-tool code-mode server from Codex, Claude, VS Code, or another MCP client.</span></a>
+  <a class="tb-doc-card" href="/workflows/"><strong>Compose a workflow</strong><span>Discover schemas first, preserve warnings, and combine only compatible outputs.</span></a>
+  <a class="tb-doc-card" href="/reference/operations/"><strong>Browse capabilities</strong><span>Find transforms, DNS, email, TLS, HTTP, network, and utility operations.</span></a>
+</div>
+
+## Choose the right surface
+
+Use the browser tools at [tamperbox.dev](https://tamperbox.dev) when you want a visual workflow or local processing. Use the API when an application needs a single documented operation. Use the MCP server when an agent needs to discover schemas and compose calls.
+
+<div class="tb-callout"><strong>Data boundary:</strong> browser-local tools keep supported inputs on the device. Server checks and MCP API calls send their operation inputs to the configured Tamperbox API.</div>
+
+## What this site covers
+
+- Setup for the public MCP server and local stdio package
+- Code-mode discovery and execution patterns
+- Operation families and input shapes
+- Limits, evidence boundaries, security, and privacy
+- Contribution paths for the public documentation repository
+
+## Product sources
+
+The [Tamperbox MCP repository](https://github.com/oceanrescue/tamperbox-mcp) remains the source of truth for package behavior, versioned schemas, tests, and deployment records. This site turns those contracts into task-focused guidance.

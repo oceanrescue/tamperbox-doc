@@ -1,0 +1,12 @@
+---
+import StarlightHead from '@astrojs/starlight/components/Head.astro';
+
+const { entry } = Astro.locals.starlightRoute;
+const rawPath = Astro.url.pathname === '/' ? '/index.md' : `${Astro.url.pathname.replace(/\/$/, '')}.md`;
+---
+<StarlightHead />
+<meta name="theme-color" content="#f6f7f5" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#0e1110" media="(prefers-color-scheme: dark)" />
+<link rel="alternate" type="text/markdown" href={rawPath} title="Markdown version" />
+<link rel="describedby" type="text/plain" href="/llms.txt" title="LLM index" />
+<meta name="tamperbox:product-version" content={entry.data.productVersion} />

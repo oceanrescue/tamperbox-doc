@@ -1,0 +1,36 @@
+---
+title: Security and privacy
+description: Understand where code runs, where operation inputs go, and which conclusions Tamperbox evidence can support.
+updated: 2026-10-19
+productVersion: "MCP 0.2.0"
+agentSummary: Understand the Tamperbox MCP sandbox, API data path, supported boundaries, and evidence interpretation rules.
+prerequisites: []
+outputs:
+  - A data-handling decision for a planned Tamperbox task
+limitations:
+  - Hosting, proxy, and model-provider logging policies are separate from Tamperbox package behavior.
+---
+
+## Code isolation
+
+Submitted code runs in a fresh QuickJS WebAssembly environment inside a worker thread. The guest has no general network client. Only allowlisted calls to documented Tamperbox API routes cross the host boundary.
+
+## Data path
+
+Code and embedded inputs are visible to the MCP client and model provider. When `execute` calls an operation, its request input is sent to the configured Tamperbox API. A remotely hosted MCP service also receives the submitted code and embedded values.
+
+Use synthetic examples for evaluation. Prefer browser-local tools for sensitive material that should not leave the device.
+
+## Evidence boundaries
+
+- JWT decoding does not verify signature authenticity or issuer trust.
+- DNS evidence does not prove email delivery or mailbox existence.
+- HTTP headers do not establish the complete security of a site.
+- A failed probe is not the same as a negative result.
+- Caller-context checks can observe a proxy, shared gateway, or MCP host.
+
+## Unsupported authority
+
+Tamperbox does not authenticate to DNS accounts, send mail, publish records, or mutate third-party services. It inspects and transforms within the documented API contract.
+
+Report security issues through the process in the [Tamperbox MCP security policy](https://github.com/oceanrescue/tamperbox-mcp/blob/main/SECURITY.md).

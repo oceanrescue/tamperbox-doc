@@ -1,0 +1,32 @@
+---
+export const prerender = true;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="robots" content="noindex" />
+    <title>Page not found | Tamperbox docs</title>
+    <link rel="icon" href="/favicon.svg" />
+    <style>
+      @font-face { font-family: Geist; src: url('/geist.woff2') format('woff2'); font-weight: 400 700; font-display: swap; }
+      :root { color-scheme: light dark; --page: light-dark(#f6f7f5, #0e1110); --text: light-dark(#1b1f1d, #eef2ef); --muted: light-dark(#565e59, #a3aca6); --accent: light-dark(#0f7d5a, #2bc48f); }
+      * { box-sizing: border-box; }
+      body { min-height: 100dvh; margin: 0; display: grid; place-items: center; padding: 1.25rem; background: var(--page); color: var(--text); font-family: Geist, system-ui, sans-serif; }
+      main { width: min(100%, 42rem); }
+      h1 { max-width: 12ch; margin: 0; font-size: clamp(2.8rem, 8vw, 5rem); line-height: 1; letter-spacing: -.04em; }
+      p { max-width: 38rem; margin: 1.25rem 0 1.75rem; color: var(--muted); font-size: 1.1rem; line-height: 1.6; }
+      a { display: inline-flex; min-height: 2.75rem; align-items: center; padding: 0 1rem; border-radius: .5rem; background: var(--accent); color: var(--page); font-weight: 600; text-decoration: none; }
+      a:active { transform: translateY(1px); }
+      a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>That page is not in the box.</h1>
+      <p>The address may be old, incomplete, or typed incorrectly. The documentation home can get you back to a known path.</p>
+      <a href="/">Open the docs</a>
+    </main>
+  </body>
+</html>

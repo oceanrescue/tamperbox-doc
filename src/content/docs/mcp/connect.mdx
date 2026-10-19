@@ -1,0 +1,47 @@
+---
+title: Connect an MCP client
+description: Configure Tamperbox MCP through local stdio or the public Streamable HTTP endpoint.
+updated: 2026-10-19
+productVersion: "MCP 0.2.0"
+agentSummary: Configure Tamperbox MCP in a compatible client using the npm stdio package or the public HTTP endpoint.
+prerequisites:
+  - An MCP-compatible client
+  - Node.js 22 or later for stdio
+outputs:
+  - A connected Tamperbox server exposing search and execute
+limitations:
+  - Exact configuration keys vary by client.
+---
+
+## Local stdio
+
+Use the published npm package when the client can launch a local process.
+
+```json
+{
+  "mcpServers": {
+    "tamperbox": {
+      "command": "npx",
+      "args": ["-y", "tamperbox-mcp@0.2.0"]
+    }
+  }
+}
+```
+
+Restart or reload the client after changing its MCP configuration. A successful connection exposes exactly two tools, `search` and `execute`.
+
+## Public HTTP endpoint
+
+Use the hosted endpoint when the client supports Streamable HTTP:
+
+```text
+https://mcp.tamperbox.dev/mcp
+```
+
+The public endpoint does not require an API key. Inputs sent through it pass through the model provider and the hosted MCP service before an API request is made.
+
+## Confirm the connection
+
+Ask the client to list the Tamperbox tools or to inspect one operation schema without running a check. If discovery succeeds, ask for a synthetic `json_format` example and confirm that the result reports one attempted API call.
+
+Client-specific examples live in the [Tamperbox MCP repository](https://github.com/oceanrescue/tamperbox-mcp/tree/main/examples).

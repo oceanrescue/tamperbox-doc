@@ -1,0 +1,42 @@
+---
+title: Contributing
+description: Improve the public Tamperbox documentation with focused changes and verifiable product claims.
+updated: 2026-10-19
+productVersion: "Documentation base 0.1.0"
+agentSummary: Set up the documentation repository, edit MDX content, verify the Astro build, and open a focused contribution.
+prerequisites:
+  - Node.js 22 or later
+  - Git
+outputs:
+  - A checked documentation change ready for review
+limitations:
+  - Product claims must stay aligned with versioned Tamperbox source and schemas.
+---
+
+## Local setup
+
+```sh
+git clone https://github.com/oceanrescue/tamperbox-doc.git
+cd tamperbox-doc
+npm ci
+npm run dev
+```
+
+## Content contract
+
+Every page includes a review date, product version, agent summary, prerequisites, outputs, and limitations. These fields support the visible docs and the generated agent resources.
+
+Add user-facing pages under `src/content/docs`. Update `astro.config.mjs` when the page belongs in the primary sidebar.
+
+## Verify changes
+
+```sh
+npm run check
+npm run build
+```
+
+The static build must include the human-readable page, its `.md` mirror, `llms.txt`, `llms-full.txt`, and the sitemap.
+
+## Claim discipline
+
+Check product claims against the [Tamperbox MCP repository](https://github.com/oceanrescue/tamperbox-mcp), its bundled OpenAPI document, and current release records. Separate implemented behavior from proposals and future work.

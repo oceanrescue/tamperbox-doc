@@ -1,0 +1,13 @@
+---
+import Pagination from '@astrojs/starlight/components/Pagination.astro';
+
+const title = Astro.locals.starlightRoute.entry.data.title;
+const issueUrl = `https://github.com/oceanrescue/tamperbox-doc/issues/new?title=${encodeURIComponent(`Docs: ${title}`)}&body=${encodeURIComponent(`Page: ${Astro.url.href}\n\nWhat is missing or unclear?\n`)}`;
+---
+<footer class="tb-docs-footer">
+  <section class="tb-feedback" aria-labelledby="tb-feedback-title">
+    <h2 id="tb-feedback-title">Did this page help?</h2>
+    <a href={issueUrl}>Report a docs gap</a>
+  </section>
+  <Pagination />
+</footer>

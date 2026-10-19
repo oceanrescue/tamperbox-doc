@@ -1,0 +1,38 @@
+---
+title: Operation catalog
+description: The current Tamperbox MCP catalog groups 58 operations across transforms, diagnostics, and workflow utilities.
+updated: 2026-10-19
+productVersion: "MCP 0.2.0"
+agentSummary: Browse Tamperbox operation families and learn which input shapes and evidence boundaries each family uses.
+prerequisites: []
+outputs:
+  - An operation family to inspect with search
+limitations:
+  - Counts and schemas can change with later product releases.
+---
+
+The bundled catalog contains 58 operations representing all 53 public website tool entries. Use `search` for the exact current schema.
+
+## Transforms
+
+`jwt_decode`, `json_format`, `json_to_yaml`, `timestamp_to_iso`, and `api_convert` accept text artifacts plus operation-specific options. Decoding and conversion do not establish trust or lossless equivalence.
+
+## Email and DNS
+
+Email-domain, provider, SPF, DMARC, DKIM, MTA-STS, BIMI, and record lookup operations inspect public DNS and related policy evidence. DNS configuration is not proof of mailbox existence or delivery.
+
+## Hosting, TLS, and HTTP
+
+Hosting, technology, CDN, certificate, header, redirect, CORS, mixed-content, HTTP/3, and uptime operations observe public endpoints from the service's vantage point. Proxies, regional differences, and unavailable probes can limit conclusions.
+
+## Network and registration
+
+IP, ASN, BGP, port, TCP, WHOIS, RDAP, reverse-DNS, and domain-availability operations return bounded observations. Caller-context checks can describe the MCP host or shared gateway rather than the human user's device.
+
+## Published site files
+
+The catalog includes checks for `robots.txt`, `ads.txt`, and `llms.txt`. These operations support documented subsets and do not automatically reproduce every browser editor mode.
+
+## Workflow utilities
+
+`tamperbox_pipeline`, `tamperbox_find`, and `get_recipe` support pipeline execution, directory search, and recipe retrieval. Fetching a recipe does not execute it.

@@ -1,0 +1,42 @@
+---
+title: Tamperbox MCP
+description: A code-mode MCP server with two tools over a documented catalog of Tamperbox operations.
+updated: 2026-10-19
+productVersion: "MCP 0.2.0"
+agentSummary: Understand the Tamperbox MCP architecture, its two tools, supported transports, and trust boundaries.
+prerequisites:
+  - An MCP-compatible client
+outputs:
+  - A clear choice between bundled search and API-backed execution
+limitations:
+  - The MCP catalog covers API operations, not every interactive browser mode.
+---
+
+Tamperbox MCP exposes two tools: `search` and `execute`. Both accept an async JavaScript function body. The smaller interface lets agents inspect exact schemas before they send inputs to the API.
+
+## Tool model
+
+### `search`
+
+Runs against the bundled OpenAPI document. It exposes `spec` and a resolved `operations` array. It does not call the Tamperbox API, and `apiCalls` stays at `0`.
+
+### `execute`
+
+Runs code in an isolated QuickJS WebAssembly environment. The code can call documented endpoints through `tamperbox.request({ method, path, query?, body? })`.
+
+```js
+const result = await tamperbox.request({
+  method: 'POST',
+  path: '/v1/tools/dns_lookup',
+  body: { name: 'example.com', type: 'A', resolver: 'google' },
+});
+return result;
+```
+
+## Transports
+
+The package supports stdio for local clients and Streamable HTTP for hosted integrations. The public production endpoint is `https://mcp.tamperbox.dev/mcp`.
+
+## What it does not do
+
+The server cannot call arbitrary URLs, add arbitrary headers, publish DNS changes, send email, or establish JWT trust through decoding. Unknown routes and arguments are rejected against the bundled contract.

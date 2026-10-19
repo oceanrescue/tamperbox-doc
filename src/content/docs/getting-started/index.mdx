@@ -1,0 +1,45 @@
+---
+title: Getting started
+description: Pick a Tamperbox surface, run a small example, and keep the result's warnings and limits intact.
+updated: 2026-10-19
+productVersion: "MCP 0.2.0"
+agentSummary: Choose between browser tools, direct API operations, and MCP code mode, then complete a small safe first run.
+prerequisites:
+  - Node.js 22 or later for local MCP use
+outputs:
+  - A working browser tool result or MCP client connection
+limitations:
+  - Live network evidence can change between requests and regions.
+---
+
+## Pick a surface
+
+| Need | Use |
+| --- | --- |
+| Explore a tool visually | [tamperbox.dev](https://tamperbox.dev) |
+| Call one documented endpoint | Tamperbox REST API |
+| Let an agent discover and combine operations | Tamperbox MCP |
+
+## Run the MCP server locally
+
+The released package starts a stdio server and uses the production Tamperbox API by default.
+
+```sh
+npx -y tamperbox-mcp@0.2.0
+```
+
+Most clients need the command split into an executable and arguments. Start with `npx`, then pass `-y` and `tamperbox-mcp@0.2.0` as arguments.
+
+## Try a safe first task
+
+Ask the connected client:
+
+> Show me the input and output schemas for `json_format`. Do not run it yet.
+
+The agent should use `search`, return a focused schema fragment, and report `apiCalls: 0`. Next, give it synthetic JSON and ask it to format the value. That second task should use `execute`.
+
+## Verify the boundary
+
+`search` reads the bundled OpenAPI snapshot and makes no API request. `execute` can call allowlisted Tamperbox API routes. Inputs embedded in executed code are visible to the MCP host, the API for each request, and the model provider carrying the tool call.
+
+Continue with [Connect a client](/mcp/connect/) or [Code mode](/mcp/code-mode/).

@@ -1,0 +1,55 @@
+---
+title: Code mode
+description: Discover operation schemas, execute allowlisted requests, and return only the evidence a task needs.
+updated: 2026-10-19
+productVersion: "MCP 0.2.0"
+agentSummary: Use focused JavaScript with search and execute to discover schemas, call supported endpoints, and preserve warnings.
+prerequisites:
+  - A connected Tamperbox MCP server
+outputs:
+  - Focused schema fragments or composed operation results
+limitations:
+  - Each execution has time, memory, result-size, and API-call budgets.
+---
+
+## Search before execution
+
+Filter `operations` by the task language and return the operation ID, method, path, descriptions, and schemas you need.
+
+```js
+return operations
+  .filter((op) => /spf|dmarc|dkim/i.test(`${op.summary} ${op.description}`))
+  .map((op) => ({
+    operationId: op.operationId,
+    method: op.method,
+    path: op.path,
+    inputSchema: op.inputSchema,
+    outputSchema: op.outputSchema,
+  }));
+```
+
+Avoid returning the full OpenAPI document. Focused discovery keeps context small and reduces schema mistakes.
+
+## Execute documented calls
+
+Use the uppercase HTTP method and exact path returned by discovery. Put path parameters in the path, scalar query values in `query`, and JSON input in `body`.
+
+```js
+const formatted = await tamperbox.request({
+  method: 'POST',
+  path: '/v1/tools/json_format',
+  body: {
+    input: { mediaType: 'application/json', value: '{"ready":true}' },
+    options: { indent: 2 },
+  },
+});
+return formatted.output;
+```
+
+## Preserve interpretation
+
+Return warnings and provenance when they affect the conclusion. A DNS failure is not an empty answer. A decoded token is not verified. A server-side HTTP observation is not a complete security audit.
+
+## Compose carefully
+
+Feed one operation's artifact into another only when the output and input schemas match. Await every request. Outstanding requests are cancelled when the execution ends.

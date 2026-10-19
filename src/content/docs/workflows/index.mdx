@@ -1,0 +1,56 @@
+---
+title: Workflow patterns
+description: Reusable patterns for transforms, diagnostics, comparisons, and evidence-preserving handoffs.
+updated: 2026-10-19
+productVersion: "MCP 0.2.0"
+agentSummary: Apply safe discovery-first patterns for transforms, diagnostics, parallel checks, and multi-step artifacts.
+prerequisites:
+  - A connected Tamperbox MCP server
+outputs:
+  - A focused result with warnings and provenance
+limitations:
+  - Workflow composition does not expand the operation catalog or bypass service limits.
+---
+
+## Discover, then call
+
+Start every unfamiliar task with `search`. Select the smallest set of operations that can answer the question. Inspect their schemas before constructing inputs.
+
+## Transform an artifact
+
+Transforms accept a text artifact shaped as `{ mediaType, value }`. The `value` remains text even when it contains serialized JSON.
+
+1. Search for the transform operation.
+2. Build the exact input artifact.
+3. Run the operation with `execute`.
+4. Parse the output only if the next step needs an object.
+
+## Combine independent diagnostics
+
+Independent public checks can run in parallel within the execution concurrency limit. Keep each result under a descriptive key and retain operation-specific warnings.
+
+```js
+const [dns, headers] = await Promise.all([
+  tamperbox.request({
+    method: 'POST',
+    path: '/v1/tools/dns_lookup',
+    body: { name: 'example.com', type: 'A', resolver: 'google' },
+  }),
+  tamperbox.request({
+    method: 'POST',
+    path: '/v1/tools/security_headers',
+    body: { url: 'https://example.com/' },
+  }),
+]);
+return { dns, headers };
+```
+
+## Chain compatible artifacts
+
+An operation can feed another when the first output matches the next input contract. A common example decodes a synthetic JWT, then passes its JSON artifact into `json_to_yaml`.
+
+Keep the first operation's warning. Decoding still does not verify the signature, issuer, audience, expiry, or trust.
+
+## Report unavailable evidence
+
+If a probe is partial or unavailable, state what is missing. Do not substitute an invented grade, address, record, or successful check.
