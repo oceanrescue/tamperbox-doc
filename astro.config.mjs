@@ -43,6 +43,7 @@ export default defineConfig({
           { label: 'BIMI Record Checker', link: '/tools/bimi-checker/' },
           { label: 'Email Header Analyzer', link: '/tools/email-header-analyzer/' },
           { label: 'Website Down Checker', link: '/tools/website-down-checker/' },
+          { label: 'Broken Link Checker', link: '/tools/broken-link-checker/' },
         ] },
         { label: 'MCP server', items: [
           { label: 'Overview', link: '/mcp/' },
