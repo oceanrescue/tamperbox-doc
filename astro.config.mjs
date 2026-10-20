@@ -44,6 +44,7 @@ export default defineConfig({
           { label: 'Email Header Analyzer', link: '/tools/email-header-analyzer/' },
           { label: 'MX Lookup & Email Domain Checker', link: '/tools/email-domain/' },
           { label: 'Email Provider Lookup', link: '/tools/email-provider/' },
+          { label: 'JWT Decoder & Verifier', link: '/tools/jwt/' },
         ] },
         { label: 'MCP server', items: [
           { label: 'Overview', link: '/mcp/' },
