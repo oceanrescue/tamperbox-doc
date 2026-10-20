@@ -44,6 +44,7 @@ export default defineConfig({
           { label: 'Email Header Analyzer', link: '/tools/email-header-analyzer/' },
           { label: 'Website Down Checker', link: '/tools/website-down-checker/' },
           { label: 'Broken Link Checker', link: '/tools/broken-link-checker/' },
+          { label: 'Open Graph Preview', link: '/tools/open-graph-preview/' },
         ] },
         { label: 'MCP server', items: [
           { label: 'Overview', link: '/mcp/' },
