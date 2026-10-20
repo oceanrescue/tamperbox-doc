@@ -1,0 +1,189 @@
+---
+title: Redirect Checker
+description: How the redirect checker follows an address hop by hop, every rule it applies to a chain, what each finding means for visitors and crawlers, and how to shorten, repair and verify redirects.
+updated: 2026-10-20
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and repair guide for the Tamperbox Redirect Checker, which follows an address through up to 15 HTTP redirects from the Tamperbox server (or reads pasted curl -sIL output in the browser) and reports each hop, loops, downgrades, temporary codes on permanent moves, chain length and the final status.
+prerequisites:
+  - A public web address on port 80 or 443, or curl -sIL output to paste
+outputs:
+  - A verdict on where the chain lands, findings, every hop with its status, Location, what changed and its time, and a link to check the final address
+limitations:
+  - HTTP redirects only, not meta refresh or script navigation; no cookies are replayed; times are from the Tamperbox server; at most 15 hops
+---
+
+The tool page is [tamperbox.dev/redirect-checker](https://tamperbox.dev/redirect-checker). It opens on a sample shop whose redirects are a fixture on the reserved `.example` zone: `http://harbor-supply.example` takes two hops to reach the page. This page is the long version: how each hop is fetched, every rule the chain is judged by, what each finding means, and how to fix and confirm it.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> an address is sent to the Tamperbox server, which requests each hop itself and returns what each answered. Pasted curl output is read in your browser and never uploaded. Nothing is stored.</div>
+
+## What the tool answers
+
+1. **Where does this address end up?** The final address and its status, after every redirect.
+2. **How does it get there?** Each hop's status, its Location and what changed from the hop before.
+3. **Is the chain healthy?** No loop, no drop from HTTPS to plain HTTP, permanent moves marked permanent, as few hops as possible, and a final page that exists.
+
+## Inputs
+
+### An address
+
+`example.com/old-page`, `https://www.example.com/` or any public `http://` or `https://` address. Without a scheme, the check starts at `http://`, so the move to HTTPS is part of the chain; type `https://` to start there. The check runs when you stop typing, or on Enter. A pasted quoted or bracketed address is tidied to the address itself; the path and query are kept, because redirects often depend on them. IP addresses, user names and passwords, and ports other than 80 and 443 are refused before anything is sent, with a repair where one exists.
+
+### Pasted curl output
+
+Paste the output of `curl -sIL https://example.com/old-page`. Each status line starts a new response; folded header lines are joined to the header above them; the address of each hop after the first comes from the previous Location header. There are no timings. If the output ends on a redirect, the chain is reported as incomplete.
+
+## Reading the result
+
+### Verdict and chips
+
+"Lands on 200 OK after 2 redirects, at https://www.example.com/." for a chain that ends well, "Ends on plain HTTP", "Ends at 404 Not Found", "Redirect loop", "Still redirecting after 15 hops", "… did not answer", "Stopped" or "Incomplete redirect chain". The line under it counts the requests and the time to the first byte of each, added up. Chips count the redirects and the problems.
+
+### Findings
+
+Every rule that applied, worst first; passing rows fold into one line.
+
+### History and Take it further
+
+History lists what Break it and Heal it replaced, with Revert and Reset input. Take it further hands where the chain lands to other tools: the final host to the [certificate checker](https://tamperbox.dev/ssl-checker) and the [security.txt checker](https://tamperbox.dev/security-txt-checker), and the final address to the [security headers checker](https://tamperbox.dev/security-headers), which grades the page visitors actually reach rather than the address they typed.
+
+### Chain
+
+One row per hop: the status code, the address with the part that changed marked, a label for each change ("to HTTPS", "adds www", "new path"), the Location, the Server header, Cache-Control on redirect hops, every response header on demand, and the time to the first byte as a bar. The last line adds the times up.
+
+## Method
+
+### Fetching each hop
+
+The server sends one `GET` per address with automatic redirect following turned off, reads the status and the Location, resolves the Location against the address it just requested and requests the result next. A relative Location is allowed: [RFC 9110 section 10.2.2](https://www.rfc-editor.org/rfc/rfc9110#section-10.2.2) says the value "is computed by resolving it against the target URI". Only 301, 302, 303, 307 and 308 continue the chain ([section 15.4](https://www.rfc-editor.org/rfc/rfc9110#section-15.4)); any other status ends it.
+
+- At most 15 requests. If the 15th answer is still a redirect, the check stops.
+- Before every hop the host must resolve only to public addresses; only ports 80 and 443 are used; addresses with credentials are refused.
+- No cookies are kept or sent back, and the request headers are the same on every hop.
+- Cookie values in the returned headers are replaced by their length; authentication challenges are left out.
+
+### Rules
+
+| Rule | Severity | Finding |
+| --- | --- | --- |
+| The next address is one already in the chain | FAIL | Redirect loop |
+| Still a redirect after 15 hops | FAIL | Stopped after 15 hops |
+| The Location is private, reserved, on another port, has credentials, or is not HTTP(S) | FAIL | Redirects to an address we will not follow |
+| A hop's DNS, connection or request fails, or a redirect has no Location | FAIL | … did not answer |
+| A hop goes from `https://` to `http://` | FAIL | Drops from HTTPS to plain HTTP |
+| A 302, 303 or 307 makes only canonical changes (to HTTPS, adding or dropping www, a trailing slash) | CHECK | A permanent move uses 302 |
+| Two or more redirects before the final page | CHECK | N redirects before the page |
+| Exactly one redirect, or none | PASS | One redirect, or No redirects |
+| A Location is relative | INFO | A relative Location |
+| The chain touches more than two hosts | INFO | Crosses N hosts |
+| The final status is 4xx | FAIL | Ends at 404 Not Found |
+| The final status is 5xx | FAIL | Ends in a server error |
+| The final status is 304 | INFO | 304 Not Modified |
+| A completed chain ends on `http://` | CHECK | Final address uses plain HTTP |
+| Pasted output ends on a redirect | INFO | The pasted output ends on a redirect |
+
+**Loops.** RFC 9110 section 15.4: "A client SHOULD detect and intervene in cyclical redirections (i.e., "infinite" redirection loops)." The tool stops at the first repeat of an exact address. Browsers stop at a fixed count; the [Fetch standard](https://fetch.spec.whatwg.org/#http-redirect-fetch) returns a network error when "request's redirect count is 20".
+
+**Permanent and temporary.** [301](https://www.rfc-editor.org/rfc/rfc9110#section-15.4.2) means the resource "has been assigned a new permanent URI and any future references to this resource ought to use one of the enclosed URIs"; [308](https://www.rfc-editor.org/rfc/rfc9110#section-15.4.9) is the same while keeping the request method. [302](https://www.rfc-editor.org/rfc/rfc9110#section-15.4.3), [303](https://www.rfc-editor.org/rfc/rfc9110#section-15.4.4) and [307](https://www.rfc-editor.org/rfc/rfc9110#section-15.4.8) are temporary. A move to HTTPS, to or from www, or to a trailing slash is permanent by nature, so a temporary code there is flagged. A temporary redirect to another path is not flagged, because sign-in and campaign flows use them on purpose.
+
+**Length.** Each redirect is a round trip, and each new host a DNS lookup and a new connection. RFC 9110 notes that "An earlier version of this specification recommended a maximum of five redirections" and that some clients may still enforce it; crawlers follow fewer than browsers.
+
+**Downgrades.** A hop from HTTPS to HTTP exposes everything after it, including later redirects, to anyone on the network.
+
+**Pasted output.** The same rules apply, without timings and without the loop and limit rules, which need live requests.
+
+## Standards and conformance
+
+| Specification | Sections | How the tool applies them | Where it stops |
+| --- | --- | --- | --- |
+| [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110) HTTP Semantics | 10.2.2, 15.4, 15.4.2 to 15.4.9 | Status classes, Location resolution, loop detection | 300 Multiple Choices is not followed; fragment inheritance (10.2.2) is not tracked, since fragments are never sent |
+| [Fetch](https://fetch.spec.whatwg.org/#http-redirect-fetch) | HTTP-redirect fetch | Browsers' limit of 20 redirects, quoted for comparison | The tool stops at 15 |
+
+RFC 9110 obsoletes RFC 7231 and RFC 7538 (which defined 308); it is current at the time of writing.
+
+## Finding reference
+
+| Finding | Severity | What it means for visitors and crawlers | Fix |
+| --- | --- | --- | --- |
+| Redirect loop | FAIL | "Too many redirects"; the page never loads | Make the layers agree on scheme and host |
+| Stopped after 15 hops | FAIL | Browsers and crawlers give up | Point the first address at the last |
+| Redirects to an address we will not follow | FAIL | Usually an internal host leaking into Location | Set the public host name |
+| … did not answer | FAIL | The chain breaks at that hop | Fix DNS, the server or the rule |
+| Drops from HTTPS to plain HTTP | FAIL | Everything after it can be read or changed | Write rule targets with https:// |
+| A permanent move uses 302 | CHECK | Search engines keep the old address; browsers do not cache | Use 301 or 308 |
+| N redirects before the page | CHECK | Slower first visits; diluted signals | One hop to the final address |
+| One redirect, No redirects | PASS | | |
+| A relative Location | INFO | Fine; very old clients may mishandle it | Optional: absolute Location |
+| Crosses N hosts | INFO | A DNS lookup and connection per host | Fewer hosts |
+| Ends at 4xx, Ends in a server error | FAIL | Visitors reach an error | Redirect to a page that exists |
+| 304 Not Modified | INFO | A cached response, not a redirect | |
+| Final address uses plain HTTP | CHECK | The final page is unencrypted | Serve it over HTTPS |
+| The pasted output ends on a redirect | INFO | No final address known | Run curl with -L |
+
+## Guide
+
+Confirm any fix outside Tamperbox:
+
+```sh
+curl -sIL http://example.com/ | grep -iE '^(HTTP|location)'
+```
+
+Each pair of lines is one hop; the last status is where it lands.
+
+### Two or more hops
+
+Make the first address redirect straight to the final one. In nginx, a server block for `example.com` on port 80 and 443 can `return 301 https://www.example.com$request_uri;`, instead of one rule for HTTPS and another for www. Then update internal links, canonical tags and the sitemap to the final address.
+
+### Redirect loop
+
+The chain shows the hop that points back. Behind a proxy or CDN that terminates HTTPS, the origin sees plain HTTP: redirect on the `X-Forwarded-Proto` header the proxy sets, or let only one layer redirect. Make apex and www rules point the same way, and use one trailing-slash rule.
+
+### Temporary code on a permanent move
+
+Change 302 or 307 to 301, or to 308 when the method must be kept (an API that receives POST).
+
+### Downgrade to HTTP
+
+Find the rule whose target starts with `http://` and write it with `https://`. Applications that build Location from the request scheme behind a proxy need to trust the proxy's forwarded headers.
+
+### Ends at 404 or 5xx
+
+Point the redirect at a page that exists, or restore the page. Old product and campaign addresses are the usual cause.
+
+### Break it cases
+
+| Case | What it loads | What it shows |
+| --- | --- | --- |
+| Start at http:// | Your https:// address as http:// | The move to HTTPS as a hop |
+| Redirect loop | A sample host that bounces between http and https | Redirect loop |
+| Long chain | A sample path with five requests | 4 redirects before the page, a temporary code |
+| HTTPS to HTTP | A sample shop that drops to http:// | Drops from HTTPS to plain HTTP |
+| Ends at a 404 | A sample product link that moved to a missing page | Ends at 404 Not Found |
+| Too many hops | A sample chain that never stops | Stopped after 15 hops |
+| No such host | Your domain with a nohost. prefix | … did not answer, at DNS |
+
+Heal it offers "Check the final address" after a completed chain with redirects; it replaces the input with the final address and checks it, so you can see it answer without hops. It does not change the site. After a break with no repair, it offers to restore the input you had.
+
+## Worked example
+
+The sample shop is reserved sample data, answered in the browser. `http://harbor-supply.example/` answers 301 to `https://harbor-supply.example/` ("to HTTPS"), which answers 301 to `https://www.harbor-supply.example/` ("adds www"), which answers 200. The verdict is "Lands on 200 OK after 2 redirects"; the findings are "2 redirects before the page" (CHECK). Both hops are 301, so no temporary-code finding. Heal it's "Check the final address" loads `https://www.harbor-supply.example/`, which answers directly. Take it further hands `www.harbor-supply.example` to the certificate and security.txt checkers and the final address to the security headers checker, all answered by sample data.
+
+## For agents
+
+The Tamperbox MCP server runs the same trace as the `redirect_checker` operation with a public `url`. Inspect its input schema before calling it. Keep these with any conclusion:
+
+- The trace is from the Tamperbox server, without cookies; a browser can be redirected differently by cookie, location or user agent.
+- Only HTTP redirects are followed.
+
+See [Connect an MCP client](/mcp/connect/) for the calling pattern.
+
+## Limits
+
+- HTTP redirects only: meta refresh and script navigation are not followed.
+- No cookies, one fixed user agent, from the Tamperbox server; geographic and cookie-based redirects can differ.
+- At most 15 hops; ports 80 and 443; public hosts only.
+- Times are from the Tamperbox server, with a fresh connection per hop.
+
+## References
+
+- [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110): HTTP Semantics. Sections 10.2.2 and 15.4 (15.4.2 301, 15.4.3 302, 15.4.4 303, 15.4.8 307, 15.4.9 308). Internet standard; obsoletes RFC 7231 and RFC 7538.
+- [Fetch standard, HTTP-redirect fetch](https://fetch.spec.whatwg.org/#http-redirect-fetch). WHATWG living standard.
