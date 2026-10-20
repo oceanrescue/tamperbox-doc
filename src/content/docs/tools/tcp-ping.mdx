@@ -1,0 +1,225 @@
+---
+title: TCP Ping
+description: How TCP Ping measures connect time to a host and port from three regions, how each attempt is classified, what every verdict and finding means, and how to fix refused, filtered and lossy ports.
+updated: 2026-10-20
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and guide for the Tamperbox TCP Ping, which resolves a host in up to three regions (Eastern North America, Western Europe, Asia Pacific) and makes three TCP handshakes to the first public address from each, reporting open, refused or unanswered attempts with connect times.
+prerequisites:
+  - A host name or public IP address that resolves only to public addresses, and a TCP port (443 when left out)
+outputs:
+  - A verdict per region (open, refused, no answer), every attempt with its connect time, a comparison of average connect times and the address tested
+limitations:
+  - TCP handshake time from three broad regions, not ICMP ping and not your own latency; only the first resolved address is tested; a timeout is inconclusive; UDP cannot be tested
+---
+
+The tool page is [tamperbox.dev/tcp-ping](https://tamperbox.dev/tcp-ping). It opens on a sample web server with fixed measurements, so the page shows a full result without spending a probe, and measures your own server when you press Ping. This page is the long version: what each region does, how an attempt is classified, what each verdict and finding means, and how to confirm a fix without Tamperbox.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> typing sends nothing. Names under the reserved <code>.example</code> zone, which the example and Break it use, are answered in your browser from fixed sample measurements. Pressing Ping or Enter sends the host and port to the Tamperbox server, which asks one measurement server in each chosen region to connect. Nothing is sent over the connections and nothing is stored.</div>
+
+## What the tool answers
+
+1. **Does the port accept connections?** From each region: open, refused, or no answer.
+2. **Is it reliable?** Did all three attempts connect, or were some lost?
+3. **How far away is it?** The connect time per region, which grows with network distance.
+4. **What exactly was tested?** The address the name resolved to, and any other addresses that were not tested.
+
+## Inputs
+
+### A host and port
+
+`example.org:443`, `example.org` (port 443 is assumed), `203.0.113.10:22`, `[2001:db8::10]:443` for an IPv6 address with a port, or a bare IPv6 address. A pasted link is reduced to its host and port (`https://example.org:8443/path` becomes `example.org:8443`), and the hint says what was kept.
+
+Near misses get a Heal it repair instead of a measurement:
+
+- a space where the colon belongs (`example.org 22` offers `example.org:22`);
+- a path after the host (`example.org/login` offers `example.org`);
+- a port outside 1 to 65535 offers port 443.
+
+Private (RFC 1918), loopback, link-local, unique local and carrier-grade NAT addresses are refused in the browser, because no server on the internet can reach them. The documentation ranges of [RFC 5737](https://www.rfc-editor.org/rfc/rfc5737#section-3) and [RFC 3849](https://www.rfc-editor.org/rfc/rfc3849#section-2) are accepted by the page so that examples read naturally, and refused by the server.
+
+### Regions
+
+Eastern North America, Western Europe and Asia Pacific, all selected by default. At least one region always stays selected. Changing the selection stages a new test; it does not run until you press Ping.
+
+### When it runs
+
+Only on Enter or the Ping button. Adding or removing spaces around the input keeps the current result. A changed target says what will be tested and waits. A sample name under `.example` runs at once because it costs nothing.
+
+## Reading the result
+
+### Verdict and chips
+
+The verdict sentence is one of:
+
+| Verdict | When |
+| --- | --- |
+| Reachable from all N regions | Every measured region connected on every attempt |
+| Reachable …, with lost attempts | Every region connected, but at least one lost an attempt |
+| Reachable from N of M regions | Some regions connected, the others refused or did not answer |
+| Refused from every region | Every measured region was refused on all three attempts |
+| No answer from any region | Nothing connected and the answers were not all refusals |
+| Measured N of M regions | Some regions did not complete the measurement; their reachability is unknown |
+| Measurements are unavailable | No region completed |
+| Target not tested | The server refused the target under the public-address rule |
+
+The detail line names the fastest and slowest regions. One chip per region gives its average time or its state; each chip scrolls to the region cards.
+
+### Findings
+
+Directly under the verdict, worst first; the [Finding reference](#finding-reference) lists them all.
+
+### Take it further
+
+The address tested into ASN Lookup (which network announces it), and for a live result: the other address the name resolves to back into TCP Ping, the certificate the server sends into the SSL Certificate Checker when the port is a TLS port (443, 465, 993, 995 or 853) and the host is a name, and the address into Reverse DNS. Nothing is put in the URL.
+
+### History
+
+Each Break it and Heal it change, with Revert and Reset input.
+
+### By region
+
+One card per region: its state, the average connect time, the three attempts (each a time, "Refused", "No answer", "Unreachable", "Failed" or "Cancelled") and the minimum and maximum.
+
+### Average connect time
+
+A bar per region for the regions that connected, with the fastest marked.
+
+### What was tested
+
+The host, the port, the address tested, and any other addresses the name resolves to, marked "not tested".
+
+## Method
+
+### 1. Resolution in each region
+
+Each chosen region resolves the name on its own, in parallel with the others. Every address in the answer must be public and the answer must hold between 1 and 64 records; otherwise the region tests nothing and reports the target as refused under that rule. Up to eight distinct addresses are kept and the first is tested. Because each region resolves separately, a name with location-dependent answers can be tested at different addresses in different regions; the What was tested panel shows the address used by the first region that completed. DNS time is not part of any connect time.
+
+### 2. Three attempts
+
+Each region opens three TCP connections in sequence to the chosen address and port, each limited to 1.5 seconds, and the whole region, resolution included, must finish within 7 seconds. An attempt that completes the three-way handshake ([RFC 9293, section 3.5](https://www.rfc-editor.org/rfc/rfc9293#section-3.5)) is closed at once; no application data is sent, so the service behind the port never receives a request. The time recorded is from sending the SYN to the handshake completing: close to one network round trip from that region plus a little local overhead.
+
+Each attempt is classified from the socket outcome:
+
+| Attempt | Socket outcome | Meaning |
+| --- | --- | --- |
+| A time in ms | Handshake completed | The port accepts connections |
+| Refused | `ECONNREFUSED`: a reset came back | Something answered and said no. [RFC 9293, section 3.5.2](https://www.rfc-editor.org/rfc/rfc9293#section-3.5.2): "A SYN segment that does not match an existing connection is rejected by this means" |
+| No answer | No reply within 1.5 seconds | Dropped somewhere, or the host is down |
+| Unreachable | `ENETUNREACH` or `EHOSTUNREACH` | A router reported no route |
+| Failed, Cancelled | Any other error, or the region's time ran out | Not classified further |
+
+### 3. Region state
+
+A region is **Open** when at least one attempt connected, **Refused** only when all three were refused, and **No answer** otherwise. Mixed refusals and timeouts count as no answer, because together they are inconclusive. Average, minimum and maximum are taken over the attempts that connected; the average is rounded to hundredths of a millisecond, and the page shows one decimal under 10 ms.
+
+### 4. Findings
+
+| Rule | Condition | Finding |
+| --- | --- | --- |
+| Refused | Any region refused on all attempts | FAIL |
+| Silent | Any measured region connected on no attempt and was not refused | CHECK |
+| Lossy | Any region connected on some but not all attempts | CHECK |
+| Unsafe target | A region refused the target under the public-address rule | CHECK |
+| Other addresses | The name resolved to more than one address | INFO |
+| Region unavailable | A region did not complete for another reason | INFO |
+| Connect time | Always | INFO |
+
+### 5. Reading distance
+
+Light in fibre covers about 200 km per millisecond, so each 100 km of fibre adds about 1 ms of round trip (0.5 ms each way). Routes are longer than straight lines, so a server in Europe usually answers Asia Pacific in 150 ms or more. When all three regions see similarly low times, the target is probably anycast or behind a CDN, and each region reached a different site.
+
+## Standards and conformance
+
+| Specification | Sections used | How the tool applies them | Where it stops |
+| --- | --- | --- | --- |
+| [RFC 9293](https://www.rfc-editor.org/rfc/rfc9293) TCP | [3.5](https://www.rfc-editor.org/rfc/rfc9293#section-3.5), [3.5.2](https://www.rfc-editor.org/rfc/rfc9293#section-3.5.2), [3.5.3](https://www.rfc-editor.org/rfc/rfc9293#section-3.5.3) | A completed handshake is "open"; a reset in response to the SYN is "refused" | No data is exchanged; TCP options, window sizes and retransmissions are not reported. Obsoletes RFC 793 |
+| [RFC 792](https://www.rfc-editor.org/rfc/rfc792) ICMP | Echo, Destination Unreachable | Not used: this is not ICMP ping. A host that answers ICMP may filter TCP, and the reverse | ICMP unreachable messages surface only as "Unreachable" when the operating system reports them |
+| [RFC 8305](https://www.rfc-editor.org/rfc/rfc8305) Happy Eyeballs v2 | [4](https://www.rfc-editor.org/rfc/rfc8305#section-4), [5](https://www.rfc-editor.org/rfc/rfc8305#section-5) | Explains why clients may use another address than the one tested | The tool tests one address only; enter the other as the host to test it |
+| [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918#section-3), [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598#section-4), [RFC 4193](https://www.rfc-editor.org/rfc/rfc4193#section-3) | as listed | Refused in the browser and on the server | |
+
+## Finding reference
+
+| Finding | Severity | What it means for the people using the server | Fix |
+| --- | --- | --- | --- |
+| Refused from N regions | FAIL | Clients there get an immediate "connection refused" | Start the service, listen on a public interface, open the host firewall |
+| No answer from N regions | CHECK | Connections hang until they time out; inconclusive | Allow the port in the network firewall or security group; check geo-blocking |
+| Some attempts were lost | CHECK | Occasional slow or failed connections | Look for packet loss, connection limits or overload |
+| Target refused by the probe | CHECK | The name resolves to a non-public address or too many records | Fix the DNS records or test the public address |
+| N other addresses not tested | INFO | Clients may connect to another address, for example over IPv6 | Test each address as the host |
+| A region did not complete the test | INFO | That region's reachability is unknown | Press Ping again |
+| This is TCP connect time | INFO | Handshake time from the region, not your latency or ICMP ping | |
+
+## Guide
+
+### The port is refused
+
+1. On the server, check that the service listens on the port and on a public address:
+
+   ```sh
+   ss -ltnp | grep ':443'
+   ```
+
+   A line with `127.0.0.1:443` means it listens on localhost only; bind it to `0.0.0.0` or the public address.
+2. Check the host firewall (`ufw status`, `firewall-cmd --list-all`, Windows Defender Firewall).
+3. Press Ping again. A refused region should turn Open.
+
+### No answer from some or all regions
+
+A timeout means the SYN or its answer was dropped. Look at the layer in front of the server: a cloud security group or network ACL, a firewall appliance, or a geo-blocking rule that differs by region. If only one region is silent, a rule or route specific to that region is the likely cause.
+
+### Lost attempts
+
+Run the test a few times. Steady loss from one region points at the path; loss everywhere points at the server or its load balancer (SYN backlog, connection rate limits, overload).
+
+### Confirm without Tamperbox
+
+From a machine near the users who report problems:
+
+```sh
+nc -vz -w 2 example.org 443
+curl -o /dev/null -s -w 'connect %{time_connect}s\n' https://example.org/
+```
+
+`nc` reports "succeeded" or "Connection refused" or a timeout, the same three outcomes as the tool.
+
+### Break it cases
+
+| Case | What it loads | What it shows |
+| --- | --- | --- |
+| Refused everywhere | `closed.harbor-supply.example:8443` | A refusal from all three regions and the FAIL finding |
+| No answer (filtered) | `filtered.harbor-supply.example:22` | Timeouts everywhere and the inconclusive verdict |
+| Only Europe answers | `eu-only.harbor-supply.example:443` | One region open, two silent |
+| Lost attempts | `flaky.harbor-supply.example:443` | Regions that connect on some attempts only |
+| Private address | `192.168.1.20:22` | The refusal in the browser; nothing is sent |
+| Port out of range | your host with port 70000 | The port error and the repair to port 443 |
+
+## Worked example
+
+The page opens on `shop.harbor-supply.example:443`, a sample web server under the reserved `.example` zone with fixed measurements. All three regions connect on every attempt: Western Europe in about 11 ms, Eastern North America in about 84 ms, Asia Pacific in about 238 ms. The spread is distance: the sample server sits in Europe. The name also resolves to an IPv6 address, `2001:db8:a5::80`, which was not tested; the informational finding suggests entering it as the host, because many clients prefer IPv6 when both work ([RFC 8305, section 4](https://www.rfc-editor.org/rfc/rfc8305#section-4)). Take it further offers the tested address to ASN Lookup, which answers from sample data for this documentation address.
+
+## For agents
+
+The Tamperbox MCP server runs the same measurement. Search its catalog for `tcp_ping`, inspect the input schema, and call it with a host, a port and optionally the regions. Each call spends one probe per region. Keep these warnings with any conclusion:
+
+- A timeout is inconclusive; only a refusal is a definite "nothing listening".
+- Only the first resolved address was tested.
+- A connected handshake does not prove the application works.
+
+See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/), and [Security and privacy](/reference/security/) for where the input travels. [ASN Lookup](/tools/asn-lookup/) names the network that announces the address.
+
+## Limits
+
+- Three broad regions, three attempts each, at one moment.
+- One address per test; other addresses are listed, not tested.
+- TCP only: UDP services (most voice, many game servers, QUIC) cannot be tested.
+- Names that resolve to private or reserved addresses are refused.
+- Sample results under `.example` are fixed and labelled.
+- Nothing you enter is stored.
+
+## References
+
+- [RFC 9293](https://www.rfc-editor.org/rfc/rfc9293), Transmission Control Protocol: sections 3.5, 3.5.2 and 3.5.3. Obsoletes RFC 793.
+- [RFC 792](https://www.rfc-editor.org/rfc/rfc792), Internet Control Message Protocol: the Echo and Destination Unreachable messages.
+- [RFC 8305](https://www.rfc-editor.org/rfc/rfc8305), Happy Eyeballs Version 2: sections 4 and 5.
+- [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918#section-3), [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598#section-4), [RFC 4193](https://www.rfc-editor.org/rfc/rfc4193#section-3): private, shared and unique local address space.
+- [RFC 5737](https://www.rfc-editor.org/rfc/rfc5737#section-3), [RFC 3849](https://www.rfc-editor.org/rfc/rfc3849#section-2): documentation addresses.
