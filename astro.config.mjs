@@ -47,6 +47,7 @@ export default defineConfig({
           { label: 'Open Graph Preview', link: '/tools/open-graph-preview/' },
           { label: 'Robots.txt & Sitemap Checker', link: '/tools/robots-txt-checker/' },
           { label: 'Ads.txt & App-Ads.txt Checker', link: '/tools/ads-txt-checker/' },
+          { label: 'llms.txt Checker & Generator', link: '/tools/llms-txt/' },
         ] },
         { label: 'MCP server', items: [
           { label: 'Overview', link: '/mcp/' },

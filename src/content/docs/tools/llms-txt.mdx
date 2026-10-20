@@ -1,0 +1,214 @@
+---
+title: llms.txt Checker & Generator
+description: How the llms.txt checker fetches and reads a site's llms.txt, the outline an agent builds from it, every rule it applies, how it compares the file with the sitemap and drafts a new one, and how to fix each finding.
+updated: 2026-10-20
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and repair guide for the Tamperbox llms.txt checker and generator, which fetches /llms.txt, the home page, robots.txt and up to two sitemaps from the Tamperbox server, or reads a pasted file in the browser, checks it against the llmstxt.org proposal, compares it with the sitemap and drafts a file from what the site publishes.
+prerequisites:
+  - A public host name, or an llms.txt file to paste
+outputs:
+  - A verdict, findings, the outline an agent reads, the file line by line, a draft built from the site and repairs
+limitations:
+  - llms.txt is a proposal some AI tools read and many do not; links are checked for form, not requested; the draft names pages from the site's own links and paths
+---
+
+The tool page is [tamperbox.dev/llms-txt](https://tamperbox.dev/llms-txt). It opens on a sample shop answered by a fixture, says whether its llms.txt follows the format and what an agent would read from it, and drafts a file from the site. This page is the long version: what is fetched, every rule, how the outline and the draft are made, and how to fix each finding.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> a pasted llms.txt is read in your browser and never uploaded. A host name is sent to the Tamperbox server, which fetches <code>/llms.txt</code>, the home page, <code>/robots.txt</code> and up to two sitemaps without cookies; the file is read and the draft written in your browser. Nothing is stored. Sample hosts on the reserved <code>.example</code> zone are answered in the browser from a fixture.</div>
+
+## What the tool answers
+
+1. **Does the site publish an llms.txt an agent can use?** Served as text at `/llms.txt`, not as a web page.
+2. **What does an agent read from it?** The name, the summary, the notes and each section's links, as an outline.
+3. **Does it follow the format?** Every line an agent would misread: a missing name, relative links, links outside lists, empty sections.
+4. **What does it leave out?** Sitemap pages the file never links.
+5. **What could it say?** A draft from the site's own name, description, navigation and sitemap.
+
+## Inputs
+
+### A host
+
+`example.com` or a full address; the host is kept. The check runs when you stop typing, or on Enter. The usual refusals apply: spaces, other schemes, credentials, non-standard ports, IP addresses and single labels.
+
+### A pasted file
+
+Text with a newline, or starting with `#`, `>`, a list link `- [` or a link `[Name](`, is read as llms.txt, in the browser. Nothing is fetched, so there is no draft and no sitemap comparison, and relative links cannot be resolved unless a host was checked just before. Files up to 2 MiB (`.txt`, `.md`) can be dropped or opened.
+
+A pasted address loses quotes, brackets and trailing punctuation and keeps the host; text that fits nothing stays as pasted.
+
+## Reading the result
+
+### Verdict and chips
+
+"llms.txt with n links in m sections, in the expected format." or "… and n things to fix.", "No llms.txt at host." with the draft offered, "llms.txt is a web page." or "Empty llms.txt." The chips count problems and scroll to the findings. Two items say where the input went.
+
+### Findings
+
+Worst first, line findings prefixed with their line; passes fold.
+
+### History
+
+Every Break it, Heal it and **Check the draft** change, newest first, with Revert and Reset input. After a break with no repair, Heal it offers "Restore input before this break".
+
+### Take it further
+
+- **Redirect chain of llms.txt** opens the [redirect checker](https://tamperbox.dev/redirect-checker) on `https://host/llms.txt`.
+- **Does the first linked page answer?** opens the [website down checker](/tools/website-down-checker/) on the file's first link, resolved to a full address: this tool checks link form, not whether the pages exist.
+- **Certificate of a linked host outside the site** opens the [SSL certificate checker](/tools/ssl-checker/) on the first linked host that is not the site or its subdomain (documentation hosted elsewhere, for example), when there is one.
+
+### What an agent reads
+
+The outline: the name (or "No name" in red), the summary (or the first note shown in its place), then each section with its link count and links. A section titled Optional is marked as one an agent may skip. Relative links are tinted.
+
+### llms.txt
+
+The file as written, numbered, issue lines tinted and noted. Long files show their first 60 lines and every marked line; **Show all n lines** lists the rest.
+
+### Draft from the site
+
+A complete llms.txt built from the site, with a note saying how many link names came from the site's own links and how many from URL paths. **Copy**, **Download llms.txt**, and **Check the draft**, which loads the draft into the box and checks it.
+
+## Method
+
+### Fetching
+
+For a host, three fetches start together on `https://host`: `/llms.txt` (up to 5 redirects, first 2 MiB), the home page (up to 10 redirects, first 512 KiB of HTML) and `/robots.txt`. Then up to two sitemaps are read: those robots.txt lists, or `/sitemap.xml`, plus up to four children of a sitemap index. The home page and sitemaps feed the draft and the coverage check; if they fail, the file is still checked.
+
+| Response for /llms.txt | Severity |
+| --- | --- |
+| 400 or above | INFO, "No llms.txt": nothing breaks; a draft is offered |
+| HTML content type or body | FAIL: an agent reads a web page |
+| Empty | CHECK |
+
+### Structure
+
+The [llms.txt proposal](https://llmstxt.org/#format) defines the file as Markdown with "an H1 with the name of the project or site. This is the only required section", then optionally a blockquote summary, other details, and "Zero or more markdown sections delimited by H2 headers, containing “file lists” of URLs". Each list item is "a required markdown hyperlink [name](url), then optionally a : and notes about the file". Headings and lists follow [CommonMark](https://spec.commonmark.org/0.31.2/). The tool reads the file line by line, skipping fenced code blocks:
+
+| Rule | Severity | Repair |
+| --- | --- | --- |
+| No `#` line at all | FAIL | Add "# Name" first (when a host was checked) |
+| Text before the `#` line | FAIL | |
+| A second `#` line | CHECK | Turn extra H1s into sections |
+| No `>` summary under the name | INFO | |
+| A name but no `##` sections | CHECK | |
+| A `##` section with no links | CHECK | |
+| `###` or deeper heading | INFO: read as a note | |
+| A link without a scheme | CHECK | Make links absolute (when a host was checked) |
+| A `[Name](url)` that is not a list item | CHECK | Put links in a list |
+| A list item with no link | CHECK | |
+| The same URL twice | INFO | |
+
+Lines inside sections are links when they match `- [Name](url)` with an optional quoted title and `: notes`; `*` and `+` bullets are accepted. Blockquote lines before the first section join into the summary; other text before it is kept as notes. A section titled `Optional`, which the proposal uses "by convention, for secondary information: links an agent can skip when a shorter context is needed", is marked so in the outline.
+
+### Coverage
+
+When both the file and a sitemap were read, every sitemap URL other than the home page is compared with the file's links, after resolving relative links. Missing pages are INFO with the count and two example paths: a prompt to link what an agent needs most, not a target to list everything.
+
+### The draft
+
+Only what the site publishes:
+
+- the name from `og:site_name`, else the `<title>` cut at the first " | ", " · ", " – ", " — " or " - ";
+- the summary from `og:description`, else the meta description;
+- same-origin links with text inside the home page's `nav`, `header` and `footer`, named with that text;
+- same-origin sitemap URLs not already in the navigation, named from the last part of their path.
+
+Privacy, terms, cookies, legal, imprint, impressum and disclaimer pages go into Optional; other pages one level deep go under Pages, deeper ones grouped by their first path segment, at most 40 links per section. Navigation added by scripts is not seen.
+
+## Standards and conformance
+
+### The llms.txt proposal (llmstxt.org)
+
+Implemented: the H1 name as the only required part, the blockquote summary, notes, H2 sections of link lists with optional notes, the Optional section. Stricter than the text: a relative link is a CHECK, because the proposal's examples use full URLs and agents fetch the file on its own. Not implemented: the companion `.md` versions of pages and `llms-full.txt`, which the proposal suggests but does not require. The proposal is a community document, not an RFC or W3C specification; [llmstxt.org](https://llmstxt.org/) is its canonical text.
+
+### CommonMark
+
+Headings, block quotes, list items and inline links are recognised by their CommonMark forms; fenced code blocks are skipped. The parser is line-based, so multi-line list items and reference-style links are not read as links.
+
+### Sitemaps protocol and RFC 9309
+
+Sitemaps are found through robots.txt Sitemap lines ([RFC 9309, section 2.2.4](https://www.rfc-editor.org/rfc/rfc9309#section-2.2.4)) or at `/sitemap.xml`, and read as the [Sitemaps protocol](https://www.sitemaps.org/protocol.html) defines; the [robots.txt checker](/tools/robots-txt-checker/) validates them fully.
+
+## Finding reference
+
+| Finding | Severity | What it means for an agent | Fix |
+| --- | --- | --- | --- |
+| No llms.txt (n) | INFO | Nothing to read; nothing breaks | Optional; the draft is a start |
+| llms.txt is a web page | FAIL | Reads HTML | Serve Markdown text |
+| Empty llms.txt | CHECK | Nothing to read | Write the file |
+| Line 1: No H1 name | FAIL | Cannot tell what the file describes | Add "# Name" (Heal it) |
+| Line n: H1 is not the first line | FAIL | May miss the name | Move it first |
+| Line n: A second H1 | CHECK | Extra name ignored | Use ## (Heal it) |
+| Line n: No summary | INFO | No one-line context | Add "> summary" |
+| Line n: No ## sections | CHECK | Nothing to follow | Add sections |
+| Line n: Section "x" has no links | CHECK | Adds nothing | Add links or remove |
+| Line n: Hn heading | INFO | Read as a note | Use ## |
+| Line n: Relative link | CHECK | Leads nowhere out of context | Full URLs (Heal it) |
+| Line n: Link outside a list | CHECK | Read as a note | List item (Heal it) |
+| Line n: List item without a link | CHECK | Skipped | Add the link |
+| Line n: Linked twice | INFO | | Keep one |
+| n sitemap pages not linked | INFO | Pages not pointed to | Link the important ones |
+
+## Guide
+
+### No llms.txt
+
+Decide whether you want one. If yes: review the draft, rename links that came from paths, add a note to each that needs it, cut what an agent does not need, and publish it at `/llms.txt` as `text/plain` or `text/markdown`. Confirm outside Tamperbox: `curl -s https://example.com/llms.txt | head`.
+
+### The file is served as HTML
+
+Exempt `/llms.txt` from the catch-all route, so the file is served before the app.
+
+### Format problems
+
+Use Heal it for the name, extra H1s, relative links and links outside lists; each rewrites the whole file and logs the change. For list items without links and empty sections, add the links by hand. Then check again.
+
+### Choosing what to link
+
+Link the pages an agent is asked about: getting started, pricing, the API reference, support. Put the rest under `## Optional`. The coverage finding lists sitemap pages you left out; it is not a target.
+
+### Break it cases
+
+| Case | What it loads | What to look at |
+| --- | --- | --- |
+| No H1 name | Your file without its `#` line | No H1 name; Heal it adds it back |
+| Relative links | Your file with every link made relative | Relative link; Heal it makes them absolute |
+| Links without a list | Your file with the list bullets removed | Link outside a list; Heal it lists them |
+| No llms.txt | A sample host without the file | The draft |
+| Served as a web page | A sample single-page app | llms.txt is a web page |
+
+The first three are built from your own file when you entered a host or pasted one.
+
+## Worked example
+
+The page opens on `www.harbor-supply.example`, a sample shop on the reserved `.example` zone; its llms.txt, home page, robots.txt and sitemaps are answered by a fixture.
+
+- The verdict: llms.txt with 5 links in 3 sections, and 3 things to fix.
+- Findings: a relative link (line 7), a link outside a list (line 11), a list item without a link (line 13); the summary is written as plain text, so "No summary" is INFO and the outline shows the note in its place; 12 sitemap pages are not linked.
+- Heal it offers to make links absolute and to put links in a list.
+- The draft lists 18 pages in 5 sections, 11 named from the shop's own navigation links and 7 from their paths, with legal pages under Optional.
+- Take it further offers the redirect chain of the file and whether its first linked page answers.
+
+## For agents
+
+The Tamperbox MCP server can fetch the same files; search its catalog for the site file operation and call it with the host and `llms.txt`. Keep these warnings:
+
+- llms.txt is a proposal; its absence breaks nothing.
+- Links were checked for form, not fetched.
+- The draft is a starting point to review, not a file to publish unread.
+
+See [Connect an MCP client](/mcp/connect/) and [Security and privacy](/reference/security/).
+
+## Limits
+
+- One fetch each of llms.txt (2 MiB), the home page (512 KiB) and robots.txt, and up to two sitemaps with four children.
+- Links are not requested.
+- The parser is line-based CommonMark; multi-line list items and reference links are not read as links.
+- Live checks are rate limited. Nothing is stored.
+
+## References
+
+- [The llms.txt proposal](https://llmstxt.org/), [format](https://llmstxt.org/#format).
+- [CommonMark specification 0.31.2](https://spec.commonmark.org/0.31.2/): [ATX headings](https://spec.commonmark.org/0.31.2/#atx-headings), [block quotes](https://spec.commonmark.org/0.31.2/#block-quotes), [list items](https://spec.commonmark.org/0.31.2/#list-items), [links](https://spec.commonmark.org/0.31.2/#links).
+- [Sitemaps XML format, protocol 0.9](https://www.sitemaps.org/protocol.html).
+- [RFC 9309, Robots Exclusion Protocol](https://www.rfc-editor.org/rfc/rfc9309#section-2.2.4), section 2.2.4.
