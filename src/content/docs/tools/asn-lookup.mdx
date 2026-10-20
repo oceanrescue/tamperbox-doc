@@ -123,6 +123,8 @@ For an AS number the server asks RIPEstat's `as-overview` for the holder and whe
 | Server time limit | 20 seconds |
 | Input length | 300 characters |
 
+<span id="standards"></span>
+
 ## Standards and conformance
 
 | Specification | Sections used | How the tool applies them | Where it stops |
@@ -131,9 +133,9 @@ For an AS number the server asks RIPEstat's `as-overview` for the holder and whe
 | [RFC 6811](https://www.rfc-editor.org/rfc/rfc6811) origin validation | [2](https://www.rfc-editor.org/rfc/rfc6811#section-2) definitions | Origin AS as defined there | The tool does not compute Valid, Invalid or NotFound against RPKI; a second origin is flagged, not judged |
 | [RFC 1930](https://www.rfc-editor.org/rfc/rfc1930) BCP 6 | [7](https://www.rfc-editor.org/rfc/rfc1930#section-7) one prefix, one origin | More than one origin is a warning to check | It cannot tell intent; anycast and multi-homing are named as normal causes |
 | [RFC 6793](https://www.rfc-editor.org/rfc/rfc6793) four-octet ASNs | [3](https://www.rfc-editor.org/rfc/rfc6793#section-3) | Accepts 1 to 4294967295 | Does not flag private-use ([RFC 6996](https://www.rfc-editor.org/rfc/rfc6996#section-3)) numbers; the registry answer shows them as unheld |
-| [RFC 9224](https://www.rfc-editor.org/rfc/rfc9224) RDAP bootstrap | [5](https://www.rfc-editor.org/rfc/rfc9224#section-5) | Longest match in the IANA IPv4 or IPv6 file, HTTPS only | Obsoletes RFC 7484 |
-| [RFC 9082](https://www.rfc-editor.org/rfc/rfc9082) RDAP query | [3.1.1](https://www.rfc-editor.org/rfc/rfc9082#section-3.1.1) | `ip/<address>` | No AS-number RDAP query ([3.1.2](https://www.rfc-editor.org/rfc/rfc9082#section-3.1.2)); RIPEstat answers for AS numbers. Obsoletes RFC 7482 |
-| [RFC 9083](https://www.rfc-editor.org/rfc/rfc9083) RDAP response | [5.4](https://www.rfc-editor.org/rfc/rfc9083#section-5.4), [6](https://www.rfc-editor.org/rfc/rfc9083#section-6) | Reads the IP network object; only an error document with 404 means absent | Remarks, events and nested entities are not shown. Obsoletes RFC 7483 |
+| [RFC 9224](https://www.rfc-editor.org/rfc/rfc9224) RDAP bootstrap | [5](https://www.rfc-editor.org/rfc/rfc9224#section-5) | Longest match in the IANA IPv4 or IPv6 file, HTTPS only | Obsoletes [RFC 7484](https://www.rfc-editor.org/rfc/rfc7484) |
+| [RFC 9082](https://www.rfc-editor.org/rfc/rfc9082) RDAP query | [3.1.1](https://www.rfc-editor.org/rfc/rfc9082#section-3.1.1) | `ip/<address>` | No AS-number RDAP query ([3.1.2](https://www.rfc-editor.org/rfc/rfc9082#section-3.1.2)); RIPEstat answers for AS numbers. Obsoletes [RFC 7482](https://www.rfc-editor.org/rfc/rfc7482) |
+| [RFC 9083](https://www.rfc-editor.org/rfc/rfc9083) RDAP response | [5.4](https://www.rfc-editor.org/rfc/rfc9083#section-5.4), [6](https://www.rfc-editor.org/rfc/rfc9083#section-6) | Reads the IP network object; only an error document with 404 means absent | Remarks, events and nested entities are not shown. Obsoletes [RFC 7483](https://www.rfc-editor.org/rfc/rfc7483) |
 | [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918#section-3), [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598#section-4), [RFC 4193](https://www.rfc-editor.org/rfc/rfc4193#section-3), [RFC 6890](https://www.rfc-editor.org/rfc/rfc6890#section-2.2.2) | as listed | Special-purpose ranges are explained in the browser and never sent | |
 | [RFC 5737](https://www.rfc-editor.org/rfc/rfc5737#section-3), [RFC 3849](https://www.rfc-editor.org/rfc/rfc3849#section-2), [RFC 5398](https://www.rfc-editor.org/rfc/rfc5398#section-2) | as listed | Documentation addresses and numbers are answered from labelled sample data | |
 
@@ -226,11 +228,11 @@ See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for 
 - [RFC 4271](https://www.rfc-editor.org/rfc/rfc4271), A Border Gateway Protocol 4: section 5.1.2. Updated by RFC 6793 and later RFCs.
 - [RFC 6811](https://www.rfc-editor.org/rfc/rfc6811), BGP Prefix Origin Validation: section 2.
 - [RFC 1930](https://www.rfc-editor.org/rfc/rfc1930), Guidelines for creation, selection, and registration of an Autonomous System (BCP 6): section 7.
-- [RFC 6793](https://www.rfc-editor.org/rfc/rfc6793), BGP Support for Four-Octet AS Number Space: section 3. Obsoletes RFC 4893.
+- [RFC 6793](https://www.rfc-editor.org/rfc/rfc6793), BGP Support for Four-Octet AS Number Space: section 3. Obsoletes [RFC 4893](https://www.rfc-editor.org/rfc/rfc4893).
 - [RFC 6996](https://www.rfc-editor.org/rfc/rfc6996), Autonomous System Reservation for Private Use: section 3.
-- [RFC 9224](https://www.rfc-editor.org/rfc/rfc9224), Finding the Authoritative RDAP Service: section 5. Obsoletes RFC 7484.
-- [RFC 9082](https://www.rfc-editor.org/rfc/rfc9082), RDAP Query Format: sections 3.1.1 and 3.1.2. Obsoletes RFC 7482.
-- [RFC 9083](https://www.rfc-editor.org/rfc/rfc9083), JSON Responses for RDAP: sections 5.4 and 6. Obsoletes RFC 7483.
+- [RFC 9224](https://www.rfc-editor.org/rfc/rfc9224), Finding the Authoritative RDAP Service: section 5. Obsoletes [RFC 7484](https://www.rfc-editor.org/rfc/rfc7484).
+- [RFC 9082](https://www.rfc-editor.org/rfc/rfc9082), RDAP Query Format: sections 3.1.1 and 3.1.2. Obsoletes [RFC 7482](https://www.rfc-editor.org/rfc/rfc7482).
+- [RFC 9083](https://www.rfc-editor.org/rfc/rfc9083), JSON Responses for RDAP: sections 5.4 and 6. Obsoletes [RFC 7483](https://www.rfc-editor.org/rfc/rfc7483).
 - [RFC 6890](https://www.rfc-editor.org/rfc/rfc6890), Special-Purpose IP Address Registries: section 2.2.2.
 - [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918#section-3), [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598#section-4), [RFC 4193](https://www.rfc-editor.org/rfc/rfc4193#section-3): private, shared and unique local address space.
 - [RFC 5737](https://www.rfc-editor.org/rfc/rfc5737#section-3), [RFC 3849](https://www.rfc-editor.org/rfc/rfc3849#section-2), [RFC 5398](https://www.rfc-editor.org/rfc/rfc5398#section-2): documentation addresses and AS numbers.

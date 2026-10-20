@@ -92,11 +92,13 @@ A reset means a device answered for the port but nothing accepted the connection
 
 The steps under What to do next and in the How to fix it card follow the outcome: for open, confirm you meant it and keep the service updated; for refused, start the service, listen on the network rather than localhost, and point the forward at the right device; for no answer, add the forward, allow the port in the device's firewall, compare the router's WAN address for carrier-grade NAT, and turn off any VPN.
 
+<span id="standards"></span>
+
 ## Standards and conformance
 
 | Specification | Sections used | How the tool applies them | Where it stops |
 | --- | --- | --- | --- |
-| [RFC 9293](https://www.rfc-editor.org/rfc/rfc9293) TCP | [3.5](https://www.rfc-editor.org/rfc/rfc9293#section-3.5), [3.5.2](https://www.rfc-editor.org/rfc/rfc9293#section-3.5.2) | Handshake completed is open; a reset is refused | No data exchanged; obsoletes RFC 793 |
+| [RFC 9293](https://www.rfc-editor.org/rfc/rfc9293) TCP | [3.5](https://www.rfc-editor.org/rfc/rfc9293#section-3.5), [3.5.2](https://www.rfc-editor.org/rfc/rfc9293#section-3.5.2) | Handshake completed is open; a reset is refused | No data exchanged; obsoletes [RFC 793](https://www.rfc-editor.org/rfc/rfc793) |
 | [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598) shared address space | [4](https://www.rfc-editor.org/rfc/rfc6598#section-4) | Explains why a WAN address from 100.64.0.0/10 cannot take a forward | The tool does not read your router's WAN address |
 | [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918#section-3) private addresses | 3 | Devices on your home network are never tested directly | |
 | [RFC 6887](https://www.rfc-editor.org/rfc/rfc6887#section-1) Port Control Protocol | 1 | Background: forwards can also be created automatically (UPnP, NAT-PMP, PCP); the test sees the result either way | |
@@ -185,7 +187,7 @@ See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/), and
 
 ## References
 
-- [RFC 9293](https://www.rfc-editor.org/rfc/rfc9293), Transmission Control Protocol: sections 3.5 and 3.5.2. Obsoletes RFC 793.
+- [RFC 9293](https://www.rfc-editor.org/rfc/rfc9293), Transmission Control Protocol: sections 3.5 and 3.5.2. Obsoletes [RFC 793](https://www.rfc-editor.org/rfc/rfc793).
 - [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598), IANA-Reserved IPv4 Prefix for Shared Address Space: section 4.
 - [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918), Address Allocation for Private Internets: section 3.
 - [RFC 6887](https://www.rfc-editor.org/rfc/rfc6887), Port Control Protocol: section 1.

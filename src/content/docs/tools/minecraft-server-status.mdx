@@ -94,11 +94,13 @@ Then the server sends a ping packet with eight random bytes and times the matchi
 
 The bars follow the game client's thresholds: five under 150 ms, four under 300 ms, three under 600 ms, two under 1000 ms, one above, none without a ping. Protocol numbers map to releases only where the mapping is certain (for example 47 is 1.8 to 1.8.9, 769 is 1.21.4); other numbers are shown as reported. A protocol below 754 (1.16.4) raises "An older game version", because current clients join such a server only through a version translation layer.
 
+<span id="standards"></span>
+
 ## Standards and conformance
 
 | Specification | Parts used | How the tool applies them | Where it stops |
 | --- | --- | --- | --- |
-| [RFC 2782](https://www.rfc-editor.org/rfc/rfc2782) DNS SRV | [Format](https://www.rfc-editor.org/rfc/rfc2782#page-2), [target "."](https://www.rfc-editor.org/rfc/rfc2782#page-4), [weight](https://www.rfc-editor.org/rfc/rfc2782#page-5), [usage rules](https://www.rfc-editor.org/rfc/rfc2782#page-6) | Lowest priority, weighted random choice, "." means unavailable | One target is tried; no fallback to others, as in the game. Obsoletes RFC 2052 |
+| [RFC 2782](https://www.rfc-editor.org/rfc/rfc2782) DNS SRV | [Format](https://www.rfc-editor.org/rfc/rfc2782#page-2), [target "."](https://www.rfc-editor.org/rfc/rfc2782#page-4), [weight](https://www.rfc-editor.org/rfc/rfc2782#page-5), [usage rules](https://www.rfc-editor.org/rfc/rfc2782#page-6) | Lowest priority, weighted random choice, "." means unavailable | One target is tried; no fallback to others, as in the game. Obsoletes [RFC 2052](https://www.rfc-editor.org/rfc/rfc2052) |
 | [RFC 9293](https://www.rfc-editor.org/rfc/rfc9293) TCP | [3.5](https://www.rfc-editor.org/rfc/rfc9293#section-3.5) | Connect time is the handshake | |
 | [Server List Ping](https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping) (community protocol documentation; there is no formal standard) | Handshake, status request and response, ping and pong | Modern status exchange (1.7 and later) | The legacy pre-1.7 ping and Bedrock's UDP protocol are not implemented |
 | [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918#section-3), [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598#section-4) | as listed | Private and shared addresses are refused | |
@@ -183,7 +185,7 @@ See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/), and
 
 ## References
 
-- [RFC 2782](https://www.rfc-editor.org/rfc/rfc2782), A DNS RR for specifying the location of services (DNS SRV): the record format, target ".", the weight field and the usage rules (pages 2 to 6). Obsoletes RFC 2052.
+- [RFC 2782](https://www.rfc-editor.org/rfc/rfc2782), A DNS RR for specifying the location of services (DNS SRV): the record format, target ".", the weight field and the usage rules (pages 2 to 6). Obsoletes [RFC 2052](https://www.rfc-editor.org/rfc/rfc2052).
 - [RFC 9293](https://www.rfc-editor.org/rfc/rfc9293), Transmission Control Protocol: section 3.5.
 - [Java Edition protocol: Server List Ping](https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping), community documentation of the status exchange.
 - [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918#section-3), [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598#section-4): private and shared address space.

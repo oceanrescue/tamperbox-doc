@@ -128,11 +128,13 @@ A region is **Open** when at least one attempt connected, **Refused** only when 
 
 Light in fibre covers about 200 km per millisecond, so each 100 km of fibre adds about 1 ms of round trip (0.5 ms each way). Routes are longer than straight lines, so a server in Europe usually answers Asia Pacific in 150 ms or more. When all three regions see similarly low times, the target is probably anycast or behind a CDN, and each region reached a different site.
 
+<span id="standards"></span>
+
 ## Standards and conformance
 
 | Specification | Sections used | How the tool applies them | Where it stops |
 | --- | --- | --- | --- |
-| [RFC 9293](https://www.rfc-editor.org/rfc/rfc9293) TCP | [3.5](https://www.rfc-editor.org/rfc/rfc9293#section-3.5), [3.5.2](https://www.rfc-editor.org/rfc/rfc9293#section-3.5.2), [3.5.3](https://www.rfc-editor.org/rfc/rfc9293#section-3.5.3) | A completed handshake is "open"; a reset in response to the SYN is "refused" | No data is exchanged; TCP options, window sizes and retransmissions are not reported. Obsoletes RFC 793 |
+| [RFC 9293](https://www.rfc-editor.org/rfc/rfc9293) TCP | [3.5](https://www.rfc-editor.org/rfc/rfc9293#section-3.5), [3.5.2](https://www.rfc-editor.org/rfc/rfc9293#section-3.5.2), [3.5.3](https://www.rfc-editor.org/rfc/rfc9293#section-3.5.3) | A completed handshake is "open"; a reset in response to the SYN is "refused" | No data is exchanged; TCP options, window sizes and retransmissions are not reported. Obsoletes [RFC 793](https://www.rfc-editor.org/rfc/rfc793) |
 | [RFC 792](https://www.rfc-editor.org/rfc/rfc792) ICMP | Echo, Destination Unreachable | Not used: this is not ICMP ping. A host that answers ICMP may filter TCP, and the reverse | ICMP unreachable messages surface only as "Unreachable" when the operating system reports them |
 | [RFC 8305](https://www.rfc-editor.org/rfc/rfc8305) Happy Eyeballs v2 | [4](https://www.rfc-editor.org/rfc/rfc8305#section-4), [5](https://www.rfc-editor.org/rfc/rfc8305#section-5) | Explains why clients may use another address than the one tested | The tool tests one address only; enter the other as the host to test it |
 | [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918#section-3), [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598#section-4), [RFC 4193](https://www.rfc-editor.org/rfc/rfc4193#section-3) | as listed | Refused in the browser and on the server | |
@@ -218,7 +220,7 @@ See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/), and
 
 ## References
 
-- [RFC 9293](https://www.rfc-editor.org/rfc/rfc9293), Transmission Control Protocol: sections 3.5, 3.5.2 and 3.5.3. Obsoletes RFC 793.
+- [RFC 9293](https://www.rfc-editor.org/rfc/rfc9293), Transmission Control Protocol: sections 3.5, 3.5.2 and 3.5.3. Obsoletes [RFC 793](https://www.rfc-editor.org/rfc/rfc793).
 - [RFC 792](https://www.rfc-editor.org/rfc/rfc792), Internet Control Message Protocol: the Echo and Destination Unreachable messages.
 - [RFC 8305](https://www.rfc-editor.org/rfc/rfc8305), Happy Eyeballs Version 2: sections 4 and 5.
 - [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918#section-3), [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598#section-4), [RFC 4193](https://www.rfc-editor.org/rfc/rfc4193#section-3): private, shared and unique local address space.

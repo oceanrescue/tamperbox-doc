@@ -42,6 +42,13 @@ export default defineConfig({
           { label: 'MTA-STS & TLS-RPT Checker', link: '/tools/mta-sts-checker/' },
           { label: 'BIMI Record Checker', link: '/tools/bimi-checker/' },
           { label: 'Email Header Analyzer', link: '/tools/email-header-analyzer/' },
+          { label: 'What Is My IP Address?', link: '/tools/what-is-my-ip/' },
+          { label: 'My Connection Info', link: '/tools/connection-info/' },
+          { label: 'ASN Lookup', link: '/tools/asn-lookup/' },
+          { label: 'BGP Route Lookup', link: '/tools/bgp-lookup/' },
+          { label: 'Open Port Checker', link: '/tools/open-port-checker/' },
+          { label: 'TCP Ping', link: '/tools/tcp-ping/' },
+          { label: 'Minecraft Server Status Checker', link: '/tools/minecraft-server-status/' },
         ] },
         { label: 'MCP server', items: [
           { label: 'Overview', link: '/mcp/' },

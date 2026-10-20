@@ -115,6 +115,8 @@ An AS that announces nothing is a warning ("No routes seen from this network"). 
 
 The server reads Cloudflare Radar's BGP hijack or route leak events for the chosen period, sorted newest first, 25 per page. For hijacks, the filter matches any involved network; for leaks, it matches the leaking network, following the provider's own semantics. A route leak is defined in [RFC 7908, section 2](https://www.rfc-editor.org/rfc/rfc7908#section-2) as "the propagation of routing announcement(s) beyond their intended scope". The feed needs a configured provider token; without one the page says the feed is not connected and the routing results are unaffected. The feed is never sampled: sample incidents would read as real ones.
 
+<span id="standards"></span>
+
 ## Standards and conformance
 
 | Specification | Sections used | How the tool applies them | Where it stops |

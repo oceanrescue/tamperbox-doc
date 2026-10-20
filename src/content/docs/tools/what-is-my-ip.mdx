@@ -90,12 +90,14 @@ The test runs in the browser on purpose: a server-side request would test the se
 
 The rotation note follows [RFC 8981](https://www.rfc-editor.org/rfc/rfc8981): devices form temporary addresses ([section 3.4](https://www.rfc-editor.org/rfc/rfc8981#section-3.4)) with a default preferred lifetime of one day and a valid lifetime of two ([section 3.8](https://www.rfc-editor.org/rfc/rfc8981#section-3.8)), so the address a site sees changes about daily while the network prefix stays.
 
+<span id="standards"></span>
+
 ## Standards and conformance
 
 | Specification | Sections used | How the tool applies them | Where it stops |
 | --- | --- | --- | --- |
 | [RFC 4291](https://www.rfc-editor.org/rfc/rfc4291) IPv6 addressing | [2.5.4](https://www.rfc-editor.org/rfc/rfc4291#section-2.5.4) | Addresses are shown in their canonical compressed form | The page does not split prefix and interface ID |
-| [RFC 8981](https://www.rfc-editor.org/rfc/rfc8981) temporary addresses | [3.4](https://www.rfc-editor.org/rfc/rfc8981#section-3.4), [3.8](https://www.rfc-editor.org/rfc/rfc8981#section-3.8) | Explains why an IPv6 address changes | Obsoletes RFC 4941 |
+| [RFC 8981](https://www.rfc-editor.org/rfc/rfc8981) temporary addresses | [3.4](https://www.rfc-editor.org/rfc/rfc8981#section-3.4), [3.8](https://www.rfc-editor.org/rfc/rfc8981#section-3.8) | Explains why an IPv6 address changes | Obsoletes [RFC 4941](https://www.rfc-editor.org/rfc/rfc4941) |
 | [RFC 8305](https://www.rfc-editor.org/rfc/rfc8305) Happy Eyeballs v2 | [5](https://www.rfc-editor.org/rfc/rfc8305#section-5) | Explains why one connection shows one family | |
 | [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598) shared address space | [4](https://www.rfc-editor.org/rfc/rfc6598#section-4) | Background for carrier-grade NAT: the address shown is the provider's gateway | The page cannot see your router's WAN address |
 | [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918#section-3) private addresses | 3 | Your device's address at home is private and never shown here | |
@@ -164,7 +166,7 @@ See [Connect an MCP client](/mcp/connect/) and [Security and privacy](/reference
 ## References
 
 - [RFC 4291](https://www.rfc-editor.org/rfc/rfc4291), IP Version 6 Addressing Architecture: section 2.5.4.
-- [RFC 8981](https://www.rfc-editor.org/rfc/rfc8981), Temporary Address Extensions for Stateless Address Autoconfiguration in IPv6: sections 3.4 and 3.8. Obsoletes RFC 4941.
+- [RFC 8981](https://www.rfc-editor.org/rfc/rfc8981), Temporary Address Extensions for Stateless Address Autoconfiguration in IPv6: sections 3.4 and 3.8. Obsoletes [RFC 4941](https://www.rfc-editor.org/rfc/rfc4941).
 - [RFC 8305](https://www.rfc-editor.org/rfc/rfc8305), Happy Eyeballs Version 2: section 5.
 - [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598), IANA-Reserved IPv4 Prefix for Shared Address Space: section 4.
 - [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918), Address Allocation for Private Internets: section 3.
