@@ -32,7 +32,7 @@ The grade is a summary of configuration. It does not test the application, and a
 
 `example.com`, `www.example.com/shop` or a full `https://` address. Without a scheme, `https://` is assumed. The check runs when you stop typing, or at once on Enter. The server requests the address with a `GET`, follows up to ten redirects, and returns the headers of the response the chain ends on. The address must be a public host name: IP addresses, user names and passwords, and ports other than 80 and 443 are refused before anything is sent, with a repair in Heal it where one exists ("Remove them", "Use the standard port").
 
-Before checking, a pasted address is tidied: quotes, angle brackets and trailing punctuation are dropped, and a fragment is removed. The address keeps its path, because headers can differ by route. What you type is never rewritten while you type.
+Before checking, a pasted address is tidied: quotes, angle brackets and trailing punctuation are dropped. The address keeps its path and query, because headers can differ by route; a fragment (`#…`) stays in the box but is never sent. What you type is never rewritten while you type.
 
 ### Pasted headers
 
