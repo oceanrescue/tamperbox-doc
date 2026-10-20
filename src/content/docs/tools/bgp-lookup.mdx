@@ -1,0 +1,216 @@
+---
+title: BGP Route Lookup
+description: How the BGP Route Lookup reads who originates a prefix, how widely route collectors see it, its route objects and related prefixes, and the reported hijack and leak feed, with every rule and how to act on each finding.
+updated: 2026-10-20
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and guide for the Tamperbox BGP Route Lookup, which asks RIPEstat (RIPE RIS route collectors) for a prefix's origins, collector visibility, first and last seen, route objects and related prefixes, and lists potential hijacks and route leaks reported by Cloudflare Radar.
+prerequisites:
+  - An IPv4 or IPv6 prefix, a public IP address, an AS number, or a domain that resolves to an address
+outputs:
+  - A verdict naming the origin network and the share of collector peers that see the prefix, findings on multiple origins, missing route objects, low visibility and withdrawn routes, and a live incident feed
+limitations:
+  - Collector data is a sample of the internet and lags by hours; RPKI validity is not computed; reported incidents are detections, not confirmed attacks
+---
+
+The tool page is [tamperbox.dev/bgp-lookup](https://tamperbox.dev/bgp-lookup). It opens on a live lookup of `8.8.8.0/24`, says in one sentence who announces the prefix and how widely it is seen, and shows the evidence under it: visibility, first and last seen, origin networks with their route objects, related prefixes, and a live feed of reported hijacks and route leaks. This page is the long version: what the lookup reads, the rules behind each finding, and how to act on them.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> the input is parsed in your browser. Private space is explained there and never sent, and the documentation ranges that Break it uses are answered from sample data in the browser. Any other prefix, address or AS number is sent to the Tamperbox server, which asks RIPEstat and keeps nothing; a domain costs one DNS lookup first. The incident feed is fetched by the server from Cloudflare Radar and does not include your input unless you filter it to one network.</div>
+
+## What the tool answers
+
+1. **Is the prefix announced?** Does any network originate it now, as seen by the RIPE RIS route collectors?
+2. **Who originates it?** One network, or several, and does each have a route object in an Internet Routing Registry?
+3. **How widely is it seen?** How many of the collectors' peers carry a route for it, and since when?
+4. **What is around it?** More specific prefixes that take traffic from parts of it, less specific prefixes that cover it, and the registry block it was allocated from.
+5. **Has anything been reported?** Potential hijacks and route leaks in the last 1, 7 or 30 days, optionally narrowed to the network you looked up.
+
+## Inputs
+
+### A prefix
+
+`8.8.8.0/24` or `2001:4860::/32`. The lookup runs about 600 ms after typing pauses, or at once on Enter. A prefix with host bits set (`8.8.8.8/24`) is read as its network address, because routing tables hold the network address, and the page says so in a finding with a Heal it repair to the exact form. A prefix longer than the address allows (`/33` for IPv4, `/129` for IPv6) is refused with a repair to the longest valid length.
+
+### An address
+
+`8.8.8.8` is looked up through the prefix that contains it: RIPEstat answers with the most specific covering route. The verdict says "8.8.8.8 is in 8.8.8.0/24".
+
+### An AS number
+
+`AS15169` or `15169`, from 1 to 4294967295 ([RFC 6793, section 3](https://www.rfc-editor.org/rfc/rfc6793#section-3)). The result is the network's holder, whether it announces anything, and the number block it was assigned from. Very large networks can take many seconds to answer; the server stops after 20 seconds.
+
+### A domain
+
+`example.org` is resolved through our server's DNS endpoint (A first, AAAA when there is no A), and the first address is looked up. A name behind a CDN shows the CDN's prefix.
+
+### Pasted text and near misses
+
+A pasted link keeps its host; quotes, brackets and trailing punctuation are dropped; text that fits nothing stays as pasted with the tool's own message. `AS 15169` with a space and a typed URL get a Heal it repair. Private space ([RFC 1918, section 3](https://www.rfc-editor.org/rfc/rfc1918#section-3)), loopback, link-local, shared CGN space ([RFC 6598, section 4](https://www.rfc-editor.org/rfc/rfc6598#section-4)) and unique local addresses ([RFC 4193, section 3](https://www.rfc-editor.org/rfc/rfc4193#section-3)) are refused in the browser: they are not routed on the internet. A file dropped on the field is read in the browser; its first line becomes the input.
+
+## Reading the result
+
+### Verdict and chips
+
+"[prefix] is announced by AS…" (a pass when at least half the collector peers see it), "is announced by N networks" (a warning), or "is not announced" (a warning). The detail line gives visibility: "Seen by 325 of 325 route collector peers (100%)". Chips repeat the origin, the visibility and, when the second call failed, "Routing status unavailable".
+
+### Findings
+
+Directly under the verdict, worst first, with the informational ones folded when two or more pass. Each finding is in the [Finding reference](#finding-reference).
+
+### Take it further
+
+The first origin network into ASN Lookup (`AS15169`), the first less specific covering prefix back into BGP Route Lookup, and the network address into WHOIS & RDAP Lookup for the full registry record. The last two appear for live results only, because a documentation prefix has no real registry record. Nothing is put in the URL.
+
+### History
+
+Each Break it and Heal it change, with Revert for the newest and Reset input to go back to what you entered.
+
+### Visibility
+
+The count of collector peers that see the prefix over its address family, a bar of seeing against missing peers, and a timeline with First seen and Last seen, each with the origin at that time. The source line gives the age of the data.
+
+### Origin networks
+
+One row per origin with its name, handle and a badge: "Route object in RADB" (or the databases listed), or "No route object".
+
+### Related prefixes
+
+More specific prefixes also announced, less specific prefixes that cover this one, and the registry block (for example "8.0.0.0/8, Administered by ARIN"). For an AS number: the number block, who assigned it and the registry.
+
+### Reported hijacks and leaks
+
+The live feed from Cloudflare Radar, newest first, 25 to a page and up to 20 pages. Switch between Hijacks and Route leaks and between the last 24 hours, 7 days and 30 days. After an AS lookup or a prefix with exactly one origin, a chip narrows the feed to that network. Hijack rows show the detection time, prefixes, the announcing network, the expected origin and a confidence: High for a provider score of 8 or more, Medium for 5 to 7, Low below. Leak rows show the leaking network, the path segment, the number of prefixes and peers, and whether the leak has ended.
+
+## Method
+
+### 1. Reading the input
+
+`parseBgpInput` in the browser tries, in order: a spaced AS number, a URL, an AS number, a prefix (refusing a length over /32 or /128, refusing private space, normalising host bits), an address, a dotted quad with an octet over 255, and a host name. The server repeats the checks: it accepts only public addresses and normalises the prefix to its network address before asking RIPEstat.
+
+### 2. Overview and routing status
+
+The server makes two RIPEstat calls in parallel: `prefix-overview` (or `as-overview` for an AS number) and `routing-status`. The overview gives whether the prefix is announced, the origin networks with their holders, related prefixes and the registry block. The routing status gives visibility per address family, first and last seen with the origin at those times, the route objects per origin, and the more and less specific prefixes. If the routing status fails, the result is marked partial: the overview stands and the page says the rest is unavailable.
+
+The origin of a route is the AS that introduced it into BGP, the rightmost AS in the final `AS_SEQUENCE` of the route's `AS_PATH` ([RFC 4271, section 5.1.2](https://www.rfc-editor.org/rfc/rfc4271#section-5.1.2); "Route Origin ASN" in [RFC 6811, section 2](https://www.rfc-editor.org/rfc/rfc6811#section-2)). The collectors record the origins their peers see; the tool reports them as RIPEstat lists them.
+
+### 3. Rules applied to a prefix
+
+| Rule | Condition | Finding |
+| --- | --- | --- |
+| Host bits | The typed prefix had host bits set | INFO, with a Heal it repair to the network address |
+| Multiple origins | More than one origin network | CHECK |
+| Route objects | An origin has an empty route object list | CHECK, naming the origins without one |
+| Visibility | Announced and seen by fewer than 50% of collector peers | CHECK |
+| More specifics | Any more specific prefix announced | INFO |
+| Not announced | No announcement now | CHECK, with the last-seen time when known |
+| Partial | The routing status call failed | INFO |
+| Collector sample | Always | INFO |
+
+The multiple-origin warning follows [RFC 1930, section 7](https://www.rfc-editor.org/rfc/rfc1930#section-7): "Generally, a prefix can should belong to only one AS", with exceptions that only the holder can confirm, such as anycast or a customer announced by two providers. The route object rule reflects common practice: many networks build their prefix filters from IRR data, as [RFC 7454, section 6.1](https://www.rfc-editor.org/rfc/rfc7454#section-6.1) describes. The visibility threshold is a heuristic, not a standard: a prefix seen by fewer than half the collector peers is very likely filtered or newly announced. A frequent reason is length: [RFC 7454, section 6.1.3](https://www.rfc-editor.org/rfc/rfc7454#section-6.1.3) records that "IPv4 prefixes longer than /24 and IPv6 prefixes longer than /48 are generally neither announced nor accepted".
+
+### 4. Rules applied to an AS number
+
+An AS that announces nothing is a warning ("No routes seen from this network"). An informational finding points at the incident feed, which can be narrowed to the network.
+
+### 5. The incident feed
+
+The server reads Cloudflare Radar's BGP hijack or route leak events for the chosen period, sorted newest first, 25 per page. For hijacks, the filter matches any involved network; for leaks, it matches the leaking network, following the provider's own semantics. A route leak is defined in [RFC 7908, section 2](https://www.rfc-editor.org/rfc/rfc7908#section-2) as "the propagation of routing announcement(s) beyond their intended scope". The feed needs a configured provider token; without one the page says the feed is not connected and the routing results are unaffected. The feed is never sampled: sample incidents would read as real ones.
+
+## Standards and conformance
+
+| Specification | Sections used | How the tool applies them | Where it stops |
+| --- | --- | --- | --- |
+| [RFC 4271](https://www.rfc-editor.org/rfc/rfc4271) BGP-4 | [5.1.2](https://www.rfc-editor.org/rfc/rfc4271#section-5.1.2) | Origins are read from collector observations | No session of our own, no AS paths or attributes shown. Updated by RFC 6793 among others |
+| [RFC 6811](https://www.rfc-editor.org/rfc/rfc6811) origin validation | [2](https://www.rfc-editor.org/rfc/rfc6811#section-2) | Origin defined as there | Valid, Invalid and NotFound are not computed; ROAs are not fetched |
+| [RFC 6480](https://www.rfc-editor.org/rfc/rfc6480) RPKI | [3](https://www.rfc-editor.org/rfc/rfc6480#section-3) ROAs | Recommended in the guide as the way to authorise origins | Not checked by the tool |
+| [RFC 1930](https://www.rfc-editor.org/rfc/rfc1930) BCP 6 | [7](https://www.rfc-editor.org/rfc/rfc1930#section-7) | More than one origin is a warning | Intent cannot be seen in routing data |
+| [RFC 7454](https://www.rfc-editor.org/rfc/rfc7454) BGP operations | [6.1](https://www.rfc-editor.org/rfc/rfc7454#section-6.1), [6.1.3](https://www.rfc-editor.org/rfc/rfc7454#section-6.1.3) | Explains missing route objects and low visibility | The tool does not test any network's filters |
+| [RFC 7908](https://www.rfc-editor.org/rfc/rfc7908) route leaks | [2](https://www.rfc-editor.org/rfc/rfc7908#section-2), [3](https://www.rfc-editor.org/rfc/rfc7908#section-3) | Leak events are labelled as the provider classifies them | Not independently verified |
+| [RFC 6793](https://www.rfc-editor.org/rfc/rfc6793) | [3](https://www.rfc-editor.org/rfc/rfc6793#section-3) | Four-octet AS numbers accepted | |
+| [RFC 5737](https://www.rfc-editor.org/rfc/rfc5737#section-3), [RFC 3849](https://www.rfc-editor.org/rfc/rfc3849#section-2), [RFC 5398](https://www.rfc-editor.org/rfc/rfc5398#section-2) | as listed | Documentation prefixes and numbers answer from labelled sample data | |
+
+## Finding reference
+
+| Finding | Severity | What it means for the prefix's users | Fix |
+| --- | --- | --- | --- |
+| N origin networks | CHECK | Traffic goes to whichever origin is nearer; a wrong origin captures real traffic | Confirm the authorised origins; publish a ROA naming them |
+| No route object for AS… | CHECK | Networks filtering on IRR data may drop the route | Register a route object for the prefix and origin |
+| Only N% of collector peers see it | CHECK | Users behind networks that filter or never hear it cannot reach it | Check prefix length, ROA maximum length and upstream exports |
+| Not announced now | CHECK | Every address in the prefix is unreachable from the internet | Announce it again, with route object and ROA in place |
+| No routes seen from this network | CHECK | The AS announces nothing collectors see | Its operator checks sessions and exports |
+| … has host bits set | INFO | The typed prefix was read as its network address | Use the network address (Heal it) |
+| N more specific prefixes | INFO | Traffic to those parts follows the more specific route | Make sure each is intended and has its own ROA |
+| Routing status did not answer | INFO | Visibility, timeline and route objects are missing for now | Check again later |
+| Collectors are a sample of the internet | INFO | Observations lag and cover only the collectors' peers | |
+| Incidents involving this network | INFO | The feed below can be narrowed to the network | |
+
+## Guide
+
+### Users cannot reach your new prefix
+
+1. Look up the prefix. If it is "not announced", the announcement has not left your routers: check the BGP session and export policy with each upstream provider.
+2. If it is announced but visibility is low, check its length (no longer than /24 for IPv4 or /48 for IPv6) and your ROA: a ROA whose maximum length is shorter than the announced prefix makes the announcement RPKI-invalid, and validating networks drop it.
+3. If an origin has no route object, register one in your registry's IRR database, then check again after the mirrors update.
+
+Confirm without Tamperbox with the same RIPEstat data calls the server uses:
+
+```sh
+curl -s 'https://stat.ripe.net/data/routing-status/data.json?resource=8.8.8.0/24'
+curl -s 'https://stat.ripe.net/data/prefix-overview/data.json?resource=8.8.8.0/24'
+whois -h whois.radb.net 8.8.8.0/24
+```
+
+### A second origin appears for your prefix
+
+Compare the two rows: the new origin's first-seen date, its route object, and whether the feed reports a hijack involving your network. If you did not authorise it, contact that network's NOC and your upstream providers with the evidence, and publish a ROA for your authorised origin so that validating networks reject the other.
+
+### You run an AS and want to watch for incidents
+
+Look up your AS number and turn on the filter chip in the feed. Detections are probabilistic: a High confidence row deserves a look, a Low one usually does not. An empty feed is not proof that nothing happened.
+
+### Break it cases
+
+| Case | What it loads | What it shows |
+| --- | --- | --- |
+| Two origin networks | `203.0.113.0/24` | A sample prefix with two origins, one without a route object |
+| Not announced | `192.0.2.0/24` | A sample prefix nobody announces |
+| Host bits set | your IPv4 prefix with `.24` in place of `.0` | The host-bits finding and the Heal it repair |
+| Prefix too long | your prefix with `/33` (or `/129`) | The length refusal and the repair to the longest valid length |
+| Private space | `10.0.0.0/8` | The refusal in the browser; nothing is sent |
+
+## Worked example
+
+The page opens on `8.8.8.0/24`, looked up live, so the numbers you see will differ from these notes. At the time of writing, one network, Google's AS15169, originates it, and every collector peer that carries IPv4 routes sees it. The timeline shows it was first seen in 2002 from a different origin, AS21284: a prefix's origin can change over its life, after a transfer or a change of provider, which is why the route object and ROA must follow the origin. The origin row lists a route object in RADB. Related prefixes show two less specific covering routes, `8.0.0.0/9` and `8.0.0.0/12`, and the registry block `8.0.0.0/8` administered by ARIN. The findings are informational only.
+
+Take it further offers `AS15169` to ASN Lookup, the covering prefix `8.0.0.0/9` back to this tool, and `8.8.8.0` to WHOIS & RDAP Lookup for the full registration.
+
+## For agents
+
+The Tamperbox MCP server runs the same lookup. Search its catalog for `bgp_lookup`, inspect the input schema, and call it with one prefix, public address or AS number. Keep these warnings with any conclusion:
+
+- Multiple origins are not a hijack by themselves, and one origin is not proof the announcement is authorised.
+- Visibility is measured at the collectors' peers, not at every network.
+- RPKI validity is not part of the result.
+
+See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/), and [Security and privacy](/reference/security/) for where the input travels. [ASN Lookup](/tools/asn-lookup/) answers the registration side of the same question.
+
+## Limits
+
+- One view, RIPE RIS, at one moment; routes seen only inside some networks are missing.
+- No AS paths, no RPKI validation, no route object contents beyond the database names.
+- An address is looked up through its most specific covering prefix; a domain through its first address.
+- The incident feed is a third-party detection service; it needs a configured token and may be unavailable.
+- Sample answers for documentation ranges are made up and labelled.
+- Nothing you enter is stored.
+
+## References
+
+- [RFC 4271](https://www.rfc-editor.org/rfc/rfc4271), A Border Gateway Protocol 4: section 5.1.2. Updated by RFC 6793 and later RFCs.
+- [RFC 6811](https://www.rfc-editor.org/rfc/rfc6811), BGP Prefix Origin Validation: section 2.
+- [RFC 6480](https://www.rfc-editor.org/rfc/rfc6480), An Infrastructure to Support Secure Internet Routing: section 3.
+- [RFC 1930](https://www.rfc-editor.org/rfc/rfc1930), Guidelines for creation, selection, and registration of an Autonomous System (BCP 6): section 7.
+- [RFC 7454](https://www.rfc-editor.org/rfc/rfc7454), BGP Operations and Security (BCP 194): sections 6.1 and 6.1.3.
+- [RFC 7908](https://www.rfc-editor.org/rfc/rfc7908), Problem Definition and Classification of BGP Route Leaks: sections 2 and 3.
+- [RFC 6793](https://www.rfc-editor.org/rfc/rfc6793), BGP Support for Four-Octet AS Number Space: section 3.
+- [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918#section-3), [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598#section-4), [RFC 4193](https://www.rfc-editor.org/rfc/rfc4193#section-3): private, shared and unique local address space.
+- [RFC 5737](https://www.rfc-editor.org/rfc/rfc5737#section-3), [RFC 3849](https://www.rfc-editor.org/rfc/rfc3849#section-2), [RFC 5398](https://www.rfc-editor.org/rfc/rfc5398#section-2): documentation addresses and AS numbers.
+- [RIPEstat Data API](https://stat.ripe.net/docs/data-api/ripestat-data-api) and [Cloudflare Radar routing](https://radar.cloudflare.com/routing), the data sources.
