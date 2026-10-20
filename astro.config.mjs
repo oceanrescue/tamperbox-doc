@@ -42,6 +42,8 @@ export default defineConfig({
           { label: 'MTA-STS & TLS-RPT Checker', link: '/tools/mta-sts-checker/' },
           { label: 'BIMI Record Checker', link: '/tools/bimi-checker/' },
           { label: 'Email Header Analyzer', link: '/tools/email-header-analyzer/' },
+          { label: 'MX Lookup & Email Domain Checker', link: '/tools/email-domain/' },
+          { label: 'Email Provider Lookup', link: '/tools/email-provider/' },
         ] },
         { label: 'MCP server', items: [
           { label: 'Overview', link: '/mcp/' },

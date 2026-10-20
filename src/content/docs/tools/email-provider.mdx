@@ -1,0 +1,224 @@
+---
+title: Email Provider Lookup
+description: How the email provider lookup names the service that receives a domain's mail from its MX host names, the ten signatures it knows, how it handles gateways, mixed routes and backup routes, and how to confirm the result.
+updated: 2026-10-20
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and guide for the Tamperbox email provider lookup, which reads a domain's MX records (from the Tamperbox server, or pasted and read in the browser), matches each MX host name against ten mailbox-service and gateway signatures, and reports the provider, gateway, mixed routes and backup routes that leave the preferred service.
+prerequisites:
+  - A domain name, or its MX records as dig or a zone file prints them
+outputs:
+  - A provider verdict with chips per service, findings worst first, every route in delivery order with its provider and role, all DNS records, and Take it further links for the preferred mail server
+limitations:
+  - The provider is inferred from MX host names; a gateway hides the mailbox host, custom MX names are not followed, and unrecognised does not mean self-hosted
+---
+
+The tool page is [tamperbox.dev/email-provider](https://tamperbox.dev/email-provider). It answers a question DNS was never designed to answer directly: who handles this domain's email? The MX records name the servers that receive mail ([RFC 5321 section 5.1](https://www.rfc-editor.org/rfc/rfc5321#section-5.1)); their host names usually belong to a mail service, and the tool recognises ten of them. This page explains how the match works, what it can and cannot tell you, and how to confirm it.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> a domain is sent to the Tamperbox server, which asks a public DNS resolver for its MX records, and for its A and AAAA records only when there are no MX records. Pasted MX records are read in your browser with the same rules and never uploaded. The page opens on <code>harbor-supply.example</code>, reserved sample data answered in your browser. Nothing is stored.</div>
+
+## What the tool answers
+
+1. **Which service receives the mail first?** A mailbox service (Google Workspace, Microsoft 365 and others), a filtering gateway (Mimecast, Proofpoint and others), or neither.
+2. **Is that the whole story?** Every route is listed with the service it matches, so a mix of services, an unrecognised host or a backup route that goes somewhere else is visible.
+3. **Does any route skip the preferred service?** A backup or preferred route outside the main service is flagged, because mail that lands there may skip its filtering.
+
+It does not confirm a subscription, a mailbox, or what sits behind a gateway. For the routing rules themselves (null MX, address fallback, malformed records) see the [MX lookup](/tools/email-domain/#method), which shares the same reading of the MX answer.
+
+## Inputs
+
+### A domain
+
+`example.com`, typed or pasted. The lookup runs when you stop typing (about 0.6 seconds) or at once on Enter. The server allows eight seconds and the page twelve. Before anything is sent:
+
+- A pasted web address keeps only its host and an email address only its domain; the hint under the field names what was kept. Typing is never rewritten.
+- Capitals and a final dot are dropped, and a non-ASCII name is converted to its ASCII form.
+- An underscore name, an IP address, a port, a name without a top-level domain or an overlong label is refused with a message in the field.
+- Any `.example` name is answered from the sample data in your browser.
+
+### Pasted MX records
+
+The answer section of `dig MX example.com`, zone-file lines, or `dig +short MX` output (`10 mx.example.net.`). Comment lines starting with `;` are skipped; A and AAAA lines count only for the same owner name. The records are read in your browser and matched with the same signatures, so you can test a planned change before you publish it.
+
+## Reading the result
+
+### Verdict
+
+The lead names the outcome:
+
+| Lead | When |
+| --- | --- |
+| **Likely provider:** | Every MX host matches one mailbox service |
+| **Mimecast gateway:** (the gateway's name) | Every MX host matches one gateway; the mailbox host behind it is unknown |
+| **Mixed routes:** | More than one service, or a service plus unrecognised hosts |
+| **Provider unknown:** | No MX host matches a known service, or the MX records cannot be read |
+| **No email provider:** / **No provider named:** | Null MX, no records, no such domain, or only an address fallback |
+
+The chips list each service with its role and the number of unrecognised hosts, then the findings to check. Beside the verdict, the two items say where the input went.
+
+### Findings
+
+Worst first; passes fold into one line. See the [finding reference](#finding-reference).
+
+### History and Take it further
+
+History logs every Break it case and Heal it repair, with Revert and Reset input. Take it further carries the preferred MX host into other tools: DANE records for `host:25`, the TLS certificate on port 25, DNSSEC for the host's zone, and a port 25 reachability test. The certificate and reachability links show only for real host names, because those probes cannot answer the reserved sample's hosts.
+
+### Inbound mail routes
+
+One row per MX record, sorted by preference then name: the provider (or "Not recognised"), the role (Mailbox service, Gateway or Unknown), the MX host, and the priority, with "(preferred)" on the lowest. Read the preferred rows as where mail normally arrives.
+
+### All DNS records
+
+The raw records with their TTLs, and where they came from: the sample, the pasted text, or a public DNS lookup with its time.
+
+## Method
+
+### 1. Read the MX answer
+
+The MX answer is read with the same rules as the [MX lookup](/tools/email-domain/#method): NXDOMAIN, unreadable records, a null MX and the address fallback are decided first, and no provider is named for them. A resolver failure is reported as **Not checked**, never as a domain without a provider.
+
+### 2. Match each host name
+
+Each MX host is lowercased, its final dot dropped, and compared as a whole name against fixed patterns. A substring does not count: `mimecast.com.evil.example` is not Mimecast. The patterns:
+
+| Service | Role | MX host names matched |
+| --- | --- | --- |
+| Google Workspace | Mailbox service | `smtp.google.com`; `aspmx.l.google.com` and `alt1` to `alt4.aspmx.l.google.com`; `aspmx2` to `aspmx5.googlemail.com` |
+| Google Gmail | Mailbox service | `gmail-smtp-in.l.google.com` and its `alt1` to `alt4` variants |
+| Microsoft 365 | Mailbox service | a tenant label under `mail.protection.outlook.com`, or names under `mx.microsoft` |
+| Zoho Mail | Mailbox service | `mx`, `mx2` or `mx3` at `zoho.com`, `zoho.eu`, `zoho.in`, `zoho.com.au`, `zoho.jp` or `zoho.com.cn` |
+| Proton Mail | Mailbox service | `mail.protonmail.ch`, `mailsec.protonmail.ch` |
+| Fastmail | Mailbox service | `in1`, `in2`, `us1`, `us2`, `eu1` or `eu2` followed by `-smtp.messagingengine.com` |
+| Cloudflare Email Routing | Gateway | `route` and digits under `mx.cloudflare.net` |
+| Mimecast | Gateway | any name under `mimecast.com` |
+| Proofpoint | Gateway | names under `pphosted.com` or `ppe-hosted.com` |
+| Barracuda | Gateway | names under `ess.barracudanetworks.com` |
+
+The patterns come from each service's own MX setup documentation, for example [Google Workspace MX records](https://support.google.com/a/answer/9222085) and [Proton Mail custom domains](https://proton.me/support/custom-domain). A host that matches nothing is listed as **Not recognised**. Only the published name is matched; a vanity MX such as `mx.yourcompany.com` is not followed to wherever it resolves.
+
+For the reserved sample, the page adds one rule that the server never uses: names under `inboxcloud.example` are **InboxCloud (sample)**, the sample world's mail service.
+
+### 3. Decide the status
+
+| Matches | Status | Verdict |
+| --- | --- | --- |
+| One mailbox service, no unrecognised hosts | identified | **Likely provider: *name*.** |
+| One gateway, no unrecognised hosts | gateway | **Mimecast gateway: the mailbox host behind it is unknown.** (with the gateway's name) |
+| Two or more services, or any service plus an unrecognised host | mixed | **Mixed routes: *names* and N other routes.** |
+| Nothing recognised | unknown | **Provider unknown: these MX hosts match no supported service.** |
+
+A gateway result never names a mailbox host: the tool does not guess from SPF, website hosting or anything else.
+
+### 4. Routes that leave the preferred service
+
+Senders try the lowest preference first and use higher ones when it does not answer ([RFC 5321 section 5.1](https://www.rfc-editor.org/rfc/rfc5321#section-5.1): "Lower numbers are more preferred than higher ones"). The tool ranks the routes the same way, then:
+
+- If the preferred route belongs to a recognised service, every non-preferred route that belongs to another service or to nothing recognised is **Backup route outside** *service*: *host* (check). Mail delivered there skips the service, and its filtering for a gateway, unless that host forwards to it.
+- If the preferred route is unrecognised but a recognised service appears at a higher preference, each preferred host is **Preferred route outside** *service*: *host* (check): most mail reaches that host first.
+
+These are inferences about routing, not proof of a problem: a backup host may well forward to the main service. The finding asks you to check.
+
+### Limits applied
+
+The same as the MX lookup: eight seconds on the server, twelve on the page, eight CNAME aliases, a 64 KiB resolver response, 4,000 characters in the box.
+
+## Standards and conformance
+
+| Specification | Sections used | How the tool applies them | Where it stops |
+| --- | --- | --- | --- |
+| [RFC 5321](https://www.rfc-editor.org/rfc/rfc5321) (updated by [RFC 7504](https://www.rfc-editor.org/rfc/rfc7504)) | [5.1](https://www.rfc-editor.org/rfc/rfc5321#section-5.1) | Routes are ranked by preference, lowest first; equal preferences are all marked preferred | No SMTP connection; the hosts are not resolved |
+| [RFC 7505](https://www.rfc-editor.org/rfc/rfc7505) | [3](https://www.rfc-editor.org/rfc/rfc7505#section-3) | A valid null MX means no provider; a mixed one is unreadable | As in the MX lookup |
+| [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035) | [3.3.9](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.9) | MX data is a preference and a host name | |
+| Provider documentation | each service's MX setup page | Host name patterns | No standard defines provider names; the list is bounded and reviewed by hand |
+
+No standard says which company runs a mail server, so "conformance" here means two things: the routing rules follow RFC 5321 and RFC 7505 exactly, and the provider names are only ever presented as inferences.
+
+## Finding reference
+
+| Finding | Severity | Source | What it means | Fix |
+| --- | --- | --- | --- | --- |
+| Mailbox service: *name* | Pass | Signature | These MX hosts belong to that service | Nothing |
+| Gateway: *name* | Info | Signature | Mail is filtered there first; the mailbox host is hidden | Nothing; read Received headers to find the mailbox host |
+| *host* not recognised | Info | Signature | An unlisted service or your own server | Nothing, unless the host is unexpected |
+| Backup route outside *service*: *host* | Check | RFC 5321 §5.1 | Mail that reaches the backup skips the service | Confirm the host forwards to the service, or remove it |
+| Preferred route outside *service*: *host* | Check | RFC 5321 §5.1 | Most mail reaches that host before the service | Check the preferences; usually a leftover from a migration |
+| No supported service matched | Info | Signature | None of the ten services | Nothing |
+| N MX records read | Pass | RFC 1035 §3.3.9 | Every record names a host | Nothing |
+| Null MX: the domain accepts no mail | Info | RFC 7505 §3 | No inbound provider by design | Nothing, if the domain neither sends nor receives mail |
+| No MX record | Check | RFC 5321 §5.1 | Only an address fallback; no provider can be named | Publish MX records |
+| No MX, A or AAAA records / The domain does not exist | Fail | RFC 5321 §5.1 | Mail bounces | See the MX lookup guide |
+| An MX host is not a domain name, and the other unreadable-record findings | Fail | RFC 5321 §5.1, RFC 7505 §3 | The routes cannot be read | See the [MX lookup finding reference](/tools/email-domain/#finding-reference) |
+
+## Guide
+
+### Find the mailbox host behind a gateway
+
+1. Send a message to an address at the domain, or ask someone there to forward you one they received.
+2. Open the full headers and read the `Received:` lines from the bottom up. The hop after the gateway's own servers names the system that stores the mailbox.
+3. The [email header analyzer](https://tamperbox.dev/email-header-analyzer) lists the hops in order and reads the authentication results.
+
+### A backup route outside your mail service
+
+1. Look at the route table: the flagged host and its preference.
+2. Ask whoever runs that host whether it still forwards to your mail service, and whether it applies the same spam and malware filtering.
+3. If it does not, remove the MX record in your DNS provider. If it does, keep it and accept that its filtering is now part of your mail security.
+4. Confirm: `dig +short MX example.com` no longer lists the host, and this page shows **Likely provider** or the gateway verdict.
+
+### After a migration
+
+A move between services often leaves the old MX records in place. The verdict reads **Mixed routes**, and the old service's hosts usually sit at a different preference. Remove the old records once the new service has received mail for a few days, then check here again.
+
+### Confirm the result without Tamperbox
+
+```sh
+dig +short MX example.com
+```
+
+Compare each host name with the table in Method. For Microsoft 365 the tenant label in front of `mail.protection.outlook.com` is usually the domain with dots turned into dashes.
+
+### Break it and Heal it
+
+| Break it | What it loads, built from your domain's records | What it shows |
+| --- | --- | --- |
+| Null MX | `<domain>. MX 0 .` | No email provider: the domain refuses email |
+| Null MX beside a route | `0 .` added to your MX records | Unreadable records, with two repairs |
+| MX points at an IP | Your first MX host replaced by `192.0.2.25` | Unreadable records, with the "Name the server" repair |
+| No MX, address only | `<domain>. A 192.0.2.10` | No provider named, with the "Publish MX 0" repair |
+| Unknown host first | `mail.<domain>` added at a lower preference than your routes | Mixed routes, and the preferred route outside your service |
+
+## Worked example
+
+The page opens on `harbor-supply.example`, reserved sample data on the `.example` top-level domain ([RFC 2606 section 2](https://www.rfc-editor.org/rfc/rfc2606#section-2)), answered in your browser:
+
+```text
+harbor-supply.example.  3600  IN  MX  10 mx1.inboxcloud.example.
+harbor-supply.example.  3600  IN  MX  20 alt1.mx.inboxcloud.example.
+harbor-supply.example.  3600  IN  MX  50 backup.harbor-supply.example.
+```
+
+1. All three records are readable and none is a null MX.
+2. `mx1.inboxcloud.example` and `alt1.mx.inboxcloud.example` match the sample rule: **InboxCloud (sample)**, a mailbox service. `backup.harbor-supply.example` matches nothing.
+3. One service plus an unrecognised host: **Mixed routes: InboxCloud (sample) and 1 other route.**
+4. The preferred route (10) belongs to InboxCloud, and the backup at 50 does not: **Backup route outside InboxCloud (sample): backup.harbor-supply.example.** Mail that reaches the backup, for example while InboxCloud is briefly unreachable or because a spammer aims at it directly, skips InboxCloud unless the backup forwards to it.
+
+The cards suggest confirming whether the backup still forwards, then removing it or giving it the same filtering. Take it further offers DANE and DNSSEC for `mx1.inboxcloud.example`, both answered from the sample data.
+
+## For agents
+
+The MCP server exposes the same lookup and returns the provider block (`status`, `providers` with their evidence, `unknownExchanges`, `mailboxHost`). An agent should report the provider as an inference, never name a mailbox host for a gateway or mixed result, and treat a lookup failure as unknown, not as "no provider". The backup-route warning is computed on the page from `providers` and `unknownExchanges`; an agent can apply the same rule. See [Connect Tamperbox MCP](/mcp/connect/).
+
+## Limits
+
+- The provider is inferred from MX host names, not confirmed with the provider or the domain owner.
+- A gateway hides the mailbox host. Forwarding, hybrid setups and split delivery are invisible in MX records.
+- Custom MX names are not followed, and only ten services are recognised: unrecognised does not mean self-hosted.
+- SPF, DKIM, website hosting and nameservers are not used to guess.
+- One answer from one public resolver at one moment; pasted records show what the text says, not what DNS serves today.
+
+## References
+
+- [RFC 5321](https://www.rfc-editor.org/rfc/rfc5321), Simple Mail Transfer Protocol: [section 5.1](https://www.rfc-editor.org/rfc/rfc5321#section-5.1), MX preference and delivery order. Draft Standard, updated by [RFC 7504](https://www.rfc-editor.org/rfc/rfc7504).
+- [RFC 7505](https://www.rfc-editor.org/rfc/rfc7505), Null MX: [section 3](https://www.rfc-editor.org/rfc/rfc7505#section-3). Proposed Standard.
+- [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035), Domain Names, Implementation and Specification: [section 3.3.9](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.9), MX RDATA. Internet Standard.
+- [RFC 2606](https://www.rfc-editor.org/rfc/rfc2606), Reserved Top Level DNS Names: [section 2](https://www.rfc-editor.org/rfc/rfc2606#section-2).
+- Provider MX documentation, the source of the signatures: [Google Workspace](https://support.google.com/a/answer/9222085), [Proton Mail](https://proton.me/support/custom-domain), [Fastmail](https://www.fastmail.help/hc/en-us/articles/1500000280261-Setting-up-your-domain-MX-only), [Zoho Mail](https://www.zoho.com/mail/help/adminconsole/configure-email-delivery.html).

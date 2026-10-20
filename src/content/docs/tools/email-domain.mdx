@@ -1,0 +1,278 @@
+---
+title: MX Lookup & Email Domain Checker
+description: How the MX lookup reads a domain's MX answer, every rule it applies from RFC 5321 and RFC 7505, what each routing outcome means for mail sent to the domain, and how to fix and verify each one.
+updated: 2026-10-20
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and repair guide for the Tamperbox MX lookup, which asks a public resolver for a domain's MX records (and A and AAAA only when there is no MX) from the Tamperbox server, or reads pasted MX records in the browser, and reports MX routes, null MX refusal, address fallback or no route.
+prerequisites:
+  - A domain name, or its MX records as dig or a zone file prints them
+outputs:
+  - A routing verdict with PASS, CHECK and FAIL chips, findings worst first, the MX and address records with their TTLs, Take it further links for the preferred mail server, and repairs for broken records
+limitations:
+  - Published MX records do not prove that a server is online, accepts the connection or holds a mailbox; the MX hosts are not resolved and no SMTP connection is opened
+---
+
+The tool page is [tamperbox.dev/email-domain](https://tamperbox.dev/email-domain). It answers one question, the one a sender's mail server asks first: where does mail for this domain go? This page is the long version: what the tool reads, every rule it applies in order, what each outcome means for a message sent to the domain, and how to fix and verify each one.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> a domain is sent to the Tamperbox server, which asks a public DNS resolver for its MX records, and for its A and AAAA records only when there are no MX records. Pasted MX records are read in your browser with the same rules and never uploaded. The page opens on <code>harbor-supply.example</code>, reserved sample data answered in your browser. Nothing is stored.</div>
+
+## What the tool answers
+
+A sending mail server looks up the recipient domain's MX records, sorts them by preference and delivers to the first server that answers ([RFC 5321 section 5.1](https://www.rfc-editor.org/rfc/rfc5321#section-5.1)). The tool reads the same answer and tells you which of five situations the domain is in:
+
+1. **Routes are published.** One or more MX records name the servers that receive mail, in preference order.
+2. **Mail is refused on purpose.** A single null MX (`0 .`) declares that the domain accepts no mail ([RFC 7505 section 3](https://www.rfc-editor.org/rfc/rfc7505#section-3)).
+3. **There is only an address fallback.** No MX records, so senders treat the domain's own A or AAAA address as an implicit MX.
+4. **There is no route.** No MX, A or AAAA records; or the domain does not exist.
+5. **The records cannot be read.** An MX record is malformed, points at an address, or mixes a null MX with real routes.
+
+It does not tell you whether a mailbox exists, whether a server is up, or who hosts the mailbox. For the last question use the [email provider lookup](/tools/email-provider/), which reads the same records against known service names.
+
+## Inputs
+
+### A domain
+
+`example.com`, typed or pasted. The page waits until you stop typing (about 0.6 seconds), or runs at once on Enter, then asks the Tamperbox server. The server allows eight seconds and the page twelve. Before anything is sent, the page cleans and checks the input:
+
+- A pasted web address keeps only its host (`https://github.com/oceanrescue/` becomes `github.com`), and an email address keeps only its domain (`jane@gmail.com` becomes `gmail.com`). The hint under the field says what was kept. Typing is never rewritten mid-word.
+- Capitals and a final dot are dropped, full-width dots are converted, and a non-ASCII name is converted to its ASCII form (`münchen.de` becomes `xn--mnchen-3ya.de`).
+- A name with an underscore (`_dmarc.example.com`) is refused: names like that hold TXT records and never receive mail.
+- An IP address, a name with a port, a single label without a top-level domain, an empty label, a label over 63 characters or a name over 253 characters is refused, each with its own message in the field.
+
+Any name on the reserved `.example` top-level domain is answered from the sample data in your browser and never sent.
+
+### Pasted MX records
+
+Paste the answer section of `dig MX example.com`, lines from a zone file, or the bare data that `dig +short MX` prints:
+
+```text
+example.com.   3600  IN  MX  10 mx1.example.net.
+example.com.   3600  IN  MX  20 mx2.example.net.
+10 mx1.example.net.
+```
+
+Lines starting with `;` (dig's comments and section headers) are skipped. A and AAAA lines are read too, but count as an address fallback only when they belong to the same owner name as the MX records; lines for other names are ignored and the evidence line says how many. Text that is not entirely made of such lines is treated as a domain. Pasted records are read in your browser, nothing is looked up, and the Take it further links for real host names make their own lookups only when you click them.
+
+## Reading the result
+
+### The opening line
+
+On the sample it reads **Example**, the sample's name, and how to replace it. The line disappears as soon as you check your own input.
+
+### Verdict
+
+The lead names the outcome: **Accepts mail**, **Refuses mail on purpose**, **Possible mail route**, **No mail route** or **Inconclusive**. The rest names the detail (the number of MX records and the preference tried first, the address that would be used, or the record that could not be read). Under it, the chips: the routing state, then the provider hint read from the MX names, then the number of findings to look at. A chip that names a problem scrolls to the section that explains it.
+
+The two items beside the verdict say where your input went: pasted records stay in the browser; a domain means one MX lookup from our server, plus A and AAAA only when there is no MX.
+
+### Findings
+
+Every rule the tool applied, worst first. Passes fold into one "checks passed" line. The count on the right is problems and items to check.
+
+### History
+
+Each Break it case and Heal it repair replaces the box; History logs what it replaced. Revert undoes the newest change, Reset input returns to what you entered.
+
+### Take it further
+
+Links that carry a value from this result into another tool, which opens with the value in its box:
+
+| Link | Value carried | When it shows |
+| --- | --- | --- |
+| DANE records for the preferred mail server | `host:25` of the lowest-preference MX | Any result with an MX host name |
+| TLS certificate on the preferred mail server, port 25 | `host:25` | Real host names only |
+| DNSSEC on the preferred mail server's zone | the MX host name | Any result with an MX host name |
+| Reach the preferred mail server on port 25 | `host:25` | Real host names only |
+| Reverse DNS of the fallback address | the first fallback address | Address fallback only |
+
+The TLS and reachability probes cannot answer the reserved sample's hosts, so the sample shows only DANE and DNSSEC, which both answer the sample locally.
+
+### Mail routes
+
+Every record as a row: type, priority, host or address, TTL in seconds. The line under the table says whether the address fallback applies and where the evidence came from: the reserved sample, the pasted records, or a public DNS lookup with its time.
+
+## Method
+
+The rules run in this order. The server lookup and pasted records use the same code (`readMx` and `mailRoute` in the page's shared library), so a pasted answer and a looked-up answer give the same outcome.
+
+### 1. Does the name exist?
+
+The server asks the resolver for MX records. An NXDOMAIN answer gives **No mail route: the domain does not exist in DNS.** [RFC 5321 section 5.1](https://www.rfc-editor.org/rfc/rfc5321#section-5.1) is explicit: "If a non-existent domain error is returned, this situation MUST be reported as an error."
+
+A resolver failure, a truncated answer, a CNAME loop, more than eight aliases, or an alias that conflicts with other records at the same name is not a result about the domain. The page reports **Not checked** with "The DNS lookup failed or timed out" and keeps nothing from the previous result. RFC 5321 treats a temporary error as a reason to queue and retry, not to bounce, and the tool says the same: try again.
+
+### 2. Is every MX record readable?
+
+Each MX record is a 16-bit preference and an exchange domain name ([RFC 1035 section 3.3.9](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.9)). The tool reads the records in the order received and stops at the first it cannot use:
+
+| Record | Outcome |
+| --- | --- |
+| Not a number followed by one host, or a preference over 65535 | **Inconclusive: an MX record is not a preference and a host** |
+| A host that is not a domain name (an IPv4 or IPv6 address, an underscore label, a URL) | **Inconclusive: an MX host is not a domain name** |
+
+The host rule follows RFC 5321 section 5.1: "the data field of that response MUST contain a domain name. That domain name, when queried, MUST return at least one address record". An address written where the name belongs is a common hand-editing mistake; senders refuse it or try to resolve it as a name and fail. The host is checked with the same domain rules as your input.
+
+### 3. Null MX
+
+A record whose exchange is `.` is a null MX. The rules are from [RFC 7505 section 3](https://www.rfc-editor.org/rfc/rfc7505#section-3): the domain "advertises a single MX RR ... with an RDATA section consisting of preference number 0 and a zero-length label", and "A domain that advertises a null MX MUST NOT advertise any other MX RR."
+
+| What is published | Outcome |
+| --- | --- |
+| Exactly one MX, preference 0, host `.` | **Refuses mail on purpose** (finding: Null MX: the domain accepts no mail) |
+| `.` beside any other MX record | **Inconclusive: null MX beside other MX records** |
+| A single `.` with a preference other than 0 | **Inconclusive: null MX with a preference other than 0** |
+
+A valid null MX also stops the address fallback: the tool does not ask for A or AAAA, as a sender would not.
+
+### 4. MX routes
+
+When every record is a usable host, the records are sorted by preference and then by name, and the outcome is **Accepts mail**. Findings that follow:
+
+- **N MX records, tried lowest preference first.** RFC 5321 section 5.1: "Lower numbers are more preferred than higher ones."
+- **Every MX host is a domain name.**
+- **One MX host and no backup route** (info) when there is a single record. When that server is down, senders queue the message and retry; [RFC 5321 section 4.5.4.1](https://www.rfc-editor.org/rfc/rfc5321#section-4.5.4.1) says "the give-up time generally needs to be at least 4-5 days". A second MX is optional, not required.
+- **N hosts share preference P** (info) when several records have the same preference. RFC 5321 section 5.1: "the sender-SMTP MUST randomize them to spread the load".
+- **Provider hint** (info): the MX names compared with the services the [email provider lookup](/tools/email-provider/#method) recognises, or "No provider recognised from the MX names".
+
+### 5. Address fallback
+
+Only when the MX query succeeded and returned no MX records does the server ask for A and AAAA records. RFC 5321 section 5.1: "If an empty list of MXs is returned, the address is treated as if it was associated with an implicit MX RR, with a preference of 0, pointing to that host", and "the 'implicit MX' rule above applies only if there are no MX records present."
+
+| Addresses found | Outcome |
+| --- | --- |
+| At least one A or AAAA | **Possible mail route** (finding: No MX record, plus one row per address) |
+| None, and both queries answered | **No mail route: no MX, A or AAAA records** |
+| None, and a query failed | **Not checked** (the lookup failed; try again) |
+
+The fallback is a weaker outcome than published MX: the address usually belongs to a web server, which may not run a mail server at all.
+
+### Limits applied
+
+| Limit | Value |
+| --- | --- |
+| Input length | 4,000 characters in the box; a domain name 253 characters |
+| Server time per lookup | 8 seconds |
+| Page wait | 12 seconds |
+| CNAME aliases followed | 8 |
+| Resolver response size | 64 KiB |
+
+## Standards and conformance
+
+| Specification | Sections used | How the tool applies them | Where it stops |
+| --- | --- | --- | --- |
+| [RFC 5321](https://www.rfc-editor.org/rfc/rfc5321) (updated by [RFC 7504](https://www.rfc-editor.org/rfc/rfc7504)) | [5.1](https://www.rfc-editor.org/rfc/rfc5321#section-5.1) target host location, [4.5.4.1](https://www.rfc-editor.org/rfc/rfc5321#section-4.5.4.1) retry | NXDOMAIN is an error; MX hosts must be names; preferences sort ascending; implicit MX only without MX; equal preferences noted as load sharing | The MX hosts are not resolved, so a host with no address record, or one that is a CNAME, still passes here. No SMTP connection is opened |
+| [RFC 7505](https://www.rfc-editor.org/rfc/rfc7505) | [3](https://www.rfc-editor.org/rfc/rfc7505#section-3) the record, [4.2](https://www.rfc-editor.org/rfc/rfc7505#section-4.2) sending domains | Exactly one `0 .` is a refusal; any mix or other preference is reported as invalid; the fallback is not tried | The tool does not check whether a null MX domain also sends mail, which section 4.2 advises against |
+| [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035) | [3.3.9](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.9) MX RDATA | A preference from 0 to 65535 and a domain name | Wire-format details are the resolver's job |
+| [RFC 2181](https://www.rfc-editor.org/rfc/rfc2181) | [10.3](https://www.rfc-editor.org/rfc/rfc2181#section-10.3) MX and aliases | Not checked | The rule that an MX target must not be an alias needs a lookup of every MX host, which the tool does not make |
+
+The tool is stricter than some senders in one place: a single unreadable record makes the whole answer inconclusive, where a lenient sender might skip that record and use the rest. That is deliberate. A broken record is a configuration error that some receivers will hit, and the domain's owner should see it.
+
+## Finding reference
+
+| Finding | Severity | Source | What it means for mail sent to the domain | Fix |
+| --- | --- | --- | --- | --- |
+| N MX records, tried lowest preference first | Pass | RFC 5321 §5.1 | Senders know where to deliver | Nothing |
+| Every MX host is a domain name | Pass | RFC 5321 §5.1 | Every record is usable | Nothing |
+| One MX host and no backup route | Info | RFC 5321 §4.5.4.1 | Mail queues at the sender while that host is down | Optional: add a second MX at a higher preference that delivers to the same mailboxes |
+| N hosts share preference P | Info | RFC 5321 §5.1 | Senders spread mail between them | Nothing, if every host delivers to the same mailboxes |
+| Provider hint | Info | none (inference) | Names the service that receives mail first | Use the provider lookup for the evidence |
+| Null MX: the domain accepts no mail | Info | RFC 7505 §3 | Mail bounces at once with no retries | Nothing for a domain that neither sends nor receives mail; otherwise publish real MX records |
+| No address fallback is tried | Pass | RFC 7505 §3 | The null MX is honoured | Nothing |
+| No MX record | Check | RFC 5321 §5.1 | Mail goes to the domain's own address, often a web server | Publish MX records, or a null MX if the domain neither sends nor receives mail |
+| Address fallback to an address | Info | RFC 5321 §5.1 | The address a sender will try | As above |
+| No MX, A or AAAA records | Fail | RFC 5321 §5.1 | Every message bounces | Publish MX records |
+| The domain does not exist | Fail | RFC 5321 §5.1 | Every message bounces; nothing else resolves either | Check the spelling and the registration |
+| An MX record is not a preference and a host | Fail | RFC 1035 §3.3.9 | Some senders cannot route mail | Rewrite it as `10 mail.example.com.` |
+| An MX host is not a domain name | Fail | RFC 5321 §5.1 | Senders refuse or misroute mail for that record | Give the server a name with an A or AAAA record and point the MX at the name |
+| Null MX beside other MX records | Fail | RFC 7505 §3 | Senders cannot tell whether the domain accepts mail | Keep the routes or keep the null MX, not both |
+| Null MX with a preference other than 0 | Fail | RFC 7505 §3 | Not recognised as a null MX | Set the preference to 0 |
+
+## Guide
+
+### Mail to the domain bounces with "domain not found"
+
+1. Check the domain here. **The domain does not exist** means the name has no records at all.
+2. Check the spelling, then the registration: an expired or suspended domain is removed from DNS.
+3. Confirm independently: `dig +short NS example.com` returns nothing for a name that does not exist.
+
+### The domain should receive mail but shows "No MX record"
+
+1. Find the MX records your mail service gives you in its setup page.
+2. Add them in your DNS provider at the domain itself (the apex, often written `@`), not at `www` or `mail`.
+3. Check again here; once the TTL of the old answer has passed, the verdict reads **Accepts mail**.
+4. Confirm independently: `dig +short MX example.com` lists the records with their preferences.
+
+### The domain should never receive or send mail
+
+Publish a single null MX and, for the sending side, an SPF record that authorises nothing:
+
+```text
+example.com.  3600  IN  MX   0 .
+example.com.  3600  IN  TXT  "v=spf1 -all"
+```
+
+RFC 7505 section 4.2 says mail systems "SHOULD NOT publish a null MX record for domains that they use in RFC5321.MailFrom or RFC5322.From addresses", because receivers reject mail whose return domain refuses replies. A domain that sends newsletters or invoices therefore needs real MX records, even if nobody reads the replies.
+
+### The verdict is "Inconclusive"
+
+- **An MX host is not a domain name:** create an A (or AAAA) record such as `mail.example.com` for the server's address, then point the MX at `mail.example.com.`. Heal it shows the result for pasted records.
+- **Null MX beside other MX records:** decide whether the domain receives mail. Heal it offers both answers: drop the null MX and keep the routes, or keep only the null MX.
+- **Null MX with a preference other than 0:** change the preference to 0.
+- **An MX record is not a preference and a host:** rewrite it in the form `10 mail.example.com.`; a preference above 65535 is set to 10 by Heal it.
+
+### A backup route you no longer need
+
+Backup MX hosts that are not maintained are a common source of trouble: they accept mail the primary would reject, or queue it for days. List the routes here, ask whoever runs each host whether it still forwards to your mail service, and remove the ones that do not. The [email provider lookup](/tools/email-provider/#guide) flags a backup route that leaves your main service.
+
+### Break it and Heal it
+
+| Break it | What it loads, built from your domain's records | What it shows |
+| --- | --- | --- |
+| Null MX | `<domain>. MX 0 .` | Refuses mail on purpose |
+| Null MX beside a route | `0 .` added to your MX records | Inconclusive, with two repairs |
+| MX points at an IP | Your first MX host replaced by `192.0.2.25` | Inconclusive, with the "Name the server" repair |
+| No MX, address only | `<domain>. A 192.0.2.10` | Possible mail route, with the "Publish MX 0" repair |
+
+Each case starts from the domain you looked up or the records you pasted; before you enter anything, it uses the sample. A break with no repair offers "Restore input before this break".
+
+## Worked example
+
+The page opens on `harbor-supply.example`, reserved sample data on the `.example` top-level domain ([RFC 2606](https://www.rfc-editor.org/rfc/rfc2606#section-2)), answered in your browser. Its MX answer:
+
+```text
+harbor-supply.example.  3600  IN  MX  10 mx1.inboxcloud.example.
+harbor-supply.example.  3600  IN  MX  20 alt1.mx.inboxcloud.example.
+harbor-supply.example.  3600  IN  MX  50 backup.harbor-supply.example.
+```
+
+Reading it the way the tool does:
+
+1. The name exists and three MX records come back.
+2. Every record is a preference and a host name, so the answer is readable.
+3. No record is a null MX.
+4. Sorted by preference: `mx1.inboxcloud.example` (10) first, then `alt1.mx.inboxcloud.example` (20), then `backup.harbor-supply.example` (50). Verdict: **Accepts mail: 3 MX records, preference 10 first.**
+5. With MX records present, no address fallback is used, even though the sample domain has an A record.
+
+The provider hint names InboxCloud, the sample world's mail service, for the first two hosts. The third is the domain's own backup server, which the provider lookup reports as a route outside the service. Take it further offers DANE and DNSSEC for `mx1.inboxcloud.example`; both answer from the sample data.
+
+## For agents
+
+The MCP server exposes the same lookup. An agent should pass the bare domain, not an email address or URL, and read the result's `status` (`mx`, `null_mx`, `implicit_mx`, `no_mail`, `nxdomain`, `invalid_mx` or `dns_error`) rather than the message text. Keep these warnings when reporting the result: published MX records are not proof that a server is online or a mailbox exists; `dns_error` says nothing about the domain; `implicit_mx` is a weak route. See [Connect Tamperbox MCP](/mcp/connect/).
+
+## Limits
+
+- One answer from one public resolver at one moment. Records in private or split-horizon DNS are not seen, and a change may not show until the old answer's TTL has passed.
+- The MX hosts are not resolved: a host with no address, or one that is a CNAME ([RFC 2181 section 10.3](https://www.rfc-editor.org/rfc/rfc2181#section-10.3)), is not flagged.
+- No SMTP connection is opened, so a server that is down, refuses connections or rejects the recipient looks the same as one that works.
+- The provider hint is an inference from host names.
+- Pasted records show what the text says, not what DNS serves today.
+
+## References
+
+- [RFC 5321](https://www.rfc-editor.org/rfc/rfc5321), Simple Mail Transfer Protocol: [section 5.1](https://www.rfc-editor.org/rfc/rfc5321#section-5.1) locating the target host and the implicit MX, [section 4.5.4.1](https://www.rfc-editor.org/rfc/rfc5321#section-4.5.4.1) retry strategy. Draft Standard, updated by [RFC 7504](https://www.rfc-editor.org/rfc/rfc7504).
+- [RFC 7505](https://www.rfc-editor.org/rfc/rfc7505), A "Null MX" No Service Resource Record for Domains That Accept No Mail: [section 3](https://www.rfc-editor.org/rfc/rfc7505#section-3) the record, [section 4.2](https://www.rfc-editor.org/rfc/rfc7505#section-4.2) domains that send mail. Proposed Standard.
+- [RFC 7504](https://www.rfc-editor.org/rfc/rfc7504), SMTP 521 and 556 Reply Codes: the 556 reply a sender gives for a null MX domain.
+- [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035), Domain Names, Implementation and Specification: [section 3.3.9](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.9) MX RDATA format. Internet Standard, updated by many later RFCs including RFC 2181.
+- [RFC 2181](https://www.rfc-editor.org/rfc/rfc2181), Clarifications to the DNS Specification: [section 10.3](https://www.rfc-editor.org/rfc/rfc2181#section-10.3) MX and NS records must not point to an alias.
+- [RFC 5322](https://www.rfc-editor.org/rfc/rfc5322), Internet Message Format: [section 3.6.2](https://www.rfc-editor.org/rfc/rfc5322#section-3.6.2), the From address that RFC 7505 section 4.2 calls RFC5322.From.
+- [RFC 2606](https://www.rfc-editor.org/rfc/rfc2606), Reserved Top Level DNS Names: [section 2](https://www.rfc-editor.org/rfc/rfc2606#section-2) the `.example` name used by the sample.
