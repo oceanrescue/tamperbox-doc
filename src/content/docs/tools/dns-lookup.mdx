@@ -1,0 +1,224 @@
+---
+title: DNS Lookup
+description: How the DNS Lookup asks a public resolver or a zone's own nameserver for one record type, how it checks the response, what every status, flag and finding means, and how to confirm a fix with dig.
+updated: 2026-10-20
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and guide for the Tamperbox DNS Lookup, which sends one DNS query for a name and type to Cloudflare, Google or Quad9 over DNS over HTTPS or to the zone's authoritative nameserver over TCP port 53, validates the response, and reports status, flags, TTLs, aliases and the AD flag as the resolver's DNSSEC assertion.
+prerequisites:
+  - A DNS name, or a dig answer or zone file lines to paste
+outputs:
+  - A verdict for the answer with status, DNSSEC and TTL chips, findings, the answer and authority sections, the response flags in words, and the answer as dig-style text
+limitations:
+  - One answer from one resolver at one moment; the AD flag is the resolver's assertion and is not re-verified; the authoritative path does not validate DNSSEC
+---
+
+The tool page is [tamperbox.dev/dns-lookup](https://tamperbox.dev/dns-lookup). It opens on a live lookup of `tamperbox.dev`: a real resolver, real timing and a real DNSSEC flag. This page is the long version: what is sent, how the response is checked, what each status, flag and finding means, and how to confirm a change from your own terminal.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> a name is sent to the Tamperbox server, which sends one DNS query to the resolver you pick over DNS over HTTPS, or to the zone's own nameserver over TCP port 53, and returns the decoded response. Pasted records are parsed in your browser and never uploaded. Names under the reserved <code>.example</code> zone are answered in the browser from sample data. Nothing is stored.</div>
+
+## What the tool answers
+
+A DNS lookup asks one question: the records of one type at one name, in one class (IN). The tool answers, in this order:
+
+1. **Does the name exist?** The response code says NOERROR, NXDOMAIN (no such name), SERVFAIL (the resolver could not answer) or another failure.
+2. **Does it hold records of this type?** NOERROR with an empty answer is NODATA: the name exists, but not with this type.
+3. **Through which aliases?** Every CNAME step the resolver followed comes back in the answer section, in order.
+4. **For how long will the answer be cached?** The TTL of each record, which on a recursive resolver is the time left in its cache.
+5. **Was it validated?** The AD flag says the resolver authenticated the answer with DNSSEC.
+
+It does not tell you what every resolver in the world returns (that is the [DNS Propagation Checker](https://tamperbox.dev/dns-propagation)), whether the DNSSEC chain is sound link by link (that is the [DNSSEC Checker](https://tamperbox.dev/dnssec-checker)), or whether a server at the address answers.
+
+## Inputs
+
+### A name
+
+`example.com`, `www.example.com`, `_dmarc.example.com`. The record type is picked with the chips in the rail (A, AAAA, CNAME, MX, TXT, NS, SOA, SRV, CAA, PTR, DS, DNSKEY, TLSA) and the server with the Ask menu: Cloudflare (1.1.1.1), Google (8.8.8.8), Quad9 (9.9.9.9), or the authoritative nameserver. The lookup runs when you stop typing, about 600 ms after the last key, or at once on Enter. Changing the type or the server reruns it.
+
+Before anything is sent, the name is checked in the browser and again on the server. On the server it must be at most 253 characters, with labels of up to 63 letters, digits, hyphens or underscores and no hyphen at either end of a label. Underscores are allowed so that `_dmarc` and `_443._tcp` names can be asked. An internationalised name is converted to its ASCII form by the URL parser before it is sent.
+
+### A pasted address or email address
+
+A pasted `https://www.example.com/pricing` becomes `www.example.com` in the box, and a pasted `someone@example.com` becomes `example.com`, through the same paste cleanup every Tamperbox tool uses. The hint under the box names what was kept. Text that does not reduce to a name stays exactly as pasted, so the error explains it. Typing is never rewritten.
+
+### A pasted answer
+
+Text that starts with `;;`, or holds a line such as `www.example.com. 300 IN A 192.0.2.10`, is read in the browser instead of being looked up. Comments after `;` are dropped, the TTL and the class may come in either order, and only known record types are kept. The parser also reads `status:`, the `flags:` list, the question line and `Query time`, so a pasted answer is judged by the same status rules. DNSSEC findings are not produced for pasted text: the page cannot know what the original resolver verified.
+
+### Files
+
+Drop a `.txt` file anywhere on the page, or use the drop zone. It is read in the browser.
+
+## Reading the result
+
+### Verdict and chips
+
+The verdict names the outcome: "2 A records for example.com", "No MX record at example.com", "NXDOMAIN: example.com does not exist", "SERVFAIL: the resolver could not answer", or "Dangling alias". The line under it says who answered and how fast. The chips are the response code, whether the answer was DNSSEC-validated, and the lowest TTL of the records asked for; each scrolls to the section it describes.
+
+### Where your input goes
+
+Two items beside the verdict: pasted records stay in the browser; a name means one DNS query from our server. They are true for every input on this page.
+
+### Findings
+
+Every rule that applied, worst first. Two or more passes fold into one "checks passed" line.
+
+### Take it further
+
+Links that carry a value from this answer into another tool: the first address to the ASN Lookup and to Reverse DNS, a name with A records to the propagation check, an unvalidated or failing zone to the DNSSEC Checker, and a TXT answer that holds an SPF record to the SPF Checker. Each one opens the other tool with the value already in its box; nothing is put in the URL.
+
+### History and Heal it
+
+Break it and Heal it replace the input; History records each change with what it replaced, Revert undoes the newest, and Reset input returns to what you entered. Heal it offers to ask the authoritative server after a SERVFAIL, and to raise a pasted TTL under 60 seconds to one hour.
+
+### Answer, Response, Authority, DNS response
+
+The answer table lists every record with its owner, TTL, type and data, aliases first. Response spells out the status and each flag that is set in words. Authority appears when the answer is empty: it usually holds the zone's SOA, which also sets how long the empty answer is cached. DNS response is the whole answer as dig-style text, with a copy button for a ticket.
+
+## Method
+
+### 1. The query
+
+The server builds one DNS message ([RFC 1035 section 4.1](https://www.rfc-editor.org/rfc/rfc1035#section-4.1)): a random 16-bit ID, the question (name, type, class IN), and an EDNS OPT record with a UDP payload size of 1232 bytes and the DO bit set, so that a resolver includes DNSSEC data and reports validation. For a public resolver the RD (recursion desired) bit is set and the message is sent as wire-format DNS over HTTPS: a POST to the resolver's DoH endpoint with `content-type: application/dns-message` ([RFC 8484 section 4.1](https://www.rfc-editor.org/rfc/rfc8484#section-4.1)). Redirects are not followed.
+
+### 2. The response must answer this question
+
+A response is accepted only when all of these hold; otherwise the lookup fails with a message instead of a result:
+
+- the reply is served with the `application/dns-message` content type, or the resolver "did not return a DNS response";
+- it is at most 65,535 bytes and decodes completely, with no bytes left over;
+- it is a response, carries the same ID, has exactly one question, and that question matches the name, type and class IN asked;
+- the TC (truncated) flag is clear. A truncated message is refused with "The DNS response was truncated", because a partial answer would look complete.
+
+The ID and question checks follow the matching rule in [RFC 1035 section 7.3](https://www.rfc-editor.org/rfc/rfc1035#section-7.3): a resolver should check that a response matches a query it sent before using it.
+
+### 3. Asking the authoritative nameserver
+
+Choosing "Authoritative · TCP 53" skips caches:
+
+1. The zone is found from the SOA record that Cloudflare returns with checking disabled (CD set), taking the longest zone name that contains the name asked.
+2. The zone's NS records are read the same way; up to four nameservers are taken, and up to four public IPv4 or IPv6 addresses for each.
+3. The query is sent over TCP port 53 ([RFC 1035 section 4.2.2](https://www.rfc-editor.org/rfc/rfc1035#section-4.2.2)), without recursion, to each address in turn, with a short deadline per attempt.
+4. Only a reply with the AA (authoritative answer) flag is accepted. A server that answers without it is skipped, which filters out lame delegations.
+
+If nothing qualifies the result is "No discovered authoritative nameserver answered over TCP port 53." The common causes are nameservers that do not answer over TCP, a firewall dropping TCP 53, or NS records that point at servers no longer serving the zone. An authoritative server does not validate DNSSEC, which is why this is the way to see what a zone publishes when validating resolvers return SERVFAIL.
+
+### 4. Limits on the server
+
+One lookup may spend at most 100 DNS queries (the authoritative path uses several), the whole request has an 18-second deadline, and the same question is asked once per request. Addresses that are not public are never contacted.
+
+### 5. The verdict, by response code
+
+The response codes are those of [RFC 1035 section 4.1.1](https://www.rfc-editor.org/rfc/rfc1035#section-4.1.1) and the registry that extends them.
+
+| Status | Records of the type | Verdict | Severity |
+| --- | --- | --- | --- |
+| NOERROR | one or more | "N TYPE records for name", with the aliases passed through | pass |
+| NOERROR | none | "No TYPE record at name" (NODATA) | info |
+| NXDOMAIN | after a CNAME | "Dangling alias: name points to target, which does not exist" | fail |
+| NXDOMAIN | none | "NXDOMAIN: name does not exist" | fail |
+| SERVFAIL | none | "SERVFAIL: the resolver could not answer" | fail |
+| any other | none | the code and its meaning, for example REFUSED | fail |
+
+NXDOMAIN applies to the name, not to one type: [RFC 2308 section 2.1](https://www.rfc-editor.org/rfc/rfc2308#section-2.1) says that in this case "the domain referred to by the QNAME does not exist", and [RFC 8020](https://www.rfc-editor.org/rfc/rfc8020#section-2) adds that nothing exists below such a name either. NODATA ([RFC 2308 section 2.2](https://www.rfc-editor.org/rfc/rfc2308#section-2.2)) is the name existing without the type.
+
+### 6. Findings on the answer
+
+- **More than two aliases before the answer** (check). Each CNAME step is one more lookup for a resolver that has not cached it.
+- **TTL under 60 seconds** (info). The lowest TTL of the records asked for. Almost every visitor reaches the authoritative servers; reasonable during a migration.
+- **Not validated with DNSSEC** (info). A live NOERROR answer from a public resolver without the AD flag. [RFC 4035 section 3.2.3](https://www.rfc-editor.org/rfc/rfc4035#section-3.2.3) says a security-aware resolver "MUST NOT set the AD bit in a response unless the name server considers all RRsets in the Answer and Authority sections of the response to be authentic." No AD means the zone is unsigned or this resolver did not validate it; the page cannot tell which.
+
+### 7. TTLs and negative caching
+
+A recursive resolver returns the time left in its cache, not the TTL the zone publishes ([RFC 1034 section 3.6](https://www.rfc-editor.org/rfc/rfc1034#section-3.6), [RFC 2181 section 8](https://www.rfc-editor.org/rfc/rfc2181#section-8)); asking the authoritative server shows the published value. An empty answer is cached too: [RFC 2308 section 5](https://www.rfc-editor.org/rfc/rfc2308#section-5) takes its lifetime from the SOA in the authority section, the lower of that record's TTL and its MINIMUM field.
+
+## Standards and conformance
+
+| Specification | Sections used | How the tool applies it | Where it stops |
+| --- | --- | --- | --- |
+| [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035) | [4.1](https://www.rfc-editor.org/rfc/rfc1035#section-4.1) message format, [4.1.1](https://www.rfc-editor.org/rfc/rfc1035#section-4.1.1) header and RCODE, [4.2.2](https://www.rfc-editor.org/rfc/rfc1035#section-4.2.2) TCP, [7.3](https://www.rfc-editor.org/rfc/rfc1035#section-7.3) response matching | Messages are built and decoded on the server; ID and question are matched; TCP framing uses the two-byte length prefix | Updated by many later RFCs, including RFC 2181, RFC 2308 and RFC 4035; the tool follows those where they apply |
+| [RFC 8484](https://www.rfc-editor.org/rfc/rfc8484) | [4.1](https://www.rfc-editor.org/rfc/rfc8484#section-4.1) POST requests | Wire-format POST with the DNS message media type to each resolver's DoH endpoint | Uses POST only; the GET form, which suits HTTP caches, is not used |
+| [RFC 6891](https://www.rfc-editor.org/rfc/rfc6891) | [6.1.2](https://www.rfc-editor.org/rfc/rfc6891#section-6.1.2) OPT record | One OPT record with a 1232-byte payload size and the DO bit | EDNS options and extended RCODEs are not shown |
+| [RFC 4035](https://www.rfc-editor.org/rfc/rfc4035) | [3.2.3](https://www.rfc-editor.org/rfc/rfc4035#section-3.2.3) the AD bit | The AD flag is reported as the resolver's validation result | Signatures are not checked locally; the DNSSEC Checker reads the chain |
+| [RFC 2308](https://www.rfc-editor.org/rfc/rfc2308) | [2.1](https://www.rfc-editor.org/rfc/rfc2308#section-2.1), [2.2](https://www.rfc-editor.org/rfc/rfc2308#section-2.2), [5](https://www.rfc-editor.org/rfc/rfc2308#section-5) | NXDOMAIN and NODATA are told apart; the authority SOA is shown | The negative TTL is explained, not computed per resolver |
+| [RFC 1034](https://www.rfc-editor.org/rfc/rfc1034) | [3.6](https://www.rfc-editor.org/rfc/rfc1034#section-3.6), [3.6.2](https://www.rfc-editor.org/rfc/rfc1034#section-3.6.2) aliases | CNAME steps are listed before the answer; a chain ending in NXDOMAIN is a dangling alias | Chains are followed by the resolver, not by the tool |
+
+## Finding reference
+
+| Finding | Severity | Source | What it means for whoever relies on the name | Fix |
+| --- | --- | --- | --- | --- |
+| N TYPE records answered | pass | [RFC 1035 4.1.1](https://www.rfc-editor.org/rfc/rfc1035#section-4.1.1) | The name resolves to these records until their TTL runs out | None |
+| No TYPE record at name | info | [RFC 2308 2.2](https://www.rfc-editor.org/rfc/rfc2308#section-2.2) | The name exists but has nothing of this type; anything expecting it gets nothing | Add the record if something needs it |
+| The name does not exist | fail | [RFC 2308 2.1](https://www.rfc-editor.org/rfc/rfc2308#section-2.1) | Every lookup of the name fails at once, and the failure is cached | Fix the spelling, or add the record in the zone that holds the parent |
+| Dangling alias | fail | [RFC 1034 3.6.2](https://www.rfc-editor.org/rfc/rfc1034#section-3.6.2) | The alias points at a name that is gone; whoever claims it can serve content on yours | Remove the CNAME or recreate the target |
+| The resolver could not answer | fail | [RFC 1035 4.1.1](https://www.rfc-editor.org/rfc/rfc1035#section-4.1.1) | Visitors behind validating resolvers cannot reach the name | Ask the authoritative server; check the DNSSEC chain |
+| Another code from the server | fail | [RFC 1035 4.1.1](https://www.rfc-editor.org/rfc/rfc1035#section-4.1.1) | The server refused or could not process the question | Depends on the code; REFUSED often means the server is not authoritative for the zone |
+| N aliases before the answer | check | [RFC 1034 3.6.2](https://www.rfc-editor.org/rfc/rfc1034#section-3.6.2) | Slower first lookups and more places for the chain to break | Point the first name closer to the end |
+| TTL of under a minute | info | [RFC 2181 8](https://www.rfc-editor.org/rfc/rfc2181#section-8) | Nearly every visitor queries the authoritative servers | Raise the TTL after the change settles |
+| Not validated with DNSSEC | info | [RFC 4035 3.2.3](https://www.rfc-editor.org/rfc/rfc4035#section-3.2.3) | The answer was not authenticated; a validating client cannot tell it from a forged one | Sign the zone and publish the DS record at the registrar |
+
+## Guide
+
+### A record you just changed still shows the old value
+
+1. Ask the authoritative server on this page. If it shows the new value, the change is published and resolvers are holding the old answer until its TTL runs out.
+2. Read the TTL on a public resolver: that is the most it can keep the old answer.
+3. Run the [DNS Propagation Checker](https://tamperbox.dev/dns-propagation) to see which public resolvers still differ.
+4. Next time, lower the TTL to a few minutes a day before the change.
+
+Confirm from a terminal: `dig +norecurse @<one of the zone's nameservers> www.example.com A` shows the published answer, and `dig @1.1.1.1 www.example.com A` shows Cloudflare's cache.
+
+### NXDOMAIN for a name you expect
+
+Check the spelling and the zone: a record added to `example.com` as `www.example.com.example.com` (a missing final dot in a zone file) is a classic cause. If the name was created minutes ago, the negative answer may still be cached for up to the zone's negative TTL, the last field of its SOA. `dig example.com SOA` shows it.
+
+### SERVFAIL
+
+Use Heal it: "Ask the authoritative server". If the zone's own server answers, the zone is up and validating resolvers reject it, which almost always means a broken DNSSEC chain: a DS record at the registrar that matches no key the zone publishes, or expired signatures. Confirm with `dig +cd @1.1.1.1 example.com A`: with checking disabled the resolver returns the answer it otherwise rejects. Then open the zone in the [DNSSEC Checker](https://tamperbox.dev/dnssec-checker).
+
+### A dangling alias
+
+Remove the CNAME, or recreate the target at the service it pointed to. Then look for others: every alias to a service you no longer use is a candidate. The [CNAME Lookup](https://tamperbox.dev/cname-lookup) draws the chain step by step.
+
+### Break it cases
+
+| Case | What it loads | What it shows |
+| --- | --- | --- |
+| Name does not exist | `nohost.` in front of your name | NXDOMAIN and the negative-caching note |
+| Broken DNSSEC | a sample zone whose DS matches no key | SERVFAIL, and Heal it asking the authoritative server |
+| Dangling alias | a sample alias to a deleted host | NXDOMAIN after a CNAME |
+| Very short TTL | your own answer, pasted back with a TTL of 30 seconds | The short-TTL finding, and Heal it raising it to an hour |
+
+## Worked example
+
+The page opens on `tamperbox.dev`, type A, asked of Cloudflare. It is a live lookup, so the addresses, TTLs and timing are whatever Cloudflare returns at that moment; the shape of the result is what this example is for.
+
+The verdict names the A records and says Cloudflare answered, with its time. The chips show NOERROR, the DNSSEC state and the lowest TTL. Because `tamperbox.dev` is not signed with DNSSEC today, Findings carries "Not validated with DNSSEC" as information, with the records answered folded under it: a working name, and an honest note on what the resolver did not vouch for. Take it further offers the first address to the ASN Lookup and Reverse DNS, the name to the propagation check, and the zone to the DNSSEC Checker. Switch the type to AAAA and the same name returns its IPv6 addresses; switch the server to Authoritative and the TTLs become the published ones.
+
+## For agents
+
+The Tamperbox MCP server exposes the same lookup as the `dns-lookup` operation, with `name`, `type` and `resolver` (the three public resolvers, nine more, or `authoritative`). It returns the question, status, flags, answer and authority. Keep these warnings with any conclusion:
+
+- The AD flag is the resolver's assertion, not a local validation.
+- One answer from one resolver at one moment; other caches may differ until the TTL expires.
+- An empty answer (NODATA) is not the same as NXDOMAIN or a resolver failure.
+
+See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for the calling pattern.
+
+## Limits
+
+- One resolver's view at one moment; a public resolver answers from its cache.
+- The AD flag is reported, not re-verified. The authoritative path does not validate DNSSEC at all.
+- A record that resolves is publication evidence: it does not prove a server answers at the address.
+- Pasted answers are read as text; the page cannot know whether DNS serves them today.
+- Sample names under `.example` are answered in the browser from fixed data, labelled as the sample zone.
+
+## References
+
+- [RFC 1034](https://www.rfc-editor.org/rfc/rfc1034): Domain names, concepts and facilities. Sections 3.6, 3.6.2. Updated by many, including RFC 2181, RFC 2308, RFC 4035 and RFC 8020.
+- [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035): Domain names, implementation and specification. Sections 4.1, 4.1.1, 4.2.2, 7.3.
+- [RFC 2181](https://www.rfc-editor.org/rfc/rfc2181): Clarifications to the DNS specification. Section 8, TTLs.
+- [RFC 2308](https://www.rfc-editor.org/rfc/rfc2308): Negative caching of DNS queries. Sections 2.1, 2.2, 5.
+- [RFC 4035](https://www.rfc-editor.org/rfc/rfc4035): DNSSEC protocol modifications. Section 3.2.3, the AD bit.
+- [RFC 6891](https://www.rfc-editor.org/rfc/rfc6891): Extension mechanisms for DNS (EDNS(0)). Section 6.1.2.
+- [RFC 8020](https://www.rfc-editor.org/rfc/rfc8020): NXDOMAIN, there really is nothing underneath. Section 2.
+- [RFC 8484](https://www.rfc-editor.org/rfc/rfc8484): DNS queries over HTTPS (DoH). Section 4.1.

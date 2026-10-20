@@ -1,0 +1,186 @@
+---
+title: CNAME Lookup
+description: How the CNAME Lookup follows an alias chain to the name that holds the address, what a dangling alias, an apex CNAME, a loop and a long chain mean, every rule it applies, and how to fix and confirm each one.
+updated: 2026-10-20
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and guide for the Tamperbox CNAME Lookup, which asks Cloudflare for a name's A records over DNS over HTTPS so the resolver returns every CNAME step, or reads pasted CNAME records in the browser, then reports a target that does not exist (dangling alias), a CNAME at the registrable domain, a loop and chains of more than two aliases.
+prerequisites:
+  - A DNS name, or CNAME records to paste
+outputs:
+  - A verdict for the chain, findings, the chain drawn from the name to its end with each step's TTL, the addresses the end holds, and the answer as dig-style text
+limitations:
+  - The chain is followed by asking for A records, so the end's AAAA records are not checked; a dangling alias is reported but whether someone can claim the target is not tested
+---
+
+The tool page is [tamperbox.dev/cname-lookup](https://tamperbox.dev/cname-lookup). It opens on `status.harbor-supply.example`, a sample name on the reserved `.example` zone whose status page sits behind three aliases. This page is the long version: how the chain is followed, every rule applied to it, and how to fix a dangling or misplaced alias.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> a name is sent to the Tamperbox server, which asks Cloudflare for its A records over DNS over HTTPS; the resolver follows every CNAME and returns each step. Pasted records are read in your browser and never uploaded. The public suffix list used for the apex check is loaded into the page. Sample names under <code>.example</code> are answered in the browser. Nothing is stored.</div>
+
+## What the tool answers
+
+A CNAME record makes one name an alias for another, its canonical name ([RFC 1034 section 3.6.2](https://www.rfc-editor.org/rfc/rfc1034#section-3.6.2)). A resolver that meets one restarts the question at the target, and keeps going until it reaches a name with real records. The tool answers:
+
+1. **Is this name an alias, and of what?** Each step from the name to the end of the chain.
+2. **Does the end exist?** An alias to a name that is gone is dangling, the setup behind subdomain takeovers.
+3. **Is the alias in a place DNS forbids?** A CNAME cannot share its name with other records, so it cannot sit at a zone's apex.
+4. **Does the chain loop or run long?** Loops never resolve; long chains are slow and fragile.
+5. **What does the end hold?** The IPv4 addresses the resolver returned with the chain.
+
+An alias is not an HTTP redirect: the browser keeps showing your name, and the server at the end must accept requests for it. The [Redirect Checker](https://tamperbox.dev/redirect-checker) traces HTTP redirects.
+
+## Inputs
+
+### A name
+
+`www.example.com`, `status.example.com`. The lookup runs when you stop typing, or on Enter. The name is validated in the browser and on the server. A pasted address or email address is reduced to its host, and the hint names what was kept; text that does not reduce stays as pasted.
+
+### Pasted records
+
+Anything with a space or a quote is read as records, in the browser: dig answers, zone file lines, or a bare target per line. The chain is drawn from the records in the order they link. Whether the end exists cannot be known for pasted records, so a dangling alias is never reported for them.
+
+### Files
+
+Drop a `.txt` file anywhere on the page.
+
+## Reading the result
+
+### Verdict and chips
+
+"Alias: www.example.com points to example.net." for one step, "3 aliases to edge.example.net." for a chain, "Dangling alias: target does not exist." or "No CNAME record at name." when the name holds its own records. The chip counts the steps or says Dangling.
+
+### Where your input goes
+
+Pasted records stay in the browser; a name means one DNS query from our server.
+
+### Findings
+
+Failures and checks, worst first, or one pass naming the chain.
+
+### Take it further
+
+The end of the chain to the DNS Lookup (every record it holds), its first address to the ASN Lookup, and, for a live name, the end to the hosting check, or for a dangling alias the target's registrable domain to the availability check.
+
+### History and Heal it
+
+History logs every Break it change; Revert and Reset input bring the input back.
+
+### CNAME records
+
+The chain as a path: the name, each target with the TTL of the step that leads to it, and the end, marked when it does not exist. Under it, what the end holds.
+
+### DNS response
+
+The answer as dig-style text, with a copy button.
+
+## Method
+
+### 1. Following the chain
+
+The server asks Cloudflare for the name's A records, not its CNAME. A recursive resolver that meets a CNAME "simply restarts the query at the new name" ([RFC 1034 section 5.2.2](https://www.rfc-editor.org/rfc/rfc1034#section-5.2.2)) and returns every CNAME it passed through in the answer section, followed by the A records of the end. Asking for A therefore yields the whole chain in one query. The CNAME records in the answer are the steps; any other records are what the end holds. A name that is not an alias returns its own A records and no CNAME: "No CNAME record at name", info.
+
+### 2. Rule: the end must exist
+
+When the answer carries CNAME steps but the status is NXDOMAIN, the last target does not exist: fail, "target does not exist", and the verdict "Dangling alias". [RFC 1034 section 5.2.2](https://www.rfc-editor.org/rfc/rfc1034#section-5.2.2) says resolvers should catch "aliases which point to non-existent names". The harm is what happens next: if the target was a name at a hosting provider (a bucket, a blog, a status page, an app), whoever registers that name at the provider can serve content on your name, and pages there can read cookies scoped to your parent domain.
+
+### 3. Rule: no CNAME at the apex
+
+[RFC 1034 section 3.6.2](https://www.rfc-editor.org/rfc/rfc1034#section-3.6.2): "If a CNAME RR is present at a node, no other data should be present." [RFC 2181 section 10.1](https://www.rfc-editor.org/rfc/rfc2181#section-10.1) restates it: a name has one CNAME and nothing else, or other records and no CNAME. The top of every zone must hold its SOA and NS records ([RFC 1034 section 4.2.1](https://www.rfc-editor.org/rfc/rfc1034#section-4.2.1)), so a CNAME there contradicts the zone itself. When the first owner in the chain equals its registrable domain under the public suffix list, the finding is fail, "CNAME at the zone apex". Wildcard owners, including a bare `*`, are never treated as the apex.
+
+### 4. Rule: no loops
+
+When a target leads back to a name already in the chain: fail, "CNAME loop". [RFC 1034 section 3.6.2](https://www.rfc-editor.org/rfc/rfc1034#section-3.6.2): "CNAME chains should be followed and CNAME loops signalled as an error."
+
+### 5. Check: more than two aliases
+
+Three or more steps: check, "N aliases in a row". [RFC 1034 section 5.2.2](https://www.rfc-editor.org/rfc/rfc1034#section-5.2.2) asks that multiple levels of aliases "be avoided due to their lack of efficiency, but should not be signalled as an error", so it is a check, not a failure. Each step is another lookup for a resolver that has not cached it.
+
+### 6. When the suffix data cannot load
+
+The apex rule needs the public suffix list, which is loaded on demand. If it fails, the chain is still drawn and a check, "Apex check unavailable", says the owner was not compared with a registrable domain.
+
+### 7. Verdict
+
+A dangling end sets the verdict; otherwise the first failure; otherwise "Alias:" for one step or "N aliases" for more, as pass, or as check when only the chain-length finding applies.
+
+## Standards and conformance
+
+| Specification | Sections used | How the tool applies it | Where it stops |
+| --- | --- | --- | --- |
+| [RFC 1034](https://www.rfc-editor.org/rfc/rfc1034) | [3.6.2](https://www.rfc-editor.org/rfc/rfc1034#section-3.6.2), [4.2.1](https://www.rfc-editor.org/rfc/rfc1034#section-4.2.1), [5.2.2](https://www.rfc-editor.org/rfc/rfc1034#section-5.2.2) | Loops and dangling ends are failures; long chains are a check; the apex rule follows from 3.6.2 and 4.2.1 | The chain is followed by the resolver; the tool does not ask each step itself |
+| [RFC 2181](https://www.rfc-editor.org/rfc/rfc2181) | [10.1](https://www.rfc-editor.org/rfc/rfc2181#section-10.1) | One CNAME per name and no other data beside it | DNSSEC records beside a CNAME are allowed and not reported |
+| [RFC 2308](https://www.rfc-editor.org/rfc/rfc2308) | [2.1](https://www.rfc-editor.org/rfc/rfc2308#section-2.1) | NXDOMAIN after CNAME steps means the last target does not exist | |
+| [Public Suffix List](https://publicsuffix.org/list/) | | The apex is approximated by the registrable domain | A zone delegated below the registrable domain (`shop.example.com` as its own zone) has an apex the tool does not detect |
+
+## Finding reference
+
+| Finding | Severity | Source | What it means | Fix |
+| --- | --- | --- | --- | --- |
+| One alias / N aliases | pass | [RFC 1034 3.6.2](https://www.rfc-editor.org/rfc/rfc1034#section-3.6.2) | The name resolves through the chain | None |
+| target does not exist | fail | [RFC 1034 5.2.2](https://www.rfc-editor.org/rfc/rfc1034#section-5.2.2) | Visitors get an error; whoever claims the target can serve content on your name | Remove the CNAME, or recreate the target |
+| CNAME at the zone apex | fail | [RFC 1034 3.6.2](https://www.rfc-editor.org/rfc/rfc1034#section-3.6.2), [RFC 2181 10.1](https://www.rfc-editor.org/rfc/rfc2181#section-10.1) | Mail and other records at the apex break; resolvers answer inconsistently | Use an ALIAS, ANAME or flattened record, or A and AAAA |
+| CNAME loop | fail | [RFC 1034 3.6.2](https://www.rfc-editor.org/rfc/rfc1034#section-3.6.2) | The name never resolves | Point the last alias outside the loop |
+| N aliases in a row | check | [RFC 1034 5.2.2](https://www.rfc-editor.org/rfc/rfc1034#section-5.2.2) | Slower first lookups; more parties that can break it | Point the first name at the end |
+| Apex check unavailable | check | | The apex rule was skipped | Reload to retry |
+| No CNAME record at name | info | [RFC 2181 10.1](https://www.rfc-editor.org/rfc/rfc2181#section-10.1) | The name holds its own records | None |
+| The name does not exist | fail | [RFC 2308 2.1](https://www.rfc-editor.org/rfc/rfc2308#section-2.1) | No record of any kind at the name | Check the name |
+| The resolver could not answer | fail | [RFC 1035 4.1.1](https://www.rfc-editor.org/rfc/rfc1035#section-4.1.1) | Validating resolvers return nothing | Check the DNSSEC chain |
+
+## Guide
+
+### Close a dangling alias
+
+1. Decide whether you still need the name. If not, delete the CNAME at your DNS provider. That closes the risk at once.
+2. If you need it, recreate the target at the provider it belonged to (the same bucket or app name), or point the alias somewhere you control.
+3. Look the name up here: the chain should end in addresses, or the name should no longer be an alias.
+4. Find the others. List every CNAME in your zone and look each one up; aliases to services you cancelled are the usual suspects.
+
+Confirm from a terminal: `dig +short CNAME old-blog.example.com` shows the target, and `dig old-blog.example.com A` shows `status: NXDOMAIN` while it dangles.
+
+### Point a bare domain at a host
+
+The apex cannot be a CNAME. Most DNS providers offer a record that behaves like one: ALIAS, ANAME, or CNAME flattening. The provider looks up the target itself and answers with addresses, so the apex keeps its SOA, NS and MX records. If yours does not, publish the A and AAAA records the host gives you. Keep `www` as a CNAME.
+
+### Shorten a chain
+
+Find the steps you own: an alias from `www` to `web` to the provider's name can usually point straight at the provider's name. Keep any step the provider asks for, since it may move its own names behind it.
+
+### Break it cases
+
+| Case | What it loads | What it shows |
+| --- | --- | --- |
+| Dangling alias | a sample alias to a deleted blog host | The dangling-alias failure and its cards |
+| CNAME at the apex | your registrable domain as a pasted CNAME | "CNAME at the zone apex" |
+| Not an alias | your registrable domain | "No CNAME record", the normal state of most names |
+| Name does not exist | `nohost.` in front of your name | NXDOMAIN |
+
+## Worked example
+
+`status.harbor-supply.example` is an alias for `harbor-supply.status.example`, which is an alias for `eu.edge.status.example`, which is an alias for `eu-lb-3.edge.status.example`, which holds the address `192.0.2.61`. The verdict reads "3 aliases to eu-lb-3.edge.status.example." with "The sample zone followed the chain." under it. Findings carries one check, "3 aliases in a row": the chain works, but a resolver with an empty cache makes four lookups before it has an address. The cards suggest pointing the name at the status provider's name directly. Take it further hands the end of the chain to the DNS Lookup and its address to the ASN Lookup; both answer the sample in the browser.
+
+Press Dangling alias and the page looks up `old-blog.harbor-supply.example`, an alias for a blog host that no longer exists: the verdict turns to "Dangling alias", and the cards explain the takeover risk and how to close it.
+
+## For agents
+
+The Tamperbox MCP server exposes `cname-lookup` with a `name`. Unlike this page, the operation asks for the CNAME record at the name itself; it does not traverse the full alias chain and does not judge whether a dangling target can be claimed. To follow a chain, call `dns-lookup` with type A: the answer section lists every step. Keep these warnings with any conclusion:
+
+- A dangling alias is a finding, not proof of takeover: exploitability depends on the provider.
+- The end's AAAA records are not part of an A query.
+- One answer from one resolver at one moment.
+
+See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/).
+
+## Limits
+
+- The chain is followed by one A query; AAAA at the end is not checked.
+- The apex is approximated by the registrable domain from the public suffix list.
+- Pasted records cannot show a dangling end.
+- One answer from one resolver at one moment.
+- Sample names under `.example` are answered in the browser.
+
+## References
+
+- [RFC 1034](https://www.rfc-editor.org/rfc/rfc1034): sections 3.6.2 (aliases and canonical names), 4.2.1 (zone top), 5.2.2 (resolver handling of aliases).
+- [RFC 2181](https://www.rfc-editor.org/rfc/rfc2181): section 10.1, CNAME records. Updates RFC 1034 and RFC 1035.
+- [RFC 2308](https://www.rfc-editor.org/rfc/rfc2308): section 2.1, NXDOMAIN.
+- [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035): section 4.1.1, response codes.
+- [Public Suffix List](https://publicsuffix.org/list/): registrable domains.

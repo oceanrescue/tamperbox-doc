@@ -1,0 +1,198 @@
+---
+title: AAAA Lookup
+description: How the AAAA Lookup reads a name's IPv6 addresses, sorts each one by kind, names the network behind every public address, says whether IPv4 visitors are served too, and how to fix and confirm IPv6 publication.
+updated: 2026-10-20
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and guide for the Tamperbox AAAA Lookup, which asks Cloudflare for a name's AAAA and A records over DNS over HTTPS, classifies each IPv6 address (global, documentation, unique local, link-local, loopback, unspecified, multicast, IPv4-mapped, NAT64, 6to4, Teredo, special-purpose), looks up the network of each global address from the Team Cymru IP-to-ASN service, and reports non-public addresses, IPv6-only and IPv4-only names.
+prerequisites:
+  - A DNS name, or AAAA records to paste
+outputs:
+  - A verdict counting IPv6 and IPv4 addresses, findings, one row per address with its kind and network, and the answer as dig-style text
+limitations:
+  - A published address is not proof that anything answers on it; network names come from routing registry data and can lag; pasted records get no network lookup
+---
+
+The tool page is [tamperbox.dev/aaaa-lookup](https://tamperbox.dev/aaaa-lookup). It opens on a live lookup of `tamperbox.dev`: real global IPv6 addresses, the network that announces them, and the IPv4 addresses beside them. This page is the long version: how addresses are read and sorted, how networks are named, the findings, and how to publish IPv6 correctly.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> a name is sent to the Tamperbox server, which asks Cloudflare for its AAAA and A records over DNS over HTTPS, then looks up the network of each global IPv6 address. Pasted records are read in your browser with no network lookup. Sample names under <code>.example</code> are answered in the browser. Nothing is stored.</div>
+
+## What the tool answers
+
+An AAAA record holds one IPv6 address for a name ([RFC 3596 section 2.1](https://www.rfc-editor.org/rfc/rfc3596#section-2.1)), the IPv6 counterpart of an A record. The tool answers:
+
+1. **Does the name publish IPv6 addresses?** Every AAAA record, after any alias the resolver followed.
+2. **Is each address one the internet can reach?** Documentation, private, link-local and other special addresses are never routed.
+3. **Who runs each address?** The network (autonomous system) that announces it.
+4. **Are IPv4 visitors served too?** Whether the name also has A records.
+
+It does not connect to the addresses. A name can publish an IPv6 address on which no server listens; a connection test to the address shows that.
+
+## Inputs
+
+### A name
+
+`example.com`, `www.example.com`. The lookup runs when you stop typing, or on Enter. A pasted address or email address is reduced to its host or domain, and the hint names what was kept.
+
+### Pasted records
+
+Anything with a space or a quote is read as records, in the browser: dig answers, zone file lines, or one address per line. Each address is sorted by kind; no network is looked up and the A records are not asked for, so the IPv4 question stays open.
+
+### Files
+
+Drop a `.txt` file anywhere on the page.
+
+## Reading the result
+
+### Verdict and chips
+
+"2 IPv6 addresses for example.com, plus 2 IPv4 addresses." The line under it says who answered, or notes the documentation range for sample data. The chips say IPv6 (pass or fail) and IPv4 too, or No IPv4.
+
+### Where your input goes
+
+Pasted records stay in the browser; a name means DNS and network lookups from our server: one AAAA query, one A query, and one network lookup per global address.
+
+### Findings
+
+Failures first, then notes, then the passes folded.
+
+### Take it further
+
+The first global IPv6 address to the ASN Lookup and to Reverse DNS, and `[address]:443` to the TCP Ping, which tests whether anything answers on it.
+
+### History and Heal it
+
+History logs every Break it change; Revert and Reset input bring the input back.
+
+### AAAA records
+
+One row per address: the address, its kind, and for global addresses the network name and AS number.
+
+### DNS response
+
+The answer as dig-style text, with a copy button.
+
+## Method
+
+### 1. The lookups
+
+The server asks Cloudflare for the AAAA records at the name; the resolver follows any CNAME and returns the addresses of the end ([RFC 3596 section 2.3](https://www.rfc-editor.org/rfc/rfc3596#section-2.3)). For a looked-up name it then asks for the A records, only to say whether IPv4 visitors are served too.
+
+### 2. Sorting each address
+
+Each address is parsed (any compressed or mixed notation is accepted) and sorted by the first rule that matches:
+
+| Kind | Range | Source |
+| --- | --- | --- |
+| Unspecified: never routed | `::` | [RFC 4291 section 2.5.2](https://www.rfc-editor.org/rfc/rfc4291#section-2.5.2) |
+| Loopback: never routed | `::1` | [RFC 4291 section 2.5.3](https://www.rfc-editor.org/rfc/rfc4291#section-2.5.3) |
+| IPv4-mapped | `::ffff:0:0/96` | [RFC 4291 section 2.5.5.2](https://www.rfc-editor.org/rfc/rfc4291#section-2.5.5.2) |
+| Documentation range | `2001:db8::/32`, `3fff::/20` | [RFC 3849 section 4](https://www.rfc-editor.org/rfc/rfc3849#section-4), [RFC 9637 section 6](https://www.rfc-editor.org/rfc/rfc9637#section-6) |
+| Multicast: not a unicast host | `ff00::/8` | [RFC 4291 section 2.7](https://www.rfc-editor.org/rfc/rfc4291#section-2.7) |
+| Unique local: private | `fc00::/7` | [RFC 4193 section 3.1](https://www.rfc-editor.org/rfc/rfc4193#section-3.1) |
+| Link-local: never routed | `fe80::/10` | [RFC 4291 section 2.5.6](https://www.rfc-editor.org/rfc/rfc4291#section-2.5.6) |
+| NAT64 translation | `64:ff9b::/96` | [RFC 6052 section 2.1](https://www.rfc-editor.org/rfc/rfc6052#section-2.1) |
+| NAT64 local-use translation | `64:ff9b:1::/48` | [RFC 8215 section 1](https://www.rfc-editor.org/rfc/rfc8215#section-1) |
+| 6to4 transition | `2002::/16` | [RFC 3056 section 2](https://www.rfc-editor.org/rfc/rfc3056#section-2) |
+| Teredo transition | `2001::/32` | [RFC 4380 section 2.6](https://www.rfc-editor.org/rfc/rfc4380#section-2.6) |
+| Global | any other address that is publicly routable | the [IANA IPv6 special-purpose registry](https://www.iana.org/assignments/iana-ipv6-special-registry/) |
+| Special-purpose | any other address in that registry | |
+
+### 3. Naming the network
+
+For each global address, the server asks the Team Cymru IP-to-ASN service over DNS (a TXT query under `origin6.asn.cymru.com` for the reversed address) for the announcing AS numbers, the prefix and the registry country, then asks for each AS's name; it also asks for the address's PTR record. The page shows the network name and the AS number. Registry data says who announces the prefix, not where a server is or who rents it; a cloud provider's network is named, not its customer.
+
+### 4. Rules
+
+- **Not public** (fail, "address is not public"): an address sorted as unspecified, loopback, multicast, unique local, link-local or invalid, or a documentation address anywhere but the reserved sample zone. Clients that prefer IPv6 try it first: [RFC 8305 section 5](https://www.rfc-editor.org/rfc/rfc8305#section-5) has a client start "one connection attempt to a single address" and move to the next only after a delay, so an unreachable AAAA record costs every dual-stack visitor that delay.
+- **Translation or transition address** (info): NAT64, 6to4, Teredo, IPv4-mapped or another special-purpose address. Reachability depends on the mechanism; no network is looked up.
+- **IPv6 only** (info): AAAA records and no A record. Visitors on IPv4-only networks cannot reach the name.
+- **No IPv6** (info): no AAAA record, but A records. Visitors on IPv6-only networks reach the name only if their network translates.
+- **Published** (pass): N IPv6 addresses; and **IPv4 too** (pass) when A records exist.
+
+Documentation addresses on names under `.example` are the sample's and pass, labelled as sample data.
+
+## Standards and conformance
+
+| Specification | Sections used | How the tool applies it | Where it stops |
+| --- | --- | --- | --- |
+| [RFC 3596](https://www.rfc-editor.org/rfc/rfc3596) | [2.1](https://www.rfc-editor.org/rfc/rfc3596#section-2.1), [2.3](https://www.rfc-editor.org/rfc/rfc3596#section-2.3) | AAAA records are read from the answer, after aliases | Additional-section processing does not apply to AAAA |
+| [RFC 4291](https://www.rfc-editor.org/rfc/rfc4291) | 2.5.2, 2.5.3, 2.5.5.2, 2.5.6, 2.7 | Address kinds are sorted by these ranges | Updated by [RFC 5952](https://www.rfc-editor.org/rfc/rfc5952) (text form) and others; output keeps the resolver's text |
+| [RFC 4193](https://www.rfc-editor.org/rfc/rfc4193), [RFC 3849](https://www.rfc-editor.org/rfc/rfc3849), [RFC 9637](https://www.rfc-editor.org/rfc/rfc9637), [RFC 6052](https://www.rfc-editor.org/rfc/rfc6052), [RFC 8215](https://www.rfc-editor.org/rfc/rfc8215), [RFC 3056](https://www.rfc-editor.org/rfc/rfc3056), [RFC 4380](https://www.rfc-editor.org/rfc/rfc4380) | as in the table above | Each range is a kind; private and never-routed kinds fail | RFC 3849 is updated by RFC 9637, which adds `3fff::/20` |
+| [RFC 8305](https://www.rfc-editor.org/rfc/rfc8305) | [4](https://www.rfc-editor.org/rfc/rfc8305#section-4), [5](https://www.rfc-editor.org/rfc/rfc8305#section-5) | Explains why a bad AAAA record hurts dual-stack visitors | No connection is attempted; obsoletes [RFC 6555](https://www.rfc-editor.org/rfc/rfc6555) |
+
+## Finding reference
+
+| Finding | Severity | Source | What it means | Fix |
+| --- | --- | --- | --- | --- |
+| N IPv6 addresses published | pass | [RFC 3596 2.1](https://www.rfc-editor.org/rfc/rfc3596#section-2.1) | The name has routable IPv6 addresses | Test a connection to one |
+| IPv4 too | pass | | Visitors on either network find the name | None |
+| address is not public | fail | [RFC 4291 2.5](https://www.rfc-editor.org/rfc/rfc4291#section-2.5), [RFC 4193 3.1](https://www.rfc-editor.org/rfc/rfc4193#section-3.1) | Clients try an address nobody can reach, then fall back late or fail | Publish the global address, or remove the record |
+| address: translation or transition kind | info | [RFC 6052 2.1](https://www.rfc-editor.org/rfc/rfc6052#section-2.1), [RFC 3056 2](https://www.rfc-editor.org/rfc/rfc3056#section-2) | Reachability depends on the mechanism | Prefer a native global address |
+| IPv6 only | info | | IPv4-only visitors cannot reach the name | Add A records unless IPv6-only is intended |
+| No IPv6 | info | | IPv6-only visitors depend on translation | Add AAAA records if the host offers IPv6 |
+| No AAAA record at name | info | [RFC 2308 2.2](https://www.rfc-editor.org/rfc/rfc2308#section-2.2) | No IPv6 and no IPv4 here | Check the name and the records |
+| The name does not exist | fail | [RFC 2308 2.1](https://www.rfc-editor.org/rfc/rfc2308#section-2.1) | No record of any kind | Check the name |
+| The resolver could not answer | fail | [RFC 1035 4.1.1](https://www.rfc-editor.org/rfc/rfc1035#section-4.1.1) | Validating resolvers return nothing | Check the DNSSEC chain |
+
+## Guide
+
+### Add IPv6 to a site
+
+1. Ask your host for the server's IPv6 address. Many CDNs and platforms enable it with a setting.
+2. Make sure the server listens on it, on the same ports as IPv4, with the same certificate.
+3. Publish the AAAA record (or let the CDN publish it), with the same TTL as the A record.
+4. Look the name up here, then test a connection: the TCP Ping link opens `[address]:443`.
+
+Confirm from a terminal: `dig +short AAAA www.example.com` lists the addresses; `curl -6 -sI https://www.example.com` makes a request over IPv6 only.
+
+### A private or documentation address is published
+
+It usually comes from a copied example (`2001:db8::1`) or from a server's internal address entered by mistake. Replace it with the global address, or delete the AAAA record: a name with only A records is fine, while a name with a broken AAAA record is slower for every dual-stack visitor.
+
+### IPv6 only
+
+Intended for some internal or modern-only services. For a public site, add A records too, or many visitors cannot reach it at all.
+
+### Break it cases
+
+| Case | What it loads | What it shows |
+| --- | --- | --- |
+| IPv6 only | a sample name with AAAA and no A | "IPv6 only" |
+| No IPv6 | the sample domain, which has A records only | "No IPv6" |
+| Name does not exist | `nohost.` in front of your name | NXDOMAIN |
+
+## Worked example
+
+The page opens on `tamperbox.dev`, looked up live. At the time of writing it publishes two global IPv6 addresses, both in Cloudflare's network (AS13335), and two IPv4 addresses; the exact addresses can change, which is why the page shows what Cloudflare returns now rather than a fixed list. The verdict counts both families, Findings folds the two passes ("IPv6 addresses published", "IPv4 too"), and each row names the network. Take it further hands the first IPv6 address to the ASN Lookup and Reverse DNS, and `[address]:443` to the TCP Ping, the step that proves something answers there. Press "IPv6 only" and the page loads a sample name with no A records; "No IPv6" loads one with no AAAA records.
+
+## For agents
+
+The Tamperbox MCP server exposes `aaaa-lookup` with a `name`, returning the question, status, flags, answer and authority. It does not sort the addresses or look up their networks; use the `reverse-dns` operation, or an ASN lookup, for an address. Keep these warnings with any conclusion:
+
+- Record presence does not establish IPv6 reachability from the agent or the user.
+- Documentation and private ranges are never routed.
+- One answer from one resolver at one moment.
+
+See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/).
+
+## Limits
+
+- No connection is made to any address.
+- Network names come from routing registry data and name the announcing network, not the customer.
+- Pasted records get no network lookup and no A lookup.
+- One answer from one resolver at one moment.
+- Sample names under `.example` are answered in the browser.
+
+## References
+
+- [RFC 3596](https://www.rfc-editor.org/rfc/rfc3596): DNS extensions to support IPv6. Sections 2.1, 2.3.
+- [RFC 4291](https://www.rfc-editor.org/rfc/rfc4291): IPv6 addressing architecture. Sections 2.5.2, 2.5.3, 2.5.5.2, 2.5.6, 2.7. Updated by [RFC 5952](https://www.rfc-editor.org/rfc/rfc5952) and others.
+- [RFC 4193](https://www.rfc-editor.org/rfc/rfc4193): unique local addresses. Section 3.1.
+- [RFC 3849](https://www.rfc-editor.org/rfc/rfc3849): IPv6 documentation prefix. Section 4. Updated by RFC 9637.
+- [RFC 9637](https://www.rfc-editor.org/rfc/rfc9637): expanding the documentation space, `3fff::/20`. Section 6.
+- [RFC 6052](https://www.rfc-editor.org/rfc/rfc6052): IPv6 addressing of IPv4/IPv6 translators. Section 2.1.
+- [RFC 8215](https://www.rfc-editor.org/rfc/rfc8215): local-use IPv4/IPv6 translation prefix. Section 1.
+- [RFC 3056](https://www.rfc-editor.org/rfc/rfc3056): 6to4. Section 2.
+- [RFC 4380](https://www.rfc-editor.org/rfc/rfc4380): Teredo. Section 2.6.
+- [RFC 8305](https://www.rfc-editor.org/rfc/rfc8305): Happy Eyeballs version 2. Sections 4, 5. Obsoletes [RFC 6555](https://www.rfc-editor.org/rfc/rfc6555).
+- [IANA IPv6 special-purpose address registry](https://www.iana.org/assignments/iana-ipv6-special-registry/).
