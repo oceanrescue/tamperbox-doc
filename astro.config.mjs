@@ -45,6 +45,7 @@ export default defineConfig({
           { label: 'MX Lookup & Email Domain Checker', link: '/tools/email-domain/' },
           { label: 'Email Provider Lookup', link: '/tools/email-provider/' },
           { label: 'JWT Decoder & Verifier', link: '/tools/jwt/' },
+          { label: 'Unix Timestamp Converter', link: '/tools/unix-timestamp/' },
         ] },
         { label: 'MCP server', items: [
           { label: 'Overview', link: '/mcp/' },
