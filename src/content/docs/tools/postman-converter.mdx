@@ -1,0 +1,202 @@
+---
+title: Postman Collection Converter
+description: How the converter reads Postman collections, OpenAPI documents and cURL commands, what each output keeps or leaves out, how credentials are replaced, what each finding means for the file you import, and how to verify a conversion.
+updated: 2026-10-20
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and guide for the Tamperbox Postman Collection Converter, which converts Postman Collection v2.0 and v2.1, OpenAPI 3.0 and 3.1 (JSON or YAML) and POSIX cURL commands among each other in the browser, never sends requests or runs scripts, replaces known credential fields by default, and reports what each conversion kept, checked or omitted.
+prerequisites:
+  - A Postman collection export, an OpenAPI 3.0 or 3.1 document, or one or more cURL commands; optionally a Postman environment export
+outputs:
+  - A verdict with the request count and notes to check, findings for what was kept, checked or omitted, a request preview, the converted output to copy or download, and History of edits
+limitations:
+  - A conversion maps structure; it does not send requests, run scripts or validate the API. Credential replacement covers known field names only. Input up to 1,000,000 characters and 1,000 requests
+---
+
+The tool page is [tamperbox.dev/postman-converter](https://tamperbox.dev/postman-converter). It moves an API description between the three forms developers trade most: a Postman collection, an OpenAPI document and a cURL command. Every conversion loses something, because the formats do not hold the same things; the tool's job is to say exactly what. This page explains how each input is read, what each output keeps or drops, how credentials are handled, and how to check a conversion before you import it.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> everything runs in your browser tab; inputs of 20,000 characters or more move to a background worker in the same tab. Nothing is sent to our server. cURL is tokenised, never run; files and remote references named in the input are never read. The page opens on a synthetic inventory collection for <code>api.example.com</code>. Nothing is stored.</div>
+
+## What the tool answers
+
+1. **What does this source describe?** The detected format and version, and every request in it: method, URL, folder, headers, body, authentication and saved responses.
+2. **What does the target keep?** Requests, authenticated requests and response examples carried over, credentials checked or replaced.
+3. **What is lost or still open?** Every note: unresolved variables, omitted secrets, unsupported body modes, scripts, simplified parameters, a draft spec.
+4. **Can I take the result back?** Reverse conversion turns the output into the source, so you can compare what a round trip keeps.
+
+It does not call the API, run collection scripts, or validate a spec against a standard beyond what the conversion needs.
+
+## Inputs
+
+Paste into the box or anywhere on the page, drop a file, or open one (`.json`, `.yaml`, `.yml`, `.sh`, `.txt`, up to 1 MB). Pasting into an empty or fully selected box starts a new source; pasting a snippet into a selection edits it in place.
+
+### Format detection
+
+With "Detect automatically", text that starts with `curl` (after optional `#` comment lines) is cURL. Anything else is parsed as JSON or YAML: a document with an `openapi` field is OpenAPI, everything else is treated as a Postman collection. "Read the source as" under Output options overrides the guess.
+
+- A Postman collection needs `info` and an `item` array. If `info.schema` is present it must name Collection v2.0.0 or v2.1.0; v1 exports must be upgraded in Postman first.
+- An OpenAPI document needs an `openapi` value starting with 3.0 or 3.1, plus `info` and `paths` objects. A Swagger 2.0 file has no `openapi` field, so it is read as Postman and refused.
+- A Postman environment export (a `values` array and no `item`) pasted or dropped on its own goes into the Postman environment field instead.
+
+### Refusals
+
+Integers beyond JavaScript's safe range stop the conversion ("Quote it as a string"), as do circular YAML aliases, more than 100 aliases, nesting deeper than 80 levels and more than 40 nested folders. Input is limited to 1,000,000 characters and 1,000 requests.
+
+## Reading the result
+
+### Verdict
+
+**Converted N requests**, with "N notes to check" when there are notes, and the direction (Postman Collection → OpenAPI JSON). A failure reads **Not converted** with the reason. The two items beside the verdict say that the input stays in the browser and nothing goes to the server.
+
+### Findings
+
+First what the conversion carried, from its report: requests, authenticated requests, response examples (kept, or omitted when the target cannot hold them) and credential fields (checked, replaced, or kept for review). Then each conversion note, as a check. Passes fold into one line.
+
+### History
+
+The latest change's message (a Break it case, a repair, a reverse conversion, an edit) above the source's size difference from what you pasted. Undo steps back one change; Reset input restores the pasted source exactly. History stays visible when an edit leaves the source unconvertible, so Undo is always in reach.
+
+### Take it further
+
+For the first request's API host: its TLS certificate, its security headers, and CORS for the first request URL. The links appear only for a real `http` or `https` URL: a URL that still holds a `{{variable}}`, and the reserved example hosts (`*.example`, `example.com`, `example.net`, `example.org`), are never sent anywhere, so the opening example shows none.
+
+### Request preview, Converted output
+
+One row per request: method, URL, folder path, header count, body mode, authentication type and saved responses; open a row for every field. Find a request filters the preview only. The output is shown up to 150,000 characters; Copy and Download always include all of it.
+
+## Method
+
+### Postman collections
+
+- Folders are walked recursively. Disabled headers, query parameters, form fields and variables are skipped.
+- `{{name}}` variables resolve from collection, folder and request scopes, then from an optional environment whose enabled values override collection values. Nested references resolve up to eight levels. Names still unresolved are noted as **Unresolved variables** and added as empty variables to Postman output.
+- `:id` path variables stay editable for Postman and OpenAPI output; cURL output substitutes known values.
+- Raw, URL-encoded and form-data bodies convert. Other modes, such as GraphQL or binary file bodies, are noted as not converted.
+- Pre-request scripts and tests are omitted and never run; each item that had them gets a note.
+
+The collection format is defined by the [Postman Collection Format v2.1.0 schema](https://schema.postman.com/collection/json/v2.1.0/draft-07/docs/index.html).
+
+### OpenAPI documents
+
+Following the [OpenAPI Specification 3.1.0](https://spec.openapis.org/oas/v3.1.0) (and 3.0.3, which has the same structures for what the tool reads):
+
+- Each path starting with `/` yields one request per GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS or TRACE operation ([Path Item Object](https://spec.openapis.org/oas/v3.1.0#path-item-object)).
+- Only the first server is used, with `{variable}` defaults filled in ([Server Object](https://spec.openapis.org/oas/v3.1.0#server-object)). Relative or missing servers become `{{baseUrl}}`.
+- Example values come from `example`, then the first of `examples`, then are generated from the schema: `default`, the first `enum` value, the first `oneOf` or `anyOf` branch, merged `allOf`, `minimum` or 0 for numbers, `false` for booleans, `"string"` otherwise. `readOnly` properties are left out of generated request examples.
+- Form and deepObject query styles are serialised; other styles are simplified with a note ([Style Values](https://spec.openapis.org/oas/v3.1.0#style-values)). Header and cookie parameters become headers.
+- Only the first request body media type and the first security alternative are used. Bearer, Basic, API key and OAuth 2.0 map to placeholders such as `{{token}}`, `{{apiKey}}` and `{{accessToken}}`; other schemes need manual configuration.
+- Response codes become saved examples. `default` maps to 200 and `4XX` to 400, each with a note.
+- Only local `#/` references resolve ([Reference Object](https://spec.openapis.org/oas/v3.1.0#reference-object)). An external reference stops with "Bundle it into the document first"; a circular one cannot be expanded into an example.
+
+### cURL commands
+
+- Single quotes, double quotes, backslash escapes and line continuations follow the POSIX shell rules ([Shell Command Language, 2.2 Quoting](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html#tag_19_02)). Several commands are allowed, one per line, each starting with `curl`. `$`, backticks and `; | & < > ( )` are refused rather than interpreted, so nothing is ever expanded or executed.
+- Recognised options ([curl manual](https://curl.se/docs/manpage.html)): `-X`, `-H`, `-d`, `--data-raw`, `--data-binary`, `--data-urlencode`, `--json`, `-F`, `--form-string`, `-u`, `-b`, `--url`, `-G` and `-I`, with their long forms. `-L`, `-s`, `-S` and `--compressed` are accepted but not kept. Any other option stops the conversion with "Unsupported cURL option".
+- Data switches the method to POST unless `-X` is given; with `-G` it is appended to the query string. Data defaults to `application/x-www-form-urlencoded` unless a header sets a type; `--json` adds JSON Content-Type and Accept headers. Data and form options cannot be combined.
+- `@file` data, file form fields, header files and cookie files are never read.
+
+### What each output keeps
+
+| Output | Keeps | Drops or changes |
+| --- | --- | --- |
+| Postman Collection v2.1 | Folders, variables, auth (an `Authorization: Bearer` header becomes bearer auth), bodies, saved responses | Nothing structural; unresolved variables become empty variables |
+| OpenAPI 3.0.3 or 3.1.0 | One operation per method and path, parameters, request bodies, security schemes, response examples | A second request on the same method and path stops the conversion (Drop duplicates keeps the first). Authorization values and Basic credentials are omitted. Repeated query parameters and headers keep their first example. Always noted as a starting point that needs schemas |
+| cURL | Method, URL, headers, body, `-u` credentials as placeholders | Saved responses and file fields; uses `--globoff` with single-quoted arguments |
+
+### Credentials
+
+"Replace credentials" is on by default. It looks for known names, including Authorization, Cookie, password, secret, client_secret, token, access_token, refresh_token, api_key, x-api-key, session ids and AWS-style access keys, in headers, query strings, URL user info, JSON and URL-encoded bodies, form fields, auth settings, secret-type variables and response examples, and replaces the values with `{{redacted_*}}` placeholders. Values that are already placeholders are left alone. With the option off, Copy and Download keep the originals and the finding says how many credential fields were kept; the request preview stays masked either way.
+
+## Standards and conformance
+
+| Specification | How the tool applies it | Where it stops |
+| --- | --- | --- |
+| [OpenAPI Specification 3.1.0](https://spec.openapis.org/oas/v3.1.0) and [3.0.3](https://spec.openapis.org/oas/v3.0.3) | Reads paths, operations, servers, parameters, request bodies, security, responses and local references; writes 3.0.3 or 3.1.0 | Not a validator: an input that converts may still be an invalid spec. External references, callbacks, links and webhooks are not converted |
+| [Postman Collection Format v2.1.0](https://schema.postman.com/collection/json/v2.1.0/draft-07/docs/index.html) (and v2.0.0) | Reads and writes items, folders, variables, auth, bodies and responses | Scripts are carried as notes, never run. Collection v1 is refused |
+| [POSIX Shell Command Language, 2.2](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html#tag_19_02) | Quoting and escaping of cURL commands | No expansion, substitution or redirection: such input is refused |
+| [curl manual](https://curl.se/docs/manpage.html) | The listed options | Any other option is refused rather than ignored |
+| [YAML 1.2.2](https://yaml.org/spec/1.2.2/) | OpenAPI in YAML, through the js-yaml parser | Alias count and depth are capped to stop resource exhaustion |
+
+Refusing an unknown cURL option instead of ignoring it is deliberate: an ignored `--proxy` or `--cert` would produce a request that looks complete but is not the one the command described.
+
+## Finding reference
+
+| Finding | Severity | What it means for the file you import | Fix |
+| --- | --- | --- | --- |
+| N requests | Pass | Every request was parsed | Nothing |
+| N authenticated requests | Pass | Authentication is described in the target | Configure secrets in your client |
+| N response examples (kept) | Pass | Saved responses carried over | Nothing |
+| N response examples (omitted) | Check | The target cannot hold them (cURL), or Include response examples is off | Turn the option on, or keep the collection |
+| No known credentials found / credential fields replaced | Pass | Known secrets are placeholders | Still review custom text |
+| Credential fields kept | Check | The output contains secrets | Turn Replace credentials on |
+| Unresolved variables | Check | Requests point at literal `{{names}}` | Load the environment or Fill variables |
+| Authorization values are omitted | Check | Auth is described, not carried | Configure credentials in your client |
+| Generated OpenAPI is a starting point | Check | No schemas or validation rules | Add them before publishing |
+| Scripts omitted | Check | Pre-request and test logic is gone | Move it into tests or client config |
+| Body mode not converted | Check | That request has no body in the output | Recreate it in the target |
+| Query style simplified | Check | Serialisation may differ | Check the parameters |
+| `default` or `4XX` response mapped | Check | Shown as 200 or 400 | Adjust if it matters |
+
+A failed conversion is not a finding but the verdict: **Not converted** with the parser's reason, such as a duplicate operation for OpenAPI, malformed JSON, an unsupported cURL option or an external reference.
+
+## Guide
+
+### Convert a collection to OpenAPI for documentation
+
+1. Export the collection from Postman as Collection v2.1 and drop it on the page.
+2. Choose OpenAPI JSON or YAML, and the version your tooling needs.
+3. Read the findings. Load the environment if variables are unresolved, so servers and paths are real.
+4. Download the file and run it through an OpenAPI linter; add response schemas, required flags and descriptions.
+
+### Turn a cURL command from a bug report into a collection
+
+1. Paste the command. Shell variables (`$TOKEN`) are refused; replace them with literal text or `{{token}}` first.
+2. Choose Postman Collection v2.1 and download it; import it with Import, Files.
+3. Credentials in `-H 'Authorization: …'` or `-u` become placeholders; set them in an environment.
+
+### Check a conversion
+
+- Use Reverse conversion and compare the round trip with your original: anything missing was lost.
+- Compare the request preview with the source: method, URL and folder for each request.
+- Confirm independently by importing the file into your client, or for OpenAPI by validating it with a linter.
+
+### Break it and Heal it
+
+| Break it | What it does to your source | Heal it |
+| --- | --- | --- |
+| Duplicate operation | Copies the first request beside itself and targets OpenAPI | Drop duplicates keeps the first of each method and path |
+| Unresolved variable | Adds `{{productId}}` to the first request's URL | Fill variables sets the value, in this tab only |
+| Malformed input | Cuts the last bracket or brace | Repair syntax closes what was left open |
+
+Each case starts from your own source; a format that cannot carry it (a duplicate in a cURL command) loads the example instead. Undo and Reset input in History go back.
+
+## Worked example
+
+The page opens on a synthetic Postman Collection v2.1, "Inventory API": a `baseUrl` variable of `https://api.example.com/v1`, bearer authentication with `{{token}}`, and a Products folder with List products (GET with a `limit` query and one saved response) and Create product (POST with a JSON body). The host is on the reserved `example.com` domain ([RFC 2606 section 3](https://www.rfc-editor.org/rfc/rfc2606#section-3)).
+
+Converted to OpenAPI JSON:
+
+1. Two requests, two authenticated, one response example: all kept.
+2. No known credentials found: `{{token}}` is already a placeholder.
+3. Three notes: **Unresolved variables: token**, **Authorization values are omitted from OpenAPI**, **Generated OpenAPI is a starting point**.
+
+Verdict: **Converted 2 requests. 3 notes to check.** Heal it offers Fill variables for `token`. Take it further shows nothing, because the example host is reserved.
+
+## For agents
+
+Over MCP, the `api_convert` operation runs the same converter, with the target format and credential replacement (on by default) as its options. It returns the output with one general warning, not the per-conversion notes this page shows, so an agent should check the output as the Guide describes, say that unsupported features may be missing, keep credential replacement on, and never paste a real collection with secrets into a prompt. See [Connect Tamperbox MCP](/mcp/connect/).
+
+## Limits
+
+- Structure only: no requests are sent, no scripts run, no spec is validated.
+- Credential replacement covers known names; custom fields and free text can still hold secrets.
+- Only the first server, the first request body media type and the first security alternative of an OpenAPI operation are used.
+- Input up to 1,000,000 characters and 1,000 requests; files and environments up to 1 MB each.
+
+## References
+
+- [OpenAPI Specification 3.1.0](https://spec.openapis.org/oas/v3.1.0) and [3.0.3](https://spec.openapis.org/oas/v3.0.3), OpenAPI Initiative.
+- [Postman Collection Format v2.1.0 schema](https://schema.postman.com/collection/json/v2.1.0/draft-07/docs/index.html).
+- [POSIX.1-2024 Shell Command Language, section 2.2 Quoting](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html#tag_19_02).
+- [curl manual](https://curl.se/docs/manpage.html).
+- [YAML 1.2.2](https://yaml.org/spec/1.2.2/).
+- [RFC 2606](https://www.rfc-editor.org/rfc/rfc2606), Reserved Top Level DNS Names: [section 3](https://www.rfc-editor.org/rfc/rfc2606#section-3), example.com, example.net and example.org.

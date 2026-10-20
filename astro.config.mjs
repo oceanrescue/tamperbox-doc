@@ -46,6 +46,7 @@ export default defineConfig({
           { label: 'Email Provider Lookup', link: '/tools/email-provider/' },
           { label: 'JWT Decoder & Verifier', link: '/tools/jwt/' },
           { label: 'Unix Timestamp Converter', link: '/tools/unix-timestamp/' },
+          { label: 'Postman Collection Converter', link: '/tools/postman-converter/' },
         ] },
         { label: 'MCP server', items: [
           { label: 'Overview', link: '/mcp/' },
