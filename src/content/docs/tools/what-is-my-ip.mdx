@@ -1,0 +1,162 @@
+---
+title: What Is My IP Address?
+description: How the What Is My IP page reads the public address your connection uses, why one connection shows only IPv4 or IPv6, how the device test checks both families, and how to read and act on each result.
+updated: 2026-10-20
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and guide for the Tamperbox What Is My IP page, which reads the source address, family, network, AS number and estimated country of the visitor's connection on the Tamperbox server, and on request runs an IPv4-only and an IPv6-only echo request to ipify from the browser.
+prerequisites:
+  - A browser on the connection to identify; the device test needs the browser to reach api.ipify.org and api6.ipify.org
+outputs:
+  - The public address and its family, the network, AS number and estimated country, and after the device test the IPv4 and IPv6 address the device reaches the internet with
+limitations:
+  - Describes one connection; a VPN, proxy or private relay replaces the address; the country is an estimate for the network; a failed IPv6 request is inconclusive
+---
+
+The tool page is [tamperbox.dev/what-is-my-ip](https://tamperbox.dev/what-is-my-ip). It has no input box: opening it reads your connection and shows the address in large type, with the network it belongs to, and a device test checks IPv4 and IPv6 separately. This page is the long version: where each value comes from, why the page never shows a sample address, how the device test works, and how to use the result for an allowlist or a support ticket.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> opening the page sends one request to the Tamperbox server, which reads the address your browser connected from and the network metadata of that connection, returns them, and keeps nothing. The device test runs only when you press it: your browser sends two requests to the public echo service ipify, one over IPv4 and one over IPv6, without cookies or a referrer. Nothing else is sent, and the address is never passed to advertisers.</div>
+
+## What the tool answers
+
+1. **What address does the internet see for me?** The source address of this connection.
+2. **Is it IPv4 or IPv6?** The family this connection used.
+3. **Whose network is it?** The organisation, AS number and estimated country from the connection's metadata.
+4. **Does the other family work too?** After the device test: whether this device also reaches the internet over IPv4 and over IPv6, and with which address.
+
+## Inputs
+
+There is nothing to type. The page reads the connection it was loaded over. Check again repeats the read, which is useful after switching a VPN on or off, or moving between Wi-Fi and mobile data. Arriving from another tool with a value does not change anything: the address is always read, never taken from the page.
+
+The page never shows a sample address. A made-up address on a "what is my IP" page could be copied into a firewall rule; if the read fails, the page says "Unavailable" and the device test still works without our server.
+
+## Reading the result
+
+### Your public IP address
+
+The address in large type, with Copy address, and a line naming the network and country. The label says the family: "Your public IPv4 address" or "Your public IPv6 address".
+
+### Verdict and chips
+
+| Verdict | When |
+| --- | --- |
+| Connected over IPv4 | The connection used IPv4 and the device test has not run |
+| Connected over IPv6 | The connection used IPv6 |
+| IPv6 works too | The connection used IPv4 and the device test reached the internet over IPv6 |
+| Connected over IPv4. No IPv6 found from this device | The IPv6-only request did not complete (a warning) |
+| Your address could not be read | The server read failed |
+
+The chips say which families work, and "IPv6 not tested" until the device test runs.
+
+### Findings
+
+The caveats for this connection, worst first; see the [Finding reference](#finding-reference).
+
+### Take it further
+
+Your address into ASN Lookup, Reverse DNS and BGP Route Lookup, and when the device test found a separate IPv6 address, that address into ASN Lookup. The links appear only once your address is read. Nothing is put in the URL.
+
+### IPv4 and IPv6
+
+Two lanes, one per family: Works (with the address), Not found, or Not tested, and the device test button with the hosts it contacts.
+
+### Your network
+
+Network name, autonomous system and country, with a link to the full connection details.
+
+## Method
+
+### 1. Reading the connection
+
+The server takes the address from the `CF-Connecting-IP` header set by Cloudflare's edge for every request, not from any header the browser can set. When the edge replaced an IPv6 address with a pseudo IPv4 address (one from 240.0.0.0/4), the real IPv6 address from `CF-Connecting-IPv6` is used instead. The family is that address's version. The network name, AS number and country come from the edge's connection metadata (`request.cf.asOrganization`, `asn` and `country`); they describe the network the address belongs to, not the person. No other header is consulted, so a forwarded-for header cannot change the answer.
+
+### 2. Why one connection shows one family
+
+A browser opens each connection over one family. With both available, most clients prefer IPv6 and fall back to IPv4 quickly when IPv6 is slow ("Happy Eyeballs", [RFC 8305, section 5](https://www.rfc-editor.org/rfc/rfc8305#section-5)). So a page reached over IPv4 cannot tell whether IPv6 works, and the server answer says so: an IPv4 request returns "not tested", never "IPv6 unavailable".
+
+### 3. The device test
+
+Pressing the test makes two requests from your browser at the same time: `https://api.ipify.org?format=json`, which answers over IPv4 only, and `https://api6.ipify.org?format=json`, which answers over IPv6 only. Each has a 5 second limit, sends no cookies and no referrer, and must return a small JSON body (at most 1 KiB) whose address is of the expected family. A request that fails, times out, is blocked or returns the other family counts as "inconclusive", not "missing": a content blocker, a DNS filter, a firewall or an outage of the echo service all look the same.
+
+The test runs in the browser on purpose: a server-side request would test the server's connectivity, not yours.
+
+### 4. Findings
+
+| Rule | Condition | Finding |
+| --- | --- | --- |
+| No IPv6 | The connection used IPv4 and the IPv6-only request did not complete | CHECK |
+| Two addresses | The connection used IPv4 and the IPv6-only request returned an address | INFO |
+| IPv6 rotates | The connection used IPv6 | INFO |
+| VPN or proxy | An address was read | INFO |
+
+The rotation note follows [RFC 8981](https://www.rfc-editor.org/rfc/rfc8981): devices form temporary addresses ([section 3.4](https://www.rfc-editor.org/rfc/rfc8981#section-3.4)) with a default preferred lifetime of one day and a valid lifetime of two ([section 3.8](https://www.rfc-editor.org/rfc/rfc8981#section-3.8)), so the address a site sees changes about daily while the network prefix stays.
+
+## Standards and conformance
+
+| Specification | Sections used | How the tool applies them | Where it stops |
+| --- | --- | --- | --- |
+| [RFC 4291](https://www.rfc-editor.org/rfc/rfc4291) IPv6 addressing | [2.5.4](https://www.rfc-editor.org/rfc/rfc4291#section-2.5.4) | Addresses are shown in their canonical compressed form | The page does not split prefix and interface ID |
+| [RFC 8981](https://www.rfc-editor.org/rfc/rfc8981) temporary addresses | [3.4](https://www.rfc-editor.org/rfc/rfc8981#section-3.4), [3.8](https://www.rfc-editor.org/rfc/rfc8981#section-3.8) | Explains why an IPv6 address changes | Obsoletes RFC 4941 |
+| [RFC 8305](https://www.rfc-editor.org/rfc/rfc8305) Happy Eyeballs v2 | [5](https://www.rfc-editor.org/rfc/rfc8305#section-5) | Explains why one connection shows one family | |
+| [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598) shared address space | [4](https://www.rfc-editor.org/rfc/rfc6598#section-4) | Background for carrier-grade NAT: the address shown is the provider's gateway | The page cannot see your router's WAN address |
+| [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918#section-3) private addresses | 3 | Your device's address at home is private and never shown here | |
+
+## Finding reference
+
+| Finding | Severity | What it means for you | Fix |
+| --- | --- | --- | --- |
+| No IPv6 from this device | CHECK | Sites reach you over IPv4 only; inconclusive if a blocker interfered | Enable IPv6 in the router; ask the provider; test without blockers |
+| This device has two public addresses | INFO | Logs and allowlists may show either | Allowlist both |
+| Your IPv6 address may change | INFO | Temporary addresses rotate about daily | Allowlist the /64 prefix |
+| A VPN or proxy changes this address | INFO | The address shown may be the exit of a tunnel | Check again with it off to compare |
+
+## Guide
+
+### Adding your connection to a firewall allowlist
+
+1. Read the address and its family here.
+2. For IPv4, allowlist the address; ask your provider whether it is static, because many home addresses change after a router restart.
+3. For IPv6, allowlist the prefix rather than the address: usually the first four groups followed by `::/64`.
+4. Run the device test; if both families work, add both.
+
+### Giving your address to support
+
+Copy address puts it on the clipboard. Mention the time and whether a VPN was on: an address is only meaningful together with when it was used.
+
+### IPv6 missing
+
+Look for IPv6 in the router's WAN or internet settings (often "IPv6", "DHCPv6" or "prefix delegation"), and ask your provider whether your plan includes it. Then run the device test again.
+
+### Confirm without Tamperbox
+
+```sh
+curl -4 https://api.ipify.org
+curl -6 https://api6.ipify.org
+```
+
+The first prints your IPv4 address, the second your IPv6 address or an error when there is none.
+
+## Worked example
+
+On a typical home connection over IPv4, the page shows the router's public address with the provider's name and country, the verdict "Connected over IPv4", and "IPv6 not tested". Pressing the device test sends the two echo requests. If the IPv6 request returns an address, the verdict becomes "IPv6 works too", both lanes read Works, and a finding notes that the device has two public addresses; Take it further gains a link for the IPv6 address. If it fails, the verdict warns that no IPv6 was found, and the fix card lists the router and provider steps. This page never shows a sample address, so there is no fixed example to describe.
+
+## For agents
+
+Through the Tamperbox MCP server, `what_is_my_ip` describes the connection of whatever calls it: the agent's server, not the person using the agent. The result carries that warning. Use it to learn the agent host's own address, never to answer "what is my IP" for a user; send the user to the page instead.
+
+See [Connect an MCP client](/mcp/connect/) and [Security and privacy](/reference/security/). [ASN Lookup](/tools/asn-lookup/) explains the network behind an address.
+
+## Limits
+
+- One connection, at one moment; Check again after any network change.
+- A VPN, proxy or private relay is shown in place of your connection.
+- The country is an estimate for the network.
+- A failed device test is inconclusive.
+- The address is shown to you and not stored.
+
+## References
+
+- [RFC 4291](https://www.rfc-editor.org/rfc/rfc4291), IP Version 6 Addressing Architecture: section 2.5.4.
+- [RFC 8981](https://www.rfc-editor.org/rfc/rfc8981), Temporary Address Extensions for Stateless Address Autoconfiguration in IPv6: sections 3.4 and 3.8. Obsoletes RFC 4941.
+- [RFC 8305](https://www.rfc-editor.org/rfc/rfc8305), Happy Eyeballs Version 2: section 5.
+- [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598), IANA-Reserved IPv4 Prefix for Shared Address Space: section 4.
+- [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918), Address Allocation for Private Internets: section 3.
