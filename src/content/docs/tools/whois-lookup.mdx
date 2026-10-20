@@ -1,0 +1,204 @@
+---
+title: WHOIS & RDAP Lookup
+description: How the WHOIS & RDAP Lookup finds the registry for a domain or IP address, reads its RDAP record into the registrar, dates, status codes, nameservers, DNSSEC data and abuse contact, and what each finding means.
+updated: 2026-10-20
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and guide for the Tamperbox WHOIS & RDAP Lookup, which finds the responsible registry through the IANA RDAP bootstrap lists, fetches the RDAP record for a domain or IP address (or reads pasted RDAP JSON in the browser), and shows the registrar, dates, EPP statuses, nameservers, DS records, registry events, abuse contact and raw JSON, with registration checks for domains.
+prerequisites:
+  - A domain, an IPv4 or IPv6 address, or an RDAP record saved as JSON
+outputs:
+  - The registration as rows, status codes in plain words, nameservers and DNSSEC data, registry events, the raw RDAP JSON, findings worst first, and links that carry the expiry, a signed delegation or a network block to other tools
+limitations:
+  - One registry record at one moment; registrant details are usually redacted; an IP record names who holds the block, not who runs the server; port 43 WHOIS is not queried
+---
+
+The tool page is [tamperbox.dev/whois-lookup](https://tamperbox.dev/whois-lookup). It opens on a sample registration and takes a domain, an IP address, or a saved RDAP record. This page is the long version: how the registry is found, what each part of the record means, every finding, and what to do with what you learn.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> a domain or address is sent to the Tamperbox server, which finds the responsible registry in the IANA bootstrap lists, asks its RDAP service and returns the record unchanged. The record is read in your browser. Pasted RDAP JSON never leaves the browser. Nothing is stored.</div>
+
+## What the tool answers
+
+For a domain:
+
+1. **Who is it registered with, and since when?** Registrar, IANA registrar ID, registration, expiry and last-change dates.
+2. **Who owns it?** The registrant, or that the details are redacted.
+3. **How is it protected?** Status codes: locks, holds, grace periods.
+4. **Where is its DNS, and is the delegation signed?** Nameservers with their provider, and the DS records the registry holds.
+5. **What happened to it?** The registry's events, oldest first.
+6. **Where do abuse reports go?** The registrar's abuse email and phone.
+
+For an IP address: the network block it belongs to, its range and CIDR, the organisation holding it, its type and parent, the abuse contact, and the registry's remarks.
+
+WHOIS over port 43 is not used: RDAP is its successor, with structured data and a standard way to find the right server. ICANN requires gTLD registries and registrars to run RDAP.
+
+## Inputs
+
+### A domain
+
+`example.com`, looked up when you stop typing (or at once on Enter). A pasted address is reduced to what the tool takes: `https://www.example.com/page` becomes `www.example.com`, an email address its domain, quotes and brackets are dropped. Text that contains nothing usable stays as pasted with an explanation. Typing is never rewritten mid-word, and Break it loads are never cleaned.
+
+Registries hold records for registered names only. `www.example.com` usually has no record even when `example.com` does; when a name with three or more labels has none, Heal it offers to check the name one level up.
+
+### An IP address
+
+IPv4 or IPv6, looked up at the regional internet registry that holds the block. Private and other non-public addresses are refused: "Enter a public IP address."
+
+### RDAP JSON
+
+A domain or IP network record saved from an RDAP service (it starts with `{`), pasted or dropped as a file up to 256 KiB, read in the browser. Text that is not JSON gives "Not readable JSON"; JSON that is not a domain or IP network object is refused.
+
+## Reading the result
+
+### Verdict and chips
+
+For a domain: "Registered with *registrar*", with the year of registration and the expiry date, at FAIL, CHECK or PASS by the worst finding, and a line saying when the registrant details are redacted. The chips give the expiry, the transfer lock and DNSSEC. For an IP address: the network's name and who it is registered to. For no record: "Not registered: the registry has no record of …".
+
+### Findings
+
+The registration checks, worst first, with passes folded into "n checks passed"; for an IP address, one INFO line naming the holder and the abuse contact. The [finding reference](#finding-reference) lists them all.
+
+### Take it further
+
+For a domain: the expiry date as a Unix timestamp (opens the timestamp converter in a new tab) and, when the registry holds a DS record, the DNSSEC chain it starts. For an IP address: how the network block is routed, in the BGP lookup, using the block's CIDR. Nothing is put in a URL.
+
+### History and Heal it
+
+History logs every Break it and Heal it change with Revert and Reset input. Heal it offers the registered name one level up when a longer name has no record, and after a break "Restore input before this break".
+
+### Registration
+
+The record as rows. For a domain: domain and registry handle, registrar and IANA ID, registered, expires (red when past), last changed, registrant (or "Redacted for privacy"), abuse contact. For a network: address, network name and handle, range and CIDR, organisation and country, type and parent, abuse contact.
+
+### Status codes, nameservers and DNSSEC, registry events
+
+Status codes are listed with their plain names, meaning and weight (the table is in the [Domain Availability method](/tools/domain-availability/#4-status-codes)). Nameservers are listed with the DNS provider they belong to; DS records follow with their key tag, algorithm and digest type, or "No DS record" when the delegation is unsigned. Registry events (registered, expires, last changed, transferred, locked, the registry's own refresh) are listed oldest first; future events are marked.
+
+### The RDAP record
+
+The registry's JSON exactly as returned, with a Copy button: the source for anything the rows leave out (remarks, notices, links, extensions).
+
+## Method
+
+### 1. Finding the registry
+
+The server reads the IANA RDAP bootstrap file that matches the input: domain names, IPv4 or IPv6 ([RFC 9224, sections 4 and 5](https://www.rfc-editor.org/rfc/rfc9224#section-4)). Domains match the longest registered ending; addresses match the longest covering prefix. Only HTTPS services are used, and the query is `domain/<name>` or `ip/<address>` ([RFC 9082, sections 3.1.1 and 3.1.3](https://www.rfc-editor.org/rfc/rfc9082#section-3.1.1)). Up to three redirects are followed, each checked to be a public HTTPS address; regional registries often redirect an address to the registry that actually holds it. With no service for the ending, the page says so and that this "does not mean it is available".
+
+### 2. Not found
+
+[RFC 7480, section 5.3](https://www.rfc-editor.org/rfc/rfc7480#section-5.3): an empty result is a 404, and the body is optional. A 404 counts as "no record" only with RDAP evidence: an error document with `errorCode` 404, or an empty body served as RDAP or JSON. An HTML 404 is reported as inconclusive. A record whose `objectClassName` is not the one asked for is refused.
+
+### 3. Reading a domain record
+
+From the domain object ([RFC 9083, section 5.3](https://www.rfc-editor.org/rfc/rfc9083#section-5.3)):
+
+- **Name and handle**: `ldhName` (or `unicodeName`) and `handle`.
+- **Registrar**: the entity with the `registrar` role, its `fn`, and the public ID of type "IANA Registrar ID" ([section 4.8](https://www.rfc-editor.org/rfc/rfc9083#section-4.8)); the abuse contact is the registrar's child entity with the `abuse` role (email and telephone).
+- **Registrant**: the entity with the `registrant` role (name, organisation, country), or "Redacted for privacy" when the record's `redacted` list ([RFC 9537](https://www.rfc-editor.org/rfc/rfc9537)) names registrant fields.
+- **Dates**: the `registration`, `expiration` and `last changed` events ([section 4.5](https://www.rfc-editor.org/rfc/rfc9083#section-4.5)); every event is listed in the timeline.
+- **Status**: the `status` array ([section 4.6](https://www.rfc-editor.org/rfc/rfc9083#section-4.6)), EPP values of [RFC 5731, section 2.3](https://www.rfc-editor.org/rfc/rfc5731#section-2.3) and [RFC 3915, section 3.1](https://www.rfc-editor.org/rfc/rfc3915#section-3.1) in their RDAP spelling ([RFC 8056, section 2](https://www.rfc-editor.org/rfc/rfc8056#section-2)).
+- **Nameservers** and **DNSSEC**: `nameservers[].ldhName`, and `secureDNS.delegationSigned` with `dsData` (key tag, algorithm, digest type, digest).
+
+### 4. Registration checks
+
+The same lifecycle checks as the [Domain Availability Checker](/tools/domain-availability/#5-lifecycle-checks): expiry passed, within 30 days, or later; holds; a missing transfer lock; the registry lock; an unsigned delegation. The verdict takes the level of the worst check.
+
+### 5. Reading an IP network record
+
+From the IP network object ([RFC 9083, section 5.4](https://www.rfc-editor.org/rfc/rfc9083#section-5.4)): `name`, `handle`, `startAddress` and `endAddress`, the `cidr0_cidrs` extension for the CIDR, `type`, `country`, `parentHandle`, the registrant's `fn`, the first abuse contact found among the entities and their children, and the remarks. No checks are applied: the record describes who holds the block.
+
+## Standards and conformance
+
+| Specification | Sections used | How the tool applies them | Where it stops |
+| --- | --- | --- | --- |
+| [RFC 7480](https://www.rfc-editor.org/rfc/rfc7480), HTTP usage | [5.3](https://www.rfc-editor.org/rfc/rfc7480#section-5.3) | 404 with RDAP evidence means no record | HTML 404s are treated as inconclusive |
+| [RFC 9082](https://www.rfc-editor.org/rfc/rfc9082) (obsoletes RFC 7482) | [3.1.1](https://www.rfc-editor.org/rfc/rfc9082#section-3.1.1), [3.1.3](https://www.rfc-editor.org/rfc/rfc9082#section-3.1.3) | Exact domain and IP lookups | No searches, no entity or AS lookups (the ASN lookup covers AS numbers) |
+| [RFC 9083](https://www.rfc-editor.org/rfc/rfc9083) (obsoletes RFC 7483) | 4.5, 4.6, 4.8, 5.3, 5.4 | Fields read into rows; raw JSON shown | Notices, remarks on domains and vCard fields beyond those listed stay in the raw JSON |
+| [RFC 9224](https://www.rfc-editor.org/rfc/rfc9224) (obsoletes RFC 7484) | 4, 5.1, 5.2 | Longest-match bootstrap, HTTPS only | |
+| [RFC 9537](https://www.rfc-editor.org/rfc/rfc9537), redaction | The `redacted` member | Registrant shown as redacted when the list names it | Other redacted fields are visible in the raw JSON |
+| [RFC 5731](https://www.rfc-editor.org/rfc/rfc5731), [RFC 3915](https://www.rfc-editor.org/rfc/rfc3915), [RFC 8056](https://www.rfc-editor.org/rfc/rfc8056) | Status values and mapping | Plain names and weights | |
+
+## Finding reference
+
+| Finding | Level | Source | Meaning | What to do |
+| --- | --- | --- | --- | --- |
+| Expires in N days (more than 30) | PASS | [RFC 9083 4.5](https://www.rfc-editor.org/rfc/rfc9083#section-4.5) | Paid up | |
+| Expires in N days (30 or fewer) | CHECK | | Lapses soon without renewal | Check auto-renew and payment |
+| Expired N days ago | FAIL | | In the registrar's grace period | Renew |
+| Expired and on its way out | FAIL | [RFC 3915 3.1](https://www.rfc-editor.org/rfc/rfc3915#section-3.1) | Redemption or pending delete | Restore now, or follow its release |
+| On hold | FAIL | [RFC 5731 2.3](https://www.rfc-editor.org/rfc/rfc5731#section-2.3) | Does not resolve | Ask the registrar why |
+| No transfer lock | CHECK | [RFC 5731 2.3](https://www.rfc-editor.org/rfc/rfc5731#section-2.3) | Can be moved with its auth code | Turn the lock on |
+| Registry lock | PASS | [RFC 5731 2.3](https://www.rfc-editor.org/rfc/rfc5731#section-2.3) | Changes need the registry's manual approval | |
+| Delegation not signed | INFO | [RFC 9083 5.3](https://www.rfc-editor.org/rfc/rfc9083#section-5.3) | No DS at the registry | See the [DNSSEC Checker](/tools/dnssec-checker/) |
+| No registration record | INFO | [RFC 7480 5.3](https://www.rfc-editor.org/rfc/rfc7480#section-5.3) | No record for this exact name | Check the registered name |
+| Registered to *holder* (IP) | INFO | [RFC 9083 5.4](https://www.rfc-editor.org/rfc/rfc9083#section-5.4) | Who holds the block | Report abuse to its contact |
+
+## Guide
+
+### Contacting a domain's owner
+
+Most records redact the registrant. Contact the registrar named in the record: registrars offer a contact form or relay address for the owner, and handle abuse reports at the abuse contact shown. For a legal request, the registrar's terms say how to request disclosure.
+
+### Reporting abuse
+
+For a phishing or malware domain, write to the registrar's abuse contact with the full URL, the time you saw it and the evidence. For spam or attacks from an address, look the address up here and write to the network's abuse contact with the address, the exact times (with time zone) and the headers or logs.
+
+### Moving a domain to another registrar
+
+Remove the transfer lock at the current registrar, get the auth code, start the transfer at the new registrar, and confirm it by email. Note any "Just transferred" status afterwards: a further transfer is usually blocked for 60 days. Turn the lock back on once the transfer completes.
+
+### Independent check
+
+```sh
+# RDAP for a domain or an address, through a public redirector that uses the IANA bootstrap
+curl -sL https://rdap.org/domain/example.com | head -c 600
+curl -sL https://rdap.org/ip/198.51.100.24 | head -c 600
+# Classic port 43 WHOIS, where the registry still runs it
+whois example.com
+```
+
+### Break it cases
+
+Every case is a sample record on the reserved `.example` zone or a documentation address: a registration's state belongs to the world, not to your input.
+
+| Case | Input | What it shows |
+| --- | --- | --- |
+| An IP address | `198.51.100.24` | An IP network record: TEST-NET-2, reserved for documentation |
+| Not registered | `harborsupply-marine.example` | No registration record |
+| Expired, redeemable | `anchor-chandlery.example` | Expired and on its way out, with no nameservers |
+| No transfer lock | `dockside-tools.example` | No transfer lock, and an expiry two weeks away |
+
+## Worked example
+
+The page opens on `harbor-supply.example`, a sample registry record answered in the browser, so the example makes no lookup. It reads **Registered with Sample Registrar, Inc. since 2011, expires 2027-04-18.** The registrant is redacted, the registrar's abuse contact is `abuse@registrar.example`, the three client locks are on, the nameservers are two Cloudflare hosts and one Amazon Route 53 host, and the registry holds one DS record (algorithm 13, SHA-256). The timeline lists registration, expiration and the last change, and the raw JSON carries a "Sample data" notice.
+
+Take it further offers the expiry as a Unix timestamp and the DNSSEC chain from the DS record. Try "An IP address" for a network record, then Revert. Enter your own domain or address and every section, card and link is rewritten for it.
+
+## For agents
+
+The Tamperbox MCP server runs the same lookup. Search its catalog for the WHOIS operation, read its input schema, and call it with a domain or an IP address. Keep these warnings with any conclusion:
+
+- One registry record at one moment; registrars may hold more than the registry shows.
+- Redacted registrant data is not evidence about the owner.
+- An IP record names who holds the block, not who operates the server.
+
+See [Connect an MCP client](/mcp/connect/) for the calling pattern and [Security and privacy](/reference/security/) for where the input travels.
+
+## Limits
+
+- One registry record, at one moment.
+- Registrant details are usually redacted.
+- Port 43 WHOIS is not queried; endings without RDAP cannot be looked up.
+- An IP record says who holds the block, not who runs the server.
+- The example and Break it cases use sample records and documentation addresses.
+- Nothing is stored.
+
+## References
+
+- [RFC 3915, Domain Registry Grace Period Mapping for EPP](https://www.rfc-editor.org/rfc/rfc3915), section 3.1
+- [RFC 5731, EPP Domain Name Mapping](https://www.rfc-editor.org/rfc/rfc5731), section 2.3
+- [RFC 7480, HTTP Usage in RDAP](https://www.rfc-editor.org/rfc/rfc7480), section 5.3
+- [RFC 8056, EPP and RDAP Status Mapping](https://www.rfc-editor.org/rfc/rfc8056), section 2
+- [RFC 9082, RDAP Query Format](https://www.rfc-editor.org/rfc/rfc9082), sections 3.1.1 and 3.1.3 (obsoletes RFC 7482)
+- [RFC 9083, JSON Responses for RDAP](https://www.rfc-editor.org/rfc/rfc9083), sections 4.5, 4.6, 4.8, 5.3 and 5.4 (obsoletes RFC 7483)
+- [RFC 9224, Finding the Authoritative RDAP Service](https://www.rfc-editor.org/rfc/rfc9224), sections 4 and 5 (obsoletes RFC 7484)
+- [RFC 9537, Redacted Fields in RDAP](https://www.rfc-editor.org/rfc/rfc9537)

@@ -45,6 +45,8 @@ export default defineConfig({
           { label: 'DNSSEC Checker', link: '/tools/dnssec-checker/' },
           { label: 'DANE & TLSA Checker', link: '/tools/dane-checker/' },
           { label: 'Reverse DNS Lookup', link: '/tools/reverse-dns/' },
+          { label: 'Domain Availability Checker', link: '/tools/domain-availability/' },
+          { label: 'WHOIS & RDAP Lookup', link: '/tools/whois-lookup/' },
         ] },
         { label: 'MCP server', items: [
           { label: 'Overview', link: '/mcp/' },
