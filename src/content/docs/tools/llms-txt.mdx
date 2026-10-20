@@ -82,7 +82,7 @@ For a host, three fetches start together on `https://host`: `/llms.txt` (up to 5
 
 ### Structure
 
-The [llms.txt proposal](https://llmstxt.org/#format) defines the file as Markdown with "an H1 with the name of the project or site. This is the only required section", then optionally a blockquote summary, other details, and "Zero or more markdown sections delimited by H2 headers, containing “file lists” of URLs". Each list item is "a required markdown hyperlink [name](url), then optionally a : and notes about the file". Headings and lists follow [CommonMark](https://spec.commonmark.org/0.31.2/). The tool reads the file line by line, skipping fenced code blocks:
+The [llms.txt proposal](https://llmstxt.org/#format) defines the file as Markdown with "an H1 with the name of the project or site. This is the only required section", then optionally a blockquote summary, other details, and "Zero or more markdown sections delimited by H2 headers, containing “file lists” of URLs". Each list item is "a required markdown hyperlink `[name](url)`, then optionally a : and notes about the file". Headings and lists follow [CommonMark](https://spec.commonmark.org/0.31.2/). The tool reads the file line by line, skipping fenced code blocks:
 
 | Rule | Severity | Repair |
 | --- | --- | --- |
