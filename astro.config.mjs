@@ -44,6 +44,7 @@ export default defineConfig({
           { label: 'Email Header Analyzer', link: '/tools/email-header-analyzer/' },
           { label: 'DNSSEC Checker', link: '/tools/dnssec-checker/' },
           { label: 'DANE & TLSA Checker', link: '/tools/dane-checker/' },
+          { label: 'Reverse DNS Lookup', link: '/tools/reverse-dns/' },
         ] },
         { label: 'MCP server', items: [
           { label: 'Overview', link: '/mcp/' },
