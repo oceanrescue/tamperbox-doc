@@ -1,0 +1,169 @@
+---
+title: DNS Provider Lookup
+description: How the lookup reads a zone's NS records, finds the zone when you enter a name inside it, names the provider behind each nameserver, and flags a single nameserver, several providers and self-hosted servers, with the rules and RFC sections behind each finding.
+updated: 2026-10-20
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and repair guide for the Tamperbox DNS Provider Lookup, which asks a public resolver for a domain's NS records (and its SOA to find the enclosing zone when there are none), matches each nameserver host against 29 provider patterns, recognises self-hosted nameservers, and flags a single nameserver, more than one provider and nameservers not in the catalog. Pasted NS records are read in the browser.
+prerequisites:
+  - A domain, or a list of nameservers or NS records to paste
+outputs:
+  - A verdict naming the provider, the share of nameservers per provider, every nameserver with its provider, and findings with fixes
+limitations:
+  - The NS set comes from one recursive resolver at one moment; the registrar's delegation can differ for up to a TTL after a change; providers are recognised by host name only
+---
+
+The tool page is [tamperbox.dev/dns-provider](https://tamperbox.dev/dns-provider). It opens on `harbor-supply.example`, a sample domain on the reserved `.example` zone whose nameservers sit at two providers, as after an unfinished migration. This page is the long version: what the lookup asks, how it names providers, what each finding means and how to fix and confirm it.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> a domain is sent to the Tamperbox server, which asks a public DNS resolver for its NS records, and for its SOA record when there are none, to find the zone the name belongs to. Matching nameservers to providers runs in your browser. Pasted nameservers or NS records never leave the browser. The sample is answered in the browser. Nothing is stored.</div>
+
+## What the tool answers
+
+1. **Which nameservers answer for this zone?** The NS records at the zone apex.
+2. **Who runs them?** The provider behind each nameserver host name, or "self-hosted" when the servers are named inside the zone.
+3. **Is there enough redundancy?** One nameserver is a single point of failure.
+4. **Is more than one provider involved?** Either deliberate redundancy or a migration left half done.
+5. **Which zone is it, when you entered a name inside one?** A subdomain has no NS records of its own; the lookup says which zone serves it.
+
+It does not query the nameservers themselves, compare their answers, or check the delegation at the parent zone.
+
+## Inputs
+
+### A domain
+
+`example.com`, or a full address pasted from the address bar, which becomes the domain in the box. The lookup runs when you stop typing or on Enter.
+
+### Pasted nameservers or NS records
+
+A list of nameserver host names, one per line, or NS records as `dig` prints them (`example.com. 86400 IN NS ns1.example.net.`). One line that already looks like a nameserver (`ns1.…`, `dns1.…`, `….ns.cloudflare.com`, `ns-12.awsdns-…`) is read as a pasted nameserver rather than looked up as a domain. The owner name of a pasted NS record, when there is one, is taken as the zone. Host names that are not valid are dropped; if none is left, "No nameservers found. Paste one hostname per line, or NS records."
+
+### Files
+
+A `.txt` file dropped on the page or opened with Add a file is read in the browser.
+
+## Reading the result
+
+### Verdict and chips
+
+"Amazon Route 53 answers for example.com." for one known provider; "Cloudflare, plus 1 Amazon Route 53 nameserver." for two; "Self-hosted DNS:" when the servers are named inside the zone; "DNS runs at x.net: a provider not in the catalog."; "One nameserver:" for a single server; "No NS records at …" for a name inside a zone. One chip per provider with its count, and one for the number of nameservers.
+
+### Findings, Take it further, History
+
+Findings worst first, passes folded. Take it further hands the zone to the [DNSSEC Checker](https://tamperbox.dev/dnssec-checker) and the [WHOIS and RDAP Lookup](https://tamperbox.dev/whois-lookup), and, for a real domain, the first nameserver to the [Website Hosting Checker](https://tamperbox.dev/website-hosting) to see where it runs. History logs every Break it case and Heal it repair, with Revert and Reset input.
+
+### Who answers
+
+A bar split by provider, the largest first, then each provider with its share ("2 of 3") and its host names. Providers not in the catalog are named by the last two labels of their host names.
+
+### Nameservers
+
+Every nameserver with its provider.
+
+## Method
+
+### 1. The NS lookup
+
+The server asks for NS records ([RFC 1035 section 3.3.11](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.11)) at the name and keeps only answers whose owner is that name. NS records live at a zone's apex: [RFC 1034 section 4.2](https://www.rfc-editor.org/rfc/rfc1034#section-4.2) describes the zone as the unit of delegation, with its NS records marking the cut. An ordinary name inside a zone therefore has none.
+
+### 2. Finding the zone
+
+When the name has no NS records the server asks for its SOA record ([RFC 1035 section 3.3.13](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.13)). A recursive resolver returns the SOA of the enclosing zone in the answer or authority section, which names the zone without guessing from the public suffix list. The page says "No NS records at www.example.com." and Heal it offers "Look up example.com", saying whether the zone came from the SOA or is just the immediate parent.
+
+### 3. Naming the provider
+
+Each nameserver host name is matched against 29 provider patterns: Cloudflare (`*.ns.cloudflare.com`), Amazon Route 53 (`ns-N.awsdns-N.com|net|org|co.uk`), Google Cloud DNS, Azure DNS, GoDaddy (`*.domaincontrol.com`), Namecheap (`*.registrar-servers.com`), NS1 (`*.nsone.net`), DNSimple, DigitalOcean, Akamai Edge DNS (`*.akam.net`), UltraDNS, Oracle Dyn, Hetzner, OVHcloud, Gandi, Porkbun, Vercel, Wix, Squarespace, Hostinger, Network Solutions, Hurricane Electric, Linode, Name.com, IONOS, Bluehost, Hover, Gcore and deSEC. A host named inside the zone itself (`ns1.example.com` for `example.com`) is self-hosted. Anything else is named by its last two labels and marked as not in the catalog.
+
+### 4. Redundancy
+
+One nameserver is a failure. [RFC 1034 section 4.1](https://www.rfc-editor.org/rfc/rfc1034#section-4.1) is direct about it: "By administrative fiat, we require every zone to be available on at least two servers". [RFC 2182 section 5](https://www.rfc-editor.org/rfc/rfc2182#section-5) recommends more, on separate networks, so that no single failure takes the zone away. Two or more nameservers pass.
+
+### 5. More than one provider
+
+Nameservers at more than one provider are a check, not a failure. Resolvers choose among all listed nameservers, so each must serve the same records. That is a supported design when the providers are kept in sync (zone transfers or an API), and the classic symptom of a migration where the old provider's nameservers were never removed. The finding names both providers and asks you to compare their answers before changing delegation.
+
+### 6. Self-hosted and unknown
+
+Self-hosted nameservers are informational: they work, but the registrar must hold glue records, the addresses of nameservers named inside the zone they serve ([RFC 1034 section 4.2.1](https://www.rfc-editor.org/rfc/rfc1034#section-4.2.1)), and the glue must match. Nameservers not in the catalog are informational too: the provider is named by the domain its nameservers belong to.
+
+## Standards and conformance
+
+| Specification | Sections used | How the tool applies them | Where it stops |
+| --- | --- | --- | --- |
+| [RFC 1034](https://www.rfc-editor.org/rfc/rfc1034), Domain Concepts | [4.1](https://www.rfc-editor.org/rfc/rfc1034#section-4.1) two servers, [4.2](https://www.rfc-editor.org/rfc/rfc1034#section-4.2) zones and cuts, [4.2.1](https://www.rfc-editor.org/rfc/rfc1034#section-4.2.1) glue | A single nameserver fails; NS records are read at the apex only; self-hosted servers prompt a glue check | The parent zone's delegation and glue are not queried; the NS set is the zone's own as a resolver returns it |
+| [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035), Domain Implementation | [3.3.11](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.11) NS, [3.3.13](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.13) SOA | NS records read; SOA used to find the enclosing zone | Serial numbers and timers in the SOA are not compared between providers |
+| [RFC 2182](https://www.rfc-editor.org/rfc/rfc2182), Selection and Operation of Secondary DNS Servers | [5](https://www.rfc-editor.org/rfc/rfc2182#section-5) | Explains why two is the minimum, not the target | Network diversity of the servers is not measured |
+
+## Finding reference
+
+| Finding | Severity | What it means | Fix |
+| --- | --- | --- | --- |
+| Only one nameserver | FAIL | One failure takes the whole zone offline ([RFC 1034 section 4.1](https://www.rfc-editor.org/rfc/rfc1034#section-4.1)) | Add the second nameserver your provider lists, at the registrar and in the zone |
+| N nameservers | PASS | Enough to survive one failing | |
+| N providers answer for this zone | CHECK | Resolvers may get answers from either; a stale copy is served without error | Confirm both are intended and in sync, or remove the old provider at the registrar |
+| Self-hosted nameservers | INFO | The registrar's glue must match the servers' addresses ([RFC 1034 section 4.2.1](https://www.rfc-editor.org/rfc/rfc1034#section-4.2.1)) | Check the glue at the registrar |
+| N nameservers not in the catalog | INFO | The provider is named by its domain | None |
+| X has no NS records of its own | INFO | The name is inside a zone; that zone's nameservers serve it | Look up the zone (Heal it) |
+
+## Guide
+
+### Add a second nameserver
+
+1. In the DNS provider's dashboard, find the full list of nameservers for the zone (most give two to four).
+2. At the registrar, set the delegation to all of them.
+3. Make sure the zone's own NS records list the same set.
+4. Confirm: `dig +short NS example.com` lists them all, and `dig +trace example.com` shows the same set at the parent. Then check here again.
+
+### Two providers
+
+1. Decide whether both should serve the zone.
+2. If yes, compare their answers directly: `dig +short SOA example.com @ns1.provider-a.net` and `@ns1.provider-b.net`; the serials should match after every change.
+3. If no, remove the old provider's nameservers at the registrar, wait for the parent TTL (often a day or two), then delete the old zone.
+4. Check here again: one provider remains.
+
+### Moving to a new DNS provider
+
+Copy every record to the new provider first, lower the TTLs, then change the delegation at the registrar. Keep the old zone serving the same records until the parent TTL has passed. Turning off DNSSEC first, or adding the new provider's key, avoids a validation failure during the move; the [DNSSEC Checker](https://tamperbox.dev/dnssec-checker) shows the chain.
+
+### Self-hosted nameservers
+
+Register the nameserver host names at the registrar with their addresses (glue), and check that `dig +short A ns1.example.com` returns the same addresses.
+
+### Break it cases
+
+| Case | What it loads | What it shows |
+| --- | --- | --- |
+| One nameserver | Your first nameserver alone, as an NS record | The single-nameserver failure |
+| DNS records | Two pasted NS records at one provider | Pasted record parsing |
+| Self-hosted | Two NS records named inside your zone | The self-hosted reading |
+| Not in the catalog | Two nameservers at an unknown provider | The not-in-catalog reading |
+| A subdomain | `www.` plus your domain | No NS records, and Heal it to the zone |
+
+## Worked example
+
+The page opens on `harbor-supply.example`, answered in the browser. Its NS records are `ivy.ns.cloudflare.com`, `rob.ns.cloudflare.com` and `ns-1204.awsdns-22.org`.
+
+**Cloudflare, plus 1 Amazon Route 53 nameserver.** Three nameservers pass the redundancy rule; "2 providers answer for this zone" is the check, the shape a migration from Route 53 to Cloudflare leaves when the old nameserver is not removed. Take it further hands `harbor-supply.example` to the DNSSEC and WHOIS tools, which answer their own samples. Replace the sample with your own domain and every section, card and link is rewritten for it.
+
+## For agents
+
+The Tamperbox MCP server has a `dns-provider` operation. Call it with the domain; it reads the NS records (finding the zone through SOA when needed), groups the nameservers by provider with its own server-side patterns, and lists unknown nameservers separately. Keep these with any conclusion:
+
+- Nameserver patterns identify the authoritative DNS service, not the registrar, the website host or the CDN.
+- Custom nameserver names and resellers can hide the provider.
+- Multiple providers can be deliberate; compare their answers before calling it a fault.
+
+See [Connect an MCP client](/mcp/connect/) and [Security and privacy](/reference/security/).
+
+## Limits
+
+- One recursive resolver at one moment; the parent's delegation can differ after a change.
+- The nameservers are not queried, so a server that does not answer, or answers differently, is not detected.
+- Providers are recognised by host name only.
+- Nothing is stored.
+
+## References
+
+- [RFC 1034, Domain Names: Concepts and Facilities](https://www.rfc-editor.org/rfc/rfc1034): sections 4.1, 4.2 and 4.2.1.
+- [RFC 1035, Domain Names: Implementation and Specification](https://www.rfc-editor.org/rfc/rfc1035): sections 3.3.11 (NS) and 3.3.13 (SOA).
+- [RFC 2182, Selection and Operation of Secondary DNS Servers](https://www.rfc-editor.org/rfc/rfc2182): section 5.
+- [RFC 9471, DNS Glue Requirements in Referral Responses](https://www.rfc-editor.org/rfc/rfc9471), for how resolvers use glue.
+- [DNSSEC Checker](https://tamperbox.dev/dnssec-checker), for the signatures the provider publishes.

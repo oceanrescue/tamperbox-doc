@@ -1,0 +1,198 @@
+---
+title: CDN and Proxy Detector
+description: How the detector checks a site three independent ways, through its CNAME chain, the network that owns its addresses and its response headers, when it calls a CDN certain, probable or absent, and what the headers it lets through reveal about the origin.
+updated: 2026-10-20
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and repair guide for the Tamperbox CDN and Proxy Detector, which follows a name's CNAME chain through public DNS, asks a public IP-to-ASN service who announces each address, fetches one HTTPS response, and compares the three lanes against signatures for 11 CDNs and proxies, plus the cache status and origin headers the edge passes through. Pasted headers are read in the browser.
+prerequisites:
+  - A domain, or the response headers of a page to paste
+outputs:
+  - A verdict (behind a CDN, probably, two CDNs or none), three evidence lanes, the cache status and origin hints, the response headers with the ones that matched marked, and findings with fixes
+limitations:
+  - A proxy can hide every trace and a name can use a CDN's addresses without a CNAME; absence of a signature is not proof; one view from one place at one moment
+---
+
+The tool page is [tamperbox.dev/cdn-detector](https://tamperbox.dev/cdn-detector). It opens on `www.harbor-supply.example`, a sample name on the reserved `.example` zone that runs through a CDN, with documentation addresses standing in for real networks. This page is the long version: the three kinds of evidence the detector reads, how it weighs them, what each finding means and how to confirm it yourself.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> a domain is sent to the Tamperbox server, which follows its CNAME chain and looks up its A and AAAA records through a public DNS resolver, asks a public IP-to-ASN service who announces each address, and makes one HTTPS GET for the home page. The signatures are matched in your browser. Pasted headers never leave the browser. The sample is answered in the browser. Nothing is stored.</div>
+
+## What the tool answers
+
+1. **Does the name point at a CDN?** The CNAME chain, read against each CDN's host-name patterns.
+2. **Do its addresses belong to a CDN?** The network that announces each address.
+3. **Do its responses carry a CDN's headers?** Request ids, cache headers and server names each CDN adds.
+4. **Do the three agree?** Agreement is what makes a verdict firm.
+5. **What shows through?** The cache status of the response, and headers the edge passes on from the server behind it.
+
+It does not attempt to find the origin's address and does not test whether the origin can be reached around the CDN.
+
+## Inputs
+
+### A domain
+
+`www.example.com`, or a full address pasted from the address bar, which becomes the host name in the box. The three lookups run when you stop typing or on Enter. The name you enter is the name checked; when it redirects, the headers are those of its own first response, and Heal it offers to check the destination instead.
+
+### Pasted response headers
+
+Text with an HTTP status line, or with `name: value` lines, is read as headers in the browser; only the headers lane is filled. This is the output of `curl -sI https://example.com/` or a copy from the browser's network panel. A later status line (after a redirect) starts the list again, so the last response wins. A line starting with a URL scheme is not mistaken for a header. "No headers found" is the error when nothing parses.
+
+### Files
+
+A `.txt` file dropped on the page or opened with Add a file is read in the browser.
+
+## Reading the result
+
+### Verdict and chips
+
+"Behind Cloudflare: DNS, the network and the headers agree." when every available lane points at the same CDN; "Probably Fastly:" when only some do; "Two CDNs in the path:" when a second CDN has two or more signals; "No CDN found." otherwise. One chip per lane says which CDN it points to, or "no CDN".
+
+### Findings, Take it further, History
+
+Findings are worst first, passes folded. Take it further hands the first address to the [ASN Lookup](https://tamperbox.dev/asn-lookup), and, when a CDN was found, the host to the [SSL Certificate Checker](https://tamperbox.dev/ssl-checker) (the certificate the edge serves), the [HTTP/3 Checker](https://tamperbox.dev/http3-checker) and the [Security Headers Grader](https://tamperbox.dev/security-headers). History logs every Break it case and Heal it repair, with Revert and Reset input.
+
+### Evidence
+
+Three lanes side by side: DNS (the CNAME chain), Network (who owns the addresses) and Response headers (what the server added). Each lists what it observed, with an arrow to the CDN it points to, and a badge: pass when it agrees with the verdict, check when it points elsewhere, info when it shows nothing. A lane that was not checked (pasted headers, a failed fetch) says why.
+
+### Behind the CDN
+
+The cache status, the age in cache, and each origin hint: a header the server behind the CDN set and the edge passed on. With no CDN, the plain `Server` value is shown.
+
+### Response headers
+
+Every header, with the ones that matched a signature or an origin hint marked.
+
+## Method
+
+### 1. The DNS lane
+
+The name's CNAME records are followed up to eight steps ([RFC 1034 section 3.6.2](https://www.rfc-editor.org/rfc/rfc1034#section-3.6.2), [RFC 1035 section 3.3.1](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.1)). Each target is tested against the CDN host-name patterns: `.cdn.cloudflare.net`, `.fastly.net` and `.fastlylb.net`, `.akamaiedge.net`, `.edgekey.net`, `.edgesuite.net` and `.akamaized.net`, `.cloudfront.net`, `.b-cdn.net`, `.azurefd.net` and `.azureedge.net`, `.vercel-dns.com`, `.netlify.app` and `.incapdns.net`. Pointing a name at a CDN's host name with a CNAME is how most CDNs are configured; a name at the zone apex usually cannot have a CNAME, so its DNS lane is often empty even when it is behind a CDN.
+
+### 2. The network lane
+
+The A and AAAA records at the end of the chain are looked up, and each address's announcing network is read from the [Team Cymru IP to ASN mapping service](https://www.team-cymru.com/ip-asn-mapping). An owner that matches a CDN in the network catalog (Cloudflare, Fastly, Akamai, Amazon CloudFront, Bunny CDN, Imperva, Sucuri, StackPath) is a signal for that CDN. CloudFront addresses are announced by Amazon's general network, so they usually show as Amazon Web Services and add no network signal.
+
+### 3. The headers lane
+
+One HTTPS GET for the home page, without following redirects for this lane. Each CDN has header signatures, a header name and optionally a value pattern:
+
+| CDN | Header signatures |
+| --- | --- |
+| Cloudflare | `cf-ray`, `server: cloudflare`, `cf-cache-status` |
+| Fastly | `x-served-by` with `cache-`, `x-fastly-request-id`, `fastly-debug-digest`, `via` with `varnish` |
+| Akamai | `x-akamai-transformed`, `akamai-grn`, `server: AkamaiGHost`, `x-akamai-request-id` |
+| Amazon CloudFront | `x-amz-cf-id`, `x-amz-cf-pop`, `via` or `x-cache` naming CloudFront |
+| Bunny CDN | `server: BunnyCDN`, `cdn-requestid` |
+| Azure Front Door | `x-azure-ref`, `x-fd-healthprobe` |
+| Google Cloud CDN | `via` naming Google |
+| Vercel | `x-vercel-id`, `server: Vercel` |
+| Netlify | `x-nf-request-id`, `server: Netlify` |
+| Sucuri | `x-sucuri-id`, `server` naming Sucuri |
+| Imperva | `x-iinfo`, `x-cdn` naming Imperva or Incapsula |
+
+`Via` is the standard header for intermediaries: [RFC 9110 section 7.6.3](https://www.rfc-editor.org/rfc/rfc9110#section-7.6.3) says "A proxy MUST send an appropriate Via header field" in each message it forwards. Many CDNs do not, or replace it, which is why vendor headers carry most of the evidence. `Server` is defined in [RFC 9110 section 10.2.4](https://www.rfc-editor.org/rfc/rfc9110#section-10.2.4); an edge often rewrites it with its own name.
+
+### 4. Weighing the lanes
+
+Signals are tallied per CDN and ranked by how many lanes agree, then by how many signals there are. The top CDN is the verdict. The available lanes are the ones that could be checked: headers only for pasted input; DNS (when there is an alias), network and headers (unless the fetch failed) for a domain.
+
+- Every available lane points at the top CDN: "Behind X" (pass).
+- Some do: "Probably X" (check), with the finding "The signals disagree". A stripped header or an apex name without a CNAME are the usual innocent causes.
+- A second CDN has two or more signals: "Two CDNs in the path", with "Signals for Y too". One normally sits in front of the other.
+- Nothing matched: "No CDN found." A proxy can remove every trace, so this is the absence of evidence.
+
+### 5. Cache status and age
+
+The cache status is read from `cf-cache-status`, then `x-cache`, then `x-vercel-cache`; a value containing "hit" means the response came from the cache. `Age` ([RFC 9111 section 5.1](https://www.rfc-editor.org/rfc/rfc9111#section-5.1)) is the edge's estimate, in seconds, of how long ago the response was generated at the origin.
+
+### 6. Origin hints
+
+Some headers are set by the server behind the CDN and passed through: `x-amz-request-id` and `x-amz-id-2` (Amazon S3), `x-goog-generation` (Google Cloud Storage), `x-ms-request-id` (Azure Storage), `x-github-request-id` (GitHub Pages), `x-shopid` (Shopify), `x-wix-request-id` (Wix), `x-pantheon-styx-hostname` (Pantheon), `x-kinsta-cache` (Kinsta) and the value of `x-powered-by`. Behind a CDN the first one becomes "The origin shows through", with the advice to strip origin headers at the edge.
+
+## Standards and conformance
+
+| Specification | Sections used | How the tool applies them | Where it stops |
+| --- | --- | --- | --- |
+| [RFC 1034](https://www.rfc-editor.org/rfc/rfc1034), [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035) | [1034 3.6.2](https://www.rfc-editor.org/rfc/rfc1034#section-3.6.2), [1035 3.3.1](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.1) | CNAME chain followed to the canonical name, eight steps at most | One recursive resolver; geographic answers elsewhere differ |
+| [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110), HTTP Semantics | [7.6.3](https://www.rfc-editor.org/rfc/rfc9110#section-7.6.3) Via, [10.2.4](https://www.rfc-editor.org/rfc/rfc9110#section-10.2.4) Server | Via and Server values tested against CDN patterns | A missing Via is not reported as a violation; many CDNs omit it |
+| [RFC 9111](https://www.rfc-editor.org/rfc/rfc9111), HTTP Caching | [5.1](https://www.rfc-editor.org/rfc/rfc9111#section-5.1) Age | Shown as the age in cache | Freshness is not computed |
+| [RFC 9211](https://www.rfc-editor.org/rfc/rfc9211), Cache-Status | [2](https://www.rfc-editor.org/rfc/rfc9211#section-2) | Not read: the tool reads the vendor cache headers most CDNs still send | A CDN that only sends `Cache-Status` shows no cache status here |
+
+The vendor headers in the signature table are each CDN's own documented or observed behaviour, not standards.
+
+## Finding reference
+
+| Finding | Severity | What it means | Fix |
+| --- | --- | --- | --- |
+| The signals disagree | CHECK | Only some lanes point at the CDN; the name may resolve around it, or headers were stripped | Check the DNS record is proxied; lock the origin to the CDN |
+| The origin shows through: X | INFO | A header names the server behind the CDN | Strip origin headers at the edge |
+| Signals for X too | INFO | A second CDN leaves two or more signals; one is layered in front of the other | Remove a leftover CDN configuration if it is not deliberate |
+| X redirects to Y | INFO | The signals are for the name you entered; the page visitors land on may be served differently | Heal it: check Y instead |
+| The site was not fetched | INFO | The headers lane is empty; the verdict rests on DNS and the network | Paste the headers, or fix HTTPS on the host |
+| No CDN signature | INFO | No lane matched a CDN | None needed; consider a CDN if visitors are far away |
+
+## Guide
+
+### Confirm a CDN yourself
+
+1. DNS: `dig +short www.example.com CNAME` shows the alias.
+2. Network: `dig +short www.example.com A`, then `dig +short TXT <reversed address>.origin.asn.cymru.com` for the announcing AS.
+3. Headers: `curl -sI https://www.example.com/` shows the edge's headers; repeat it to watch the cache status turn from MISS to HIT.
+
+### The signals disagree
+
+1. Read which lane is missing. A missing DNS lane on the bare domain is usually harmless: apex names use flattened records.
+2. A missing network lane means the name resolves to addresses outside the CDN. In the CDN's dashboard, check the record is proxied rather than DNS only.
+3. A missing headers lane means the edge strips its own headers, or the fetch reached the origin.
+4. Check again; all available lanes should agree.
+
+### The origin shows through
+
+Add a response header rule at the edge that removes the origin's headers (for Amazon S3, `x-amz-request-id` and `x-amz-id-2`), and restrict the origin: an origin access policy for storage, signed requests, or an allow list of the CDN's ranges. Confirm with `curl -sI` that the headers are gone.
+
+### Two CDNs
+
+Find which one visitors reach: the DNS lane's CNAME names the outer one. If the inner one is left over from a migration, remove its configuration.
+
+### Break it cases
+
+| Case | What it loads | What it shows |
+| --- | --- | --- |
+| Fastly, Akamai, CloudFront headers | Fixed header sets | Each CDN's header signatures |
+| Two CDNs | Cloudflare and CloudFront headers together | The two-CDN verdict |
+| No CDN | Plain nginx headers | No CDN found |
+| The bare domain | Your name without `www.` | A name that is often served without the CDN |
+| CDN headers stripped | Your headers with every CDN signature removed | What a proxy that hides itself looks like |
+
+## Worked example
+
+The page opens on `www.harbor-supply.example`, answered in the browser. Its CNAME points at `www.harbor-supply.example.cdn.cloudflare.net`, its addresses are labelled Cloudflare, and its headers carry `server: cloudflare`, `cf-ray` and `cf-cache-status: HIT` with `age: 1834`, plus `x-amz-request-id` from the storage behind it.
+
+**Behind Cloudflare: DNS, the network and the headers agree.** The response came from the cache. "The origin shows through: Amazon S3" is the one thing to tidy. The Break it case "The bare domain" loads `harbor-supply.example`, which shows no CDN and redirects to www; Heal it checks www instead. Replace the sample with your own domain and every section, card and link is rewritten for it.
+
+## For agents
+
+The Tamperbox MCP server has a `cdn-detector` operation. Call it with the domain; it compares DNS aliases, network ownership and the headers of a HEAD request on the submitted host, with its own server-side signatures, and reports `detected: true` or `null`, never `false`. Keep these with any conclusion:
+
+- Every signal can be hidden or spoofed; no match means unknown, not "no CDN".
+- Headers are inspected on the submitted host without following its redirects.
+- DNS hosting alone is not a proxy signal.
+
+See [Connect an MCP client](/mcp/connect/) and [Security and privacy](/reference/security/).
+
+## Limits
+
+- Signatures cover the 11 CDNs in the catalog; others show as no CDN.
+- One resolver and one fetch, from one place at one moment; anycast and geographic DNS differ elsewhere.
+- No attempt is made to find or reach the origin.
+- Pasted headers fill only the headers lane.
+- Nothing is stored.
+
+## References
+
+- [RFC 1034](https://www.rfc-editor.org/rfc/rfc1034) and [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035): section 3.6.2 and section 3.3.1 (CNAME).
+- [RFC 9110, HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110): sections 7.6.3 (Via) and 10.2.4 (Server).
+- [RFC 9111, HTTP Caching](https://www.rfc-editor.org/rfc/rfc9111): section 5.1 (Age).
+- [RFC 9211, The Cache-Status HTTP Response Header Field](https://www.rfc-editor.org/rfc/rfc9211): section 2, the standard successor to vendor cache headers.
+- [Team Cymru IP to ASN mapping](https://www.team-cymru.com/ip-asn-mapping).
+- [Website Hosting Checker](https://tamperbox.dev/website-hosting), which compares the bare domain and www.

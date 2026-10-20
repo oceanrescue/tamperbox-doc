@@ -42,6 +42,12 @@ export default defineConfig({
           { label: 'MTA-STS & TLS-RPT Checker', link: '/tools/mta-sts-checker/' },
           { label: 'BIMI Record Checker', link: '/tools/bimi-checker/' },
           { label: 'Email Header Analyzer', link: '/tools/email-header-analyzer/' },
+          { label: 'Website Technology Detector', link: '/tools/website-technology/' },
+          { label: 'Website Hosting Checker', link: '/tools/website-hosting/' },
+          { label: 'CDN and Proxy Detector', link: '/tools/cdn-detector/' },
+          { label: 'DNS Provider Lookup', link: '/tools/dns-provider/' },
+          { label: 'SaaS Stack Finder', link: '/tools/saas-stack/' },
+          { label: 'Subdomain Finder', link: '/tools/subdomain-finder/' },
         ] },
         { label: 'MCP server', items: [
           { label: 'Overview', link: '/mcp/' },

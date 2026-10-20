@@ -1,0 +1,172 @@
+---
+title: Subdomain Finder
+description: How the finder lists every name on a publicly logged certificate for a domain, what Certificate Transparency can and cannot show, how names that look internal are flagged, and what to do about each finding.
+updated: 2026-10-20
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and repair guide for the Tamperbox Subdomain Finder, which searches the public Certificate Transparency logs through crt.sh from the Tamperbox server (or reads pasted crt.sh JSON in the browser), lists every name under the domain with its earliest validity start, latest expiry, certificate count and issuers, and flags names that look like internal services, wildcard names and names with recent first certificates.
+prerequisites:
+  - A domain, or crt.sh JSON (or any text with names in it) to paste
+outputs:
+  - A verdict with the subdomain count, an overview, a filterable table of names with validity and issuers, and findings with fixes
+limitations:
+  - Only names that appeared on a publicly logged certificate are listed; a wildcard hides the names under it; a name stays in the logs after its server is gone; nothing is resolved or probed
+---
+
+The tool page is [tamperbox.dev/subdomain-finder](https://tamperbox.dev/subdomain-finder). It opens on `harbor-supply.example`, a sample domain on the reserved `.example` zone, with a fixture standing in for the certificate logs: 19 names, among them staging, Jenkins, Grafana and a VPN. This page is the long version: where the names come from, how each column is computed, which names are flagged and why, and what to do about it.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> a domain is sent to the Tamperbox server, which asks the public crt.sh search for every logged certificate naming the domain or a name under it; crt.sh therefore sees the domain. The rows are read and assessed in your browser. Pasted JSON or text never leaves the browser. The sample is answered in the browser. Nothing is stored.</div>
+
+## What the tool answers
+
+1. **Which names under this domain have had a public certificate?** Every DNS name on a logged certificate, wildcards included.
+2. **Which of them still have a valid one?** The latest expiry of any certificate naming each one.
+3. **Which look like they should not be public?** Names that usually point at development, administration or internal tooling.
+4. **When did each first appear, and who issued for it?** The earliest validity start, the certificate count and the issuers.
+
+It does not resolve the names, does not connect to them and does not guess names that never had a certificate.
+
+## Inputs
+
+### A domain
+
+`example.com`, or a full address pasted from the address bar, which becomes the domain. The search runs when you stop typing or on Enter. The server queries crt.sh for `%.example.com`, which matches the domain and every name under it.
+
+### Pasted crt.sh JSON
+
+The JSON array a crt.sh search returns with `output=json`, or one object from it. Each row's `name_value` lists the names on that certificate, one per line; `not_before`, `not_after`, `issuer_name` and `id` are read when present. The domain is inferred as the two-label suffix most names share, which suits `example.com` but not `example.co.uk`; enter the domain to be exact.
+
+### Any other text
+
+Text that is not JSON is reported as "Not crt.sh JSON: this is plain text with N names in it." Heal it can keep those names as rows, without dates or issuers. Text that starts like JSON but does not parse is "Not readable: Broken JSON at character N."
+
+### Files
+
+A `.json` or `.txt` file up to 5 MiB, dropped on the page or opened with Add a file, is read in the browser.
+
+## Reading the result
+
+### Verdict and chips
+
+"16 subdomains of example.com, 6 that look internal." with the number that still have a valid certificate. Other verdicts: "No names", "No subdomains in these results" (only the bare domain), and "Only wildcards". Chips count the names, the internal-looking ones and the wildcards.
+
+### Findings, Take it further, History
+
+Findings worst first, passes folded. Take it further hands the first internal-looking name to the [Website Hosting Checker](https://tamperbox.dev/website-hosting) to see where it points, and, for a real domain, the first internal-looking name that still has a valid certificate to the [SSL Certificate Checker](https://tamperbox.dev/ssl-checker) and, with port 443, to [TCP Ping](https://tamperbox.dev/tcp-ping). History logs every Break it case and Heal it repair, with Revert and Reset input.
+
+### Overview
+
+Names, valid now, look internal, wildcards, and the issuing organisations.
+
+### Names in certificate logs
+
+A table of every name, filterable by text and by view (All, Valid now, Look internal), with its status (Valid or Expired), first seen, last valid, certificate count and issuer. Copy names copies the names in the current view. Names are sorted by the labels nearest the domain, so `shop`, `shop.eu` and `api.shop` sit together; long names break only after a dot.
+
+## Method
+
+### 1. Where the names come from
+
+Certificate Transparency is an append-only public record of issued TLS certificates. [RFC 6962 section 3](https://www.rfc-editor.org/rfc/rfc6962#section-3) describes how logs accept certificates and precertificates and return a signed promise to include them; browsers require that promise for publicly trusted certificates, so in practice every such certificate is logged. RFC 6962 is the version deployed logs implement; [RFC 9162](https://www.rfc-editor.org/rfc/rfc9162) is its successor and obsoletes it on paper. crt.sh is a public search over those logs. The names on a certificate are its subject alternative names ([RFC 5280 section 4.2.1.6](https://www.rfc-editor.org/rfc/rfc5280#section-4.2.1.6)), which is what `name_value` lists.
+
+### 2. The server's search
+
+The server requests `https://crt.sh/?q=%25.<domain>&output=json`, reads at most 2 MiB, checks that the answer is an array of rows with name values, and returns it. A crt.sh error or rate limit becomes "Certificate search is temporarily unavailable. Try again later." Names under `.example`, `.test`, `.invalid`, `.localhost` and other reserved names are refused by the server; the sample never reaches it.
+
+### 3. Reading the rows
+
+For each row and each name on it, a name is kept when it is the domain, ends with `.` plus the domain, or is `*.` plus the domain. Per name:
+
+- **Certificates**: the number of distinct certificates (by id) that list it.
+- **First seen**: the earliest `not_before`. This is when a certificate became valid, not when the log saw it.
+- **Last valid**: the latest `not_after`. The name is "Valid" when that is in the future.
+- **Issuers**: the organisation and common name from each issuer, for example `Let's Encrypt · R11`.
+- **Wildcard**: the name starts with `*.`.
+
+### 4. Names that look internal
+
+A name is flagged when a label of its subdomain part is one of: `dev`, `devel`, `staging`, `stage`, `stg`, `test`, `testing`, `qa`, `uat`, `preprod`, `internal`, `intranet`, `admin`, `vpn`, `jenkins`, `gitlab`, `git`, `jira`, `grafana`, `kibana`, `prometheus`, `sonar`, `vault`, `backup`, `old`, `legacy`, `beta` or `sandbox`, alone or joined by a dot, a hyphen or digits (`dev-api`, `stage2`). The words are about the name, not the service: a flagged name may be a perfectly public status page, and a dangerous service can have a harmless name. Wildcards are counted separately and not flagged.
+
+### 5. Findings
+
+- Flagged names, excluding wildcards: "N names suggest internal services" (check), naming the first six.
+- Wildcard names: "N wildcard certificate names" (info). A wildcard certificate covers exactly one label below it ([RFC 9525 section 6.3](https://www.rfc-editor.org/rfc/rfc9525#section-6.3): the wildcard must be the entire leftmost label and matches one label), so the hosts under it never appear by name.
+- Names whose earliest validity start is within the last 30 days: "N names with recent validity starts" (info). It is a validity date, not the moment the log recorded it.
+- No names at all: "No names in the logs" (info).
+
+## Standards and conformance
+
+| Specification | Sections used | How the tool applies them | Where it stops |
+| --- | --- | --- | --- |
+| [RFC 6962](https://www.rfc-editor.org/rfc/rfc6962), Certificate Transparency | [3](https://www.rfc-editor.org/rfc/rfc6962#section-3) | Treats the logs as the public record of issued certificates | Logs are read through crt.sh; inclusion proofs and log signatures are not verified |
+| [RFC 9162](https://www.rfc-editor.org/rfc/rfc9162), Certificate Transparency 2.0 | Whole document | Cited as the successor that obsoletes RFC 6962 | Deployed logs and crt.sh still follow RFC 6962 |
+| [RFC 5280](https://www.rfc-editor.org/rfc/rfc5280), X.509 profile | [4.2.1.6](https://www.rfc-editor.org/rfc/rfc5280#section-4.2.1.6) | Names come from the subject alternative names crt.sh extracts | Certificates are not parsed here |
+| [RFC 9525](https://www.rfc-editor.org/rfc/rfc9525), Service Identity in TLS | [6.3](https://www.rfc-editor.org/rfc/rfc9525#section-6.3) | Explains that a wildcard name covers one label and hides the names under it | Obsoletes [RFC 6125](https://www.rfc-editor.org/rfc/rfc6125) |
+| [RFC 8659](https://www.rfc-editor.org/rfc/rfc8659), CAA | [4](https://www.rfc-editor.org/rfc/rfc8659#section-4) | Cited in the guide for limiting which authorities may issue | CAA records are not read here |
+
+## Finding reference
+
+| Finding | Severity | What it means | Fix |
+| --- | --- | --- | --- |
+| N names suggest internal services | CHECK | Anyone can find these names in the logs; scanners do so within minutes of issuance | Confirm each should be public; put the rest behind a VPN or access proxy |
+| N wildcard certificate names | INFO | Names under the wildcard are not listed ([RFC 9525 section 6.3](https://www.rfc-editor.org/rfc/rfc9525#section-6.3)) | Keep the wildcard's private key on as few servers as possible |
+| N names with recent validity starts | INFO | Certificates for these names became valid in the last 30 days | Confirm you requested them |
+| No names in the logs | INFO | No logged certificate names this domain | Check the spelling; a private CA does not log |
+| Broken JSON at character N | FAIL | The pasted JSON cannot be read, usually cut off | Copy the whole response again |
+| Expected crt.sh JSON | INFO | Plain text; names can be kept without dates | Heal it keeps the names |
+
+## Guide
+
+### Internal names in the logs
+
+1. For each flagged name, decide whether it should be reachable from the internet. `dig +short staging.example.com` shows whether it still resolves; Take it further opens the hosting check with it.
+2. For internal tools, require a login before anything else: a VPN, or an access proxy that authenticates users before passing requests on.
+3. If you want internal names kept out of the logs, use a wildcard certificate for that area, or a private certificate authority for machines that only internal clients reach.
+4. Remove DNS records for services that are gone, so an old name cannot be claimed by someone else on a platform that still points there.
+
+### Watch for certificates you did not request
+
+Publish CAA records ([RFC 8659 section 4](https://www.rfc-editor.org/rfc/rfc8659#section-4)) naming the authorities you use, and check the logs after each issuance. `curl -s 'https://crt.sh/?q=%25.example.com&output=json'` reproduces the search; the newest rows are what to compare with your requests.
+
+### Confirm a name still exists
+
+`dig +short name.example.com A` and `dig +short name.example.com AAAA`. A name with no record and an expired certificate is history; a name that resolves and has a valid certificate is a live service.
+
+### Break it cases
+
+| Case | What it loads | What it shows |
+| --- | --- | --- |
+| Not JSON | Your names as addresses in a plain-text note | The plain-text reading and Heal it's "Keep the names" |
+| Empty result | `[]` | No names |
+| Broken JSON | Your rows, cut off before the end | The parse error and its position |
+| Wildcards only | Your wildcard rows alone | Only wildcards |
+
+## Worked example
+
+The page opens on `harbor-supply.example`, answered in the browser from a fixture of 19 names. Validity is computed against today's date, so the sample's certificates age like real ones.
+
+**16 subdomains of harbor-supply.example, 6 that look internal.** The internal-looking names are `dev-api`, `grafana`, `jenkins`, `old`, `staging` and `vpn`; `*.harbor-supply.example` and `*.staging.harbor-supply.example` are wildcards. `grafana` and `old` show expired certificates, a reminder that the logs keep history; the other names show whether their latest certificate is still valid on the day you look. Take it further opens the hosting check with `dev-api.harbor-supply.example`, which the sample zone answers with no address: a name in the logs that no longer resolves. Replace the sample with your own domain and every section, card and link is rewritten for it.
+
+## For agents
+
+The Tamperbox MCP server has a `subdomain-finder` operation. Call it with the domain and an optional `limit` (default 200, at most 1000); it returns the names, the wildcards separately, the total, and whether the list was truncated. Keep these with any conclusion:
+
+- Certificate Transparency is historical and incomplete; names may be expired, unused or no longer controlled by the domain owner.
+- Wildcards do not prove that concrete hosts exist.
+- No DNS lookups, HTTP probes, brute force or port scans are made on the names; do not ask an agent to scan them without the owner's permission.
+
+See [Connect an MCP client](/mcp/connect/) and [Security and privacy](/reference/security/).
+
+## Limits
+
+- Only names that were on a publicly logged certificate appear; private CAs and plain HTTP sites leave no trace.
+- crt.sh can be slow or unavailable; the page says so rather than showing an empty list.
+- Pasted rows infer the domain from the last two labels.
+- Flags are words in names, not evidence about the service.
+- Nothing is stored.
+
+## References
+
+- [RFC 6962, Certificate Transparency](https://www.rfc-editor.org/rfc/rfc6962): section 3. Obsoleted by [RFC 9162](https://www.rfc-editor.org/rfc/rfc9162), which deployed logs have not yet adopted.
+- [RFC 5280, Internet X.509 Public Key Infrastructure Certificate and CRL Profile](https://www.rfc-editor.org/rfc/rfc5280): section 4.2.1.6.
+- [RFC 9525, Service Identity in TLS](https://www.rfc-editor.org/rfc/rfc9525): section 6.3. Obsoletes [RFC 6125](https://www.rfc-editor.org/rfc/rfc6125).
+- [RFC 8659, DNS Certification Authority Authorization (CAA) Resource Record](https://www.rfc-editor.org/rfc/rfc8659): section 4.
+- [crt.sh](https://crt.sh/), the public log search the server queries.
