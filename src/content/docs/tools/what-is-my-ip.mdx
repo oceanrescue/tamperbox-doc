@@ -126,6 +126,14 @@ Copy address puts it on the clipboard. Mention the time and whether a VPN was on
 
 Look for IPv6 in the router's WAN or internet settings (often "IPv6", "DHCPv6" or "prefix delegation"), and ask your provider whether your plan includes it. Then run the device test again.
 
+### Reading the network row
+
+The network row names the organisation that announces your address (your provider, a mobile operator, a VPN company or a cloud provider), its autonomous system number, and the country the edge associates with the connection. A VPN or private relay shows the relay operator here, which is the quickest way to tell whether the tunnel is in use. A mobile connection often shows a country or city far from you, because mobile operators route traffic through a few central gateways. None of these values locates a household: the provider holds the mapping from address to customer and releases it only through legal process.
+
+### Why the address is shared
+
+Your devices at home have private addresses ([RFC 1918, section 3](https://www.rfc-editor.org/rfc/rfc1918#section-3)), such as 192.168.1.20, that never appear on the internet. The router translates them to its one public address, so every phone and laptop at home shows the same address here. Some providers add a second translation, carrier-grade NAT, and many customers then share one public address; your router's own WAN address is then in 100.64.0.0/10 ([RFC 6598, section 4](https://www.rfc-editor.org/rfc/rfc6598#section-4)) and differs from the address on this page. With IPv6 there is usually no translation: each device has its own global address within the prefix your provider delegates, which is why the IPv6 lane can show an address no other device at home uses.
+
 ### Confirm without Tamperbox
 
 ```sh

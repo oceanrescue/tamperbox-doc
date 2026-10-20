@@ -127,6 +127,20 @@ The steps under What to do next and in the How to fix it card follow the outcome
 3. Allow the port in the device's firewall.
 4. Press Check port. Open means friends can connect; refused or no answer tell you which step to revisit.
 
+### The chain a connection has to cross
+
+A connection from the internet to a game or media server at home passes five places, and each outcome points at one of them:
+
+| Hop | What has to be right | What fails there looks like |
+| --- | --- | --- |
+| Your provider | It gives your router a public address and does not filter the port | No answer: carrier-grade NAT or an inbound block |
+| The router | A forward (or UPnP mapping) for the port and protocol, to the device's current LAN address | No answer: no forward. Refused: a forward to a device where nothing listens |
+| The device's firewall | An inbound rule allowing the port | No answer: the firewall drops it silently |
+| The service | Running, and listening on the network address or `0.0.0.0` | Refused: nothing listening, or listening only on `127.0.0.1` |
+| The application | Accepts the client after the connection | Open here, but the app still rejects players (whitelist, version, password) |
+
+Work from the service outwards: first confirm it listens on the device, then the firewall, then the router, then the provider. Each step is checked again with this tool, so you know which hop the problem was in.
+
 ### No answer even with a forward
 
 Open the router's status page and compare its WAN address with the address shown here. If they differ, or the WAN address is between 100.64.0.0 and 100.127.255.255, your provider uses carrier-grade NAT: ask for a public address, or use a tunnel service. If a VPN is on, turn it off and check again.
