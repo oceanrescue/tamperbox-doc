@@ -1,0 +1,232 @@
+---
+title: Post-Quantum TLS Checker
+description: The two handshakes the post-quantum checker makes, how it decides whether a site's TLS key exchange resists quantum computers, what each finding means, and how to put ML-KEM first on common servers.
+updated: 2026-10-20
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and configuration guide for the Tamperbox Post-Quantum TLS Checker, which runs a default-offer handshake and an ML-KEM-only handshake against a host on port 443 from the Tamperbox server (or reads pasted openssl or curl output in the browser) and reports whether the negotiated key exchange is an ML-KEM hybrid.
+prerequisites:
+  - A public host name that serves HTTPS on port 443, or openssl s_client or curl -v output to paste
+outputs:
+  - A verdict on the default-client key exchange, findings, the group's parts, both handshakes side by side, what the exchange protects, and server configuration that puts ML-KEM first
+limitations:
+  - Key exchange only, not certificate signatures; our TLS client's group offer, not a browser's; one location, port 443; a failed ML-KEM-only handshake does not prove the server lacks support
+---
+
+The tool page is [tamperbox.dev/post-quantum-checker](https://tamperbox.dev/post-quantum-checker). It opens on a sample shop whose handshakes are a fixture on the reserved `.example` zone: the server accepts ML-KEM but negotiates a classical group first. This page is the long version: what the two handshakes are, how the verdict is decided, what each finding means, and how to fix and confirm it.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> a host name is sent to the Tamperbox server, which runs two TLS handshakes on port 443 and returns what each negotiated. Pasted handshake output is read in your browser and never uploaded. Nothing is stored.</div>
+
+## What the tool answers
+
+One question, asked twice:
+
+1. **What key exchange does a client get by default?** The group the server picks when our TLS client makes an ordinary TLS 1.3 offer. This decides the verdict, because it is what protects traffic today.
+2. **Would the server use ML-KEM if that were the only choice?** A second handshake offers only the three standard hybrids. A success shows capability, which separates a server that cannot do ML-KEM from one that can but prefers a classical group.
+
+The question matters because of "harvest now, decrypt later": traffic recorded today with a classical key exchange can be decrypted once a large enough quantum computer exists. A hybrid key exchange closes that gap for new connections. Certificates are a different question: a signature only has to hold while the handshake runs, so it does not carry the same recorded-traffic risk, and this tool does not assess it.
+
+## Inputs
+
+### A host name
+
+`example.com` or `www.example.com`; a full address is reduced to its host. The check runs when you stop typing, or on Enter. `:443` is accepted and dropped. A mail port (25, 465, 587, 993, 995) is refused with the exact `openssl s_client` command to run yourself and paste, because our server checks HTTPS on port 443 only; any other port is refused with a repair that removes it.
+
+### Pasted handshake output
+
+Paste the output of `openssl s_client -connect host:443 -servername host` or `curl -v https://host/`. A multi-line paste, or text that looks like a handshake, is read as output. The page reads the group from "Negotiated TLS1.3 group", "Server Temp Key" or "Peer Temp Key", the protocol, the cipher, any TLS alert, the certificate if `-showcerts` was used, and, when the command line is included, the host (`-servername`, `-connect`) and the offered groups (`-groups`). A paste is one handshake, so it cannot show both sides of the comparison. The field takes up to 120,000 characters; a dropped file up to 128 KB.
+
+## Reading the result
+
+### Verdict and chips
+
+"Post-quantum secure.", "Not post-quantum secure." with the reason, "Post-quantum capable." when only the ML-KEM-only handshake worked, or "No TLS handshake completed." The chips show the negotiated group, the TLS version, whether ML-KEM alone was accepted, and that the certificate stays classical.
+
+### Findings
+
+One row per question, worst first: the key exchange (or the preference problem), the TLS version, the ML-KEM-only handshake, and the certificate. Passing rows fold into one line.
+
+### History and Take it further
+
+History lists what Break it replaced, with Revert and Reset input. Take it further hands values from the handshake on: the host and port to the [DANE checker](https://tamperbox.dev/dane-checker), the address the probe connected to to the [ASN lookup](https://tamperbox.dev/asn-lookup), and the host and port to [TCP ping](https://tamperbox.dev/tcp-ping), which times the connection a hybrid's larger first message rides on.
+
+### The key the probe negotiated
+
+The group broken into its parts, for example X25519 plus ML-KEM-768, each with what it resists. A classical group shows an empty post-quantum slot.
+
+### Two handshakes
+
+What each attempt offered and what came back, side by side. The default attempt reports the group the server chose; the ML-KEM-only attempt reports Accepted or Not shown.
+
+### What it protects
+
+Whether traffic recorded today could be read later, the TLS version, and the certificate's key type, with what each means.
+
+### Turn on ML-KEM, or Put ML-KEM first
+
+Configuration for nginx, Apache, Caddy, HAProxy or Go, shown when the result calls for a change.
+
+## Method
+
+### The two handshakes
+
+Both connect to the first public address of the host on port 443, send the host as SNI and offer HTTP/2 and HTTP/1.1 through ALPN.
+
+- **Default client.** The same connection the [SSL Certificate Checker](https://tamperbox.dev/ssl-checker) makes, with the probe's OpenSSL client and its default group list. In TLS 1.3 the client lists the groups it supports "ordered from most preferred to least preferred" in `supported_groups` ([RFC 9846 section 4.3.7](https://www.rfc-editor.org/rfc/rfc9846#section-4.3.7)) and sends key shares for some of them ([section 4.3.8](https://www.rfc-editor.org/rfc/rfc9846#section-4.3.8)); the server "independently selects ... an asymmetric key exchange group" ([section 4.2.1](https://www.rfc-editor.org/rfc/rfc9846#section-4.2.1)). The group reported is the server's choice for this offer. The exact offer is not reported, and it is not a browser's ClientHello.
+- **ML-KEM only.** TLS 1.3 only, offering `X25519MLKEM768:SecP256r1MLKEM768:SecP384r1MLKEM1024`, the three hybrids [RFC 10024](https://www.rfc-editor.org/rfc/rfc10024#section-7) registers. It counts as accepted only when TLS 1.3 completes, a certificate comes back and the group reported is one of the three. Anything else is "Not shown", because RFC 9846 section 4.2.1 lets a server with no overlap "abort the handshake with a "handshake_failure" or an "insufficient_security" alert", and a failure can have other causes too.
+
+The two run in parallel. If both fail, the check fails; if one fails, the result says which and why.
+
+### Classifying a group
+
+Every group name is sorted into one of five kinds, from the [IANA TLS Supported Groups registry](https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-8) and RFC 10024:
+
+| Kind | Groups | Post-quantum |
+| --- | --- | --- |
+| Hybrid | X25519MLKEM768, SecP256r1MLKEM768, SecP384r1MLKEM1024 | Yes |
+| ML-KEM alone | MLKEM512, MLKEM768, MLKEM1024 | Yes |
+| Obsolete draft | X25519Kyber768Draft00, X25519Kyber512Draft00 | No |
+| Classical | X25519, X448, P-256, P-384, P-521, ffdhe groups | No |
+| Unknown | anything else | Not classified |
+
+The obsolete drafts are named in [RFC 10024 section 7.4](https://www.rfc-editor.org/rfc/rfc10024#section-7.4), which "obsoletes these entries" and marks them "Pre-standards version of Kyber768". A hybrid combines a classical exchange with ML-KEM ([FIPS 203](https://csrc.nist.gov/pubs/fips/203/final)) so that the session key stays secret as long as either part holds, the design [RFC 9954 section 3](https://www.rfc-editor.org/rfc/rfc9954#section-3) describes. Unknown names are left unclassified rather than guessed.
+
+### How the verdict is decided
+
+The first matching rule decides:
+
+| Order | Default-client result | ML-KEM only | Verdict | Severity |
+| --- | --- | --- | --- | --- |
+| 1 | Hybrid or ML-KEM alone | any | Post-quantum secure | PASS |
+| 2 | Obsolete Kyber draft | any | Not post-quantum secure | FAIL |
+| 3 | TLS 1.2 or older | any | Not post-quantum secure | FAIL |
+| 4 | Unknown group | any | Key exchange not recognised | CHECK |
+| 5 | Classical | Accepted | Not post-quantum secure, prefers classical | FAIL |
+| 6 | Classical | Not shown | Not post-quantum secure | FAIL |
+| 7 | No group | Accepted | Post-quantum capable | CHECK |
+| 8 | No group | Not shown | No TLS handshake completed | CHECK |
+
+Rule 3 follows from the protocol: the hybrids are TLS 1.3 named groups, and TLS 1.2 key exchange cannot carry them. Rule 5 is the common case on servers that upgraded their TLS library but kept an older group list with X25519 first, or whose clients send an X25519 key share the server accepts to avoid a HelloRetryRequest ([RFC 9846 section 4.2.4](https://www.rfc-editor.org/rfc/rfc9846#section-4.2.4)).
+
+### Findings
+
+| Id | Severity | Title |
+| --- | --- | --- |
+| group | PASS | The default probe gets X25519MLKEM768 |
+| preference | FAIL | Classical X25519 first, although X25519MLKEM768 is accepted |
+| group | FAIL | Classical key exchange: X25519 |
+| group | FAIL | Obsolete Kyber draft: X25519Kyber768Draft00 |
+| group | CHECK | Key exchange not recognised |
+| group | CHECK | Default-client handshake did not complete |
+| handshake | CHECK | Handshake refused, or No TLS handshake completed |
+| protocol | PASS | TLS 1.3 negotiated |
+| protocol | FAIL | TLS 1.2 negotiated |
+| pq-only | PASS | Accepts X25519MLKEM768 when it is the only choice |
+| pq-only | CHECK, or INFO when the default already passed | No handshake when only ML-KEM was offered |
+| certificate | INFO | Certificate signature stays classical |
+
+### Pasted output
+
+A paste is judged by rules 1 to 4 and 6 on its one handshake. If the output shows a TLS alert and the command offered only post-quantum groups, the verdict says the server likely supports none of them; it does not say so as a fact.
+
+## Standards and conformance
+
+| Specification | Sections | How the tool applies them | Where it stops |
+| --- | --- | --- | --- |
+| [RFC 10024](https://www.rfc-editor.org/rfc/rfc10024) PQ/T hybrid key agreement for TLS 1.3 | 4, 7, 7.4 | The three hybrids are offered and classified; the Kyber drafts are obsolete | The ML-KEM encapsulation key check (section 4.2) is the server's and client's job, not observed here |
+| [RFC 9954](https://www.rfc-editor.org/rfc/rfc9954) Hybrid key exchange in TLS 1.3 | 1.2, 3 | Explains why a hybrid protects recorded traffic | |
+| [RFC 9846](https://www.rfc-editor.org/rfc/rfc9846) TLS 1.3 | 4.2.1, 4.2.4, 4.3.7, 4.3.8 | The server's group choice is what the default handshake reports | Our client's offer is OpenSSL's default, not a browser's; RFC 9846 obsoletes RFC 8446 |
+| [FIPS 203](https://csrc.nist.gov/pubs/fips/203/final) ML-KEM | | The post-quantum part of each hybrid | |
+| [IANA TLS Supported Groups](https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-8) | | Names and code points | Unregistered names stay unknown |
+
+Pure ML-KEM groups for TLS are still an Internet-Draft at the time of writing; the tool recognises their names but never offers them.
+
+## Finding reference
+
+| Finding | Severity | What it means for recorded traffic | Fix |
+| --- | --- | --- | --- |
+| Hybrid negotiated | PASS | Protected against a future quantum computer | Keep the library current |
+| Classical first, ML-KEM accepted | FAIL | Readable later, although the server could do better today | Put X25519MLKEM768 first |
+| Classical key exchange | FAIL | Readable later | Upgrade the library, add X25519MLKEM768 first |
+| Obsolete Kyber draft | FAIL | Browsers fall back to classical | Replace the draft with X25519MLKEM768 |
+| TLS 1.2 negotiated | FAIL | No hybrid possible | Enable TLS 1.3 |
+| Key exchange not recognised | CHECK | Unknown | Compare with your library's group names |
+| Default handshake did not complete | CHECK | Unknown for ordinary clients | Investigate the failure |
+| No handshake with ML-KEM alone | CHECK | Support not shown, not disproved | Check the library version |
+| Certificate stays classical | INFO | Signatures protect the handshake, not recorded traffic | Nothing to do yet |
+
+## Guide
+
+Confirm any change outside Tamperbox with OpenSSL 3.5 or later:
+
+```sh
+openssl s_client -connect example.com:443 -servername example.com </dev/null 2>/dev/null | grep -E 'Negotiated TLS1.3 group|Protocol'
+openssl s_client -connect example.com:443 -servername example.com -tls1_3 -groups X25519MLKEM768 </dev/null 2>&1 | grep -E 'Negotiated TLS1.3 group|alert'
+```
+
+The first shows what a default OpenSSL client gets; the second whether the server takes the hybrid alone. Paste either output into the tool page to read it there.
+
+### Classical first although ML-KEM is accepted
+
+The server supports ML-KEM; its group list puts a classical group first.
+
+1. nginx: `ssl_ecdh_curve X25519MLKEM768:X25519:prime256v1;` in the http or server block.
+2. Apache: `SSLOpenSSLConfCmd Curves X25519MLKEM768:X25519:prime256v1` in the virtual host.
+3. HAProxy: `ssl-default-bind-curves X25519MLKEM768:X25519:P-256` in `global`; a bind line with its own curves overrides it.
+4. Caddy: 2.10 and later offer it by default; if the site sets `curves`, put `x25519mlkem768` first.
+5. Go: 1.24 and later offer it by default; if `CurvePreferences` is set, put `tls.X25519MLKEM768` first.
+
+Reload and check again: the default probe should get X25519MLKEM768. If a CDN or load balancer terminates TLS, change its settings instead; the origin's do not matter to visitors.
+
+### Classical only
+
+The TLS library predates ML-KEM. nginx, Apache and HAProxy need OpenSSL 3.5 or later (`nginx -V` shows the version it was built with); Go needs 1.24 or later. Upgrade, then apply the step above.
+
+### TLS 1.2
+
+Enable TLS 1.3 (`ssl_protocols TLSv1.2 TLSv1.3;` in nginx). Old load balancer policies are a common cause.
+
+### Obsolete Kyber draft
+
+Replace `X25519Kyber768Draft00` with `X25519MLKEM768` in the group list, upgrading the library if it does not know the new name.
+
+### Break it cases
+
+| Case | What it loads | Verdict |
+| --- | --- | --- |
+| Classical X25519 | openssl output for your host with X25519 | Not post-quantum secure |
+| Obsolete Kyber draft | The same with X25519Kyber768Draft00 | Not post-quantum secure, obsolete |
+| TLS 1.2 | The same over TLS 1.2 | Not post-quantum secure, TLS 1.2 |
+| P-256 hybrid | The same with SecP256r1MLKEM768 | Post-quantum secure |
+| Handshake refused | An ML-KEM-only command refused with alert 40 | No connection; likely no support |
+
+Each builds an `openssl s_client` transcript on your own host when you entered one. There are no repairs: Heal it offers to restore the input before the break.
+
+## Worked example
+
+The sample shop `www.harbor-supply.example` is reserved sample data dated 12 October 2026, answered in the browser. The default handshake negotiates X25519 over TLS 1.3; the ML-KEM-only handshake is accepted with X25519MLKEM768. Rule 5 applies: "Not post-quantum secure. The default probe gets X25519." Findings show the preference problem (FAIL), TLS 1.3 (PASS) and the classical ECDSA certificate (INFO). The key panel shows X25519 with an empty post-quantum slot; the configuration block is titled "Put ML-KEM first". Take it further offers DANE for `www.harbor-supply.example:443`, the ASN of the documentation address `192.0.2.44`, and a TCP ping, all answered by sample data.
+
+## For agents
+
+The Tamperbox MCP server runs the ML-KEM-only handshake as the `post_quantum_checker` operation with a public `domain`, and the default handshake as `ssl_checker`. Inspect both input schemas before calling them. Keep these with any conclusion:
+
+- A hybrid on one connection from one place does not make every client or every route post-quantum.
+- A failed ML-KEM-only handshake does not prove the server lacks support.
+- Certificate signatures were not assessed.
+
+See [Connect an MCP client](/mcp/connect/) for the calling pattern.
+
+## Limits
+
+- Port 443 only; other ports through pasted output.
+- Our OpenSSL client's default offer, not a browser's; browsers can negotiate differently.
+- One location, one moment; a CDN can answer differently elsewhere.
+- Key exchange only; certificate signatures are not assessed.
+- Unknown groups stay unclassified.
+
+## References
+
+- [RFC 10024](https://www.rfc-editor.org/rfc/rfc10024): Post-Quantum Traditional (PQ/T) Hybrid Key Agreement Mechanisms for TLS 1.3. Sections 4, 7 and 7.4. Standards track, August 2026.
+- [RFC 9954](https://www.rfc-editor.org/rfc/rfc9954): Hybrid Key Exchange in TLS 1.3. Sections 1.2 and 3. Informational.
+- [RFC 9846](https://www.rfc-editor.org/rfc/rfc9846): The Transport Layer Security (TLS) Protocol Version 1.3. Sections 4.2.1, 4.2.4, 4.3.7 and 4.3.8. Standards track, July 2026; obsoletes RFC 8446.
+- [FIPS 203](https://csrc.nist.gov/pubs/fips/203/final): Module-Lattice-Based Key-Encapsulation Mechanism Standard. NIST, August 2024.
+- [IANA TLS Supported Groups](https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-8).

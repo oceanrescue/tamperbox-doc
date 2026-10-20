@@ -44,6 +44,7 @@ export default defineConfig({
           { label: 'Email Header Analyzer', link: '/tools/email-header-analyzer/' },
           { label: 'Security Headers Checker', link: '/tools/security-headers/' },
           { label: 'security.txt Checker', link: '/tools/security-txt-checker/' },
+          { label: 'Post-Quantum TLS Checker', link: '/tools/post-quantum-checker/' },
         ] },
         { label: 'MCP server', items: [
           { label: 'Overview', link: '/mcp/' },
