@@ -234,7 +234,7 @@ Verdict: **Current for 60 min. Signature matches your key.** Take it further off
 
 ## For agents
 
-The MCP server does not run this page's editor, but the same rules apply to any JWT an agent handles: report the payload as unverified unless a key the user trusts was used, pin the algorithm, check `exp`, `nbf`, `iss` and `aud`, and never put a token or key into a prompt, URL or log. The page's agent card summarises a finding without the token. See [Connect Tamperbox MCP](/mcp/connect/).
+Over MCP, the `jwt_decode` operation runs the same decoder as this page (structure, Base64URL, duplicate keys and the rest of step 1 of the Method) and returns the header and payload. It accepts no keys and does not verify the signature, the time claims or the audience, so its output is unverified by definition. The same rules apply to any JWT an agent handles: report the payload as unverified unless a key the user trusts was used, pin the algorithm, check `exp`, `nbf`, `iss` and `aud`, and never put a token or key into a prompt, URL or log. The page's agent card summarises a finding without the token. See [Connect Tamperbox MCP](/mcp/connect/).
 
 ## Limits
 
