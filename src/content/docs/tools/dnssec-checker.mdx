@@ -1,0 +1,298 @@
+---
+title: DNSSEC Checker
+description: How the DNSSEC Checker asks a validating resolver for its verdict, walks the chain of trust from the root, links every DS record to the key it names, and what each finding means for the people trying to reach a domain.
+updated: 2026-10-20
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and repair guide for the Tamperbox DNSSEC Checker, which reports a validating resolver's secure, bogus, insecure or indeterminate verdict for a domain and reads the DS, DNSKEY and RRSIG records at every zone cut from the root, or matches pasted DS and DNSKEY records in the browser.
+prerequisites:
+  - A domain, or DS and DNSKEY records copied from a registrar or DNS provider
+outputs:
+  - The resolver's verdict, one level per zone cut from the root with its DS, keys and signature windows, findings worst first, and the links that carry the zone to the registry record, DANE and the domain health report
+limitations:
+  - Signatures are not verified and DS digests are not recomputed by the tool; only the validating resolver's AD flag reflects real verification, and only the signatures over each DNSKEY set are read
+---
+
+The tool page is [tamperbox.dev/dnssec-checker](https://tamperbox.dev/dnssec-checker). It opens on a sample domain with generated keys and takes a domain, or the DS and DNSKEY records you are about to submit to a registrar. This page is the long version: what the verdict rests on, every rule applied to the chain, what each finding means, and how to fix and confirm each one.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> a domain is sent to the Tamperbox server, which asks a public validating resolver for the verdict and fetches the DS, DNSKEY and RRSIG records at each zone cut, then returns them. Key tags, matching and dates are worked out in your browser. Pasted records never leave the browser. Nothing is stored.</div>
+
+## What the tool answers
+
+DNSSEC signs DNS answers and links the signatures in a chain: the root key signs the root zone, the root zone publishes a DS record that names the key of each top-level domain, that zone publishes a DS for each signed child, and so on down to your domain. A validating resolver follows the chain and refuses answers it cannot authenticate. The tool answers, in this order:
+
+1. **Does a validating resolver accept this domain's answers?** Secure, bogus, insecure or not determined, from the resolver itself.
+2. **Where is the chain broken?** One level per zone cut from the root, with the DS each parent publishes and the key it names.
+3. **Are the keys and digests current?** Algorithms and DS digest types are judged against the current registry guidance.
+4. **Are the signatures in date?** Each signature over a key set is drawn as a window with today marked.
+5. **Do the records I am about to publish fit together?** For pasted DS and DNSKEY records, without any lookup.
+
+It does not verify signatures itself, does not check NSEC or NSEC3 denial of existence, and says nothing about the website or mail servers behind the domain.
+
+## Inputs
+
+### A domain
+
+`example.com`, or any name below it such as `www.example.com`. The check runs when you stop typing (or at once on Enter). Before it is checked the text is trimmed, and a pasted address is reduced to what the tool takes: `https://www.example.com/shop` becomes `www.example.com`, an email address becomes its domain, quotes and brackets are dropped. Text that does not contain a usable name stays exactly as pasted and the page says why it cannot be checked. Typing is never rewritten mid-word, and Break it loads are never cleaned.
+
+The walk starts from the zone that owns the name, which the server finds from the SOA record. Entering `www.example.com` therefore inspects the chain to `example.com` unless `www` is a zone of its own; the result names the zone it reached.
+
+### Pasted DS and DNSKEY records
+
+Lines in zone-file form, as a registrar or DNS provider shows them:
+
+```text
+example.com. 86400 IN DS 24895 13 2 1477FBEC43638AB9EB3D8B16270AD69FEB1B47FDFC2DB088488128D4C465D7CB
+example.com. 3600 IN DNSKEY 257 3 13 0YH3/nP+RGM16vLuNROUFyS/hkPzXCGa0aGCR+MctF07f+XgfGQGKADzfa5zZ026JGpYYFAe11QAU8BW1mUe8A==
+```
+
+Any text containing a DS, DNSKEY or RRSIG line is treated as records and read entirely in the browser, as one level named after the first owner name in it. At least one DS or DNSKEY line is required; otherwise the page asks for them. RRSIG lines are optional; when present their dates are judged too. This is the quick way to confirm that the DS your registrar is about to publish names the key your DNS provider signs with.
+
+### Files
+
+Drop a text file on the page, or open one with Add a file: it is read in the browser like pasted text, up to 256 KiB, and never uploaded.
+
+## Reading the result
+
+### Verdict and chips
+
+The verdict line states the outcome: Secure, Bogus, Not signed, Not determined, Unsafe DNSSEC algorithm, Signed but not validated, or, for pasted records, whether they fit together. The line under it says what that means for users. The chips name each level of the chain with its state, root first; each one scrolls to that level.
+
+### Findings
+
+Every check, worst first: failures, then things to check, then information. Passing checks fold into one "n checks passed" line that opens on click. When the chain has more than one level, each finding starts with its level (`example: DS 41657 matches a key`). The count on the right is problems and things to check. The [finding reference](#finding-reference) lists every finding.
+
+### Take it further
+
+Links that carry the zone the walk reached to other tools: the DS record the registry holds for it (WHOIS and RDAP), DANE on its mail servers when the zone is secure, and its DNS, email and HTTPS health. For pasted records only the registry link appears, for the owner name. Each opens the other tool with the zone in its box; nothing is put in the URL.
+
+### History and Heal it
+
+History logs every Break it change with what it replaced, with Revert for the newest change and Reset input to return to what you entered. After a break, Heal it offers to restore the input you had before.
+
+### Chain of trust
+
+One block per zone cut, from the root down. Each block shows:
+
+- **DS at the parent**: each DS record with its key tag, algorithm and digest type, and an arrow to the key it names, or "no such key". The root shows the trust anchor that validators carry built in instead.
+- **Keys**: each DNSKEY with its computed key tag, whether it is a key-signing key (flag 257) or a zone-signing key (256), "Revoked" when the revoke bit is set, and its algorithm.
+- **Signatures**: each RRSIG read with the keys, drawn as a bar from inception to expiration with today marked, labelled with the key tag that made it and the days left.
+
+## Method
+
+### 1. The resolver's verdict
+
+For a domain, the server first asks Cloudflare's public resolver (1.1.1.1, DNS over HTTPS) for the name's SOA record with the DNSSEC OK bit set ([RFC 4035, section 3.2.1](https://www.rfc-editor.org/rfc/rfc4035#section-3.2.1)), and classifies the reply into the four states of [RFC 4035, section 4.3](https://www.rfc-editor.org/rfc/rfc4035#section-4.3):
+
+| Reply | State | Shown as |
+| --- | --- | --- |
+| AD flag set, NOERROR or NXDOMAIN | Secure | "Secure: signed from the root to …" |
+| SERVFAIL, and the same question with checking disabled (CD) succeeds | Bogus | "Bogus: …" |
+| NOERROR or NXDOMAIN without AD | Insecure | "Not signed", or the two variants below when the zone has keys |
+| Anything else, including SERVFAIL that persists with CD | Indeterminate | "Not determined" |
+
+The AD flag carries the resolver's own validation. [RFC 4035, section 3.2.3](https://www.rfc-editor.org/rfc/rfc4035#section-3.2.3) says the server side "MUST NOT set the AD bit in a response unless the name server considers all RRsets in the Answer and Authority sections of the response to be authentic". Bogus rests on [section 5.5](https://www.rfc-editor.org/rfc/rfc4035#section-5.5): when no signature validates, a recursive server "MUST return RCODE 2" (SERVFAIL) unless the query set CD, so a SERVFAIL that disappears with CD is the signature of a validation failure. A SERVFAIL that persists with CD usually means unreachable nameservers or a broken delegation, so the page reports it as not determined and says it does not establish that the zone is unsigned or broken.
+
+When the resolver says insecure but the zone publishes keys, the verdict is more specific: "Unsafe DNSSEC algorithm" when the keys use RSA/SHA-1 (a validator following RFC 9905 treats such a zone as unsigned), otherwise "Signed, but not validated", with the structural finding that explains why.
+
+### 2. Walking the chain
+
+The server finds the zone that owns the name from the SOA record, then visits the root and every parent label down to that zone, skipping labels that are not zone cuts (no SOA of their own), with a limit of 16 labels. At each level it fetches the DS set from the parent, the DNSKEY set and the RRSIG records over the DNSKEY set, all with checking disabled so that a broken zone can still be inspected. The root has no DS; it is shown as the trust anchor.
+
+Everything from here on is a structural reading done in the browser. The tool does not verify RRSIG signatures and does not recompute DS digests; that is the resolver's job, and its answer is the verdict above.
+
+### 3. Key tags and flags
+
+Each DNSKEY's key tag is computed with the checksum of [RFC 4034, Appendix B](https://www.rfc-editor.org/rfc/rfc4034#appendix-B) over the flags, protocol, algorithm and key bytes. The flags are decoded per [RFC 4034, section 2.1.1](https://www.rfc-editor.org/rfc/rfc4034#section-2.1.1): bit 7 (value 256) is the zone key flag, bit 15 (value 1) the secure entry point (SEP). A key with both set (257) is shown as a key-signing key, one with only the zone flag (256) as a zone-signing key. Bit 8 (value 128) is the revoke flag of [RFC 5011, section 7](https://www.rfc-editor.org/rfc/rfc5011#section-7) and is shown as "Revoked". A revoked key does not count as a key-signing key.
+
+### 4. Linking DS to keys
+
+[RFC 4035, section 5.2](https://www.rfc-editor.org/rfc/rfc4035#section-5.2) authenticates a delegation when "the Algorithm and Key Tag in the DS RR match the Algorithm field and the key tag of a DNSKEY RR in the child zone's apex DNSKEY RRset" and the digest matches. The tool applies the first half of that rule at every level below the root:
+
+- **DS N matches a key** (PASS) when a published DNSKEY has the same key tag and algorithm.
+- **DS N matches no key** (FAIL) when none does. The parent vouches for a key the zone no longer publishes; validators reject the zone.
+- **DS at the parent, but no keys** (FAIL) when the parent publishes a DS and the zone publishes no DNSKEY at all.
+- **Signed, but no DS at the parent** (CHECK) when the zone has keys and the parent publishes no DS: the chain is never connected and validators treat the zone as unsigned.
+- **Not signed** (INFO) when there is neither.
+- **No key-signing key** (CHECK) when no non-revoked key has the SEP flag. RFC 4034 section 2.1.1 says the SEP bit is "only intended to be a hint" and validators "MUST NOT alter their behavior" because of it, so this is a hygiene note, not a failure: some signers use one key for everything.
+
+The digest is shown but not recomputed, so a DS with the right tag and algorithm and a wrong digest passes this step; the resolver's bogus verdict is what exposes it.
+
+### 5. Algorithms and digests
+
+[RFC 9904](https://www.rfc-editor.org/rfc/rfc9904) moved the canonical algorithm guidance from RFC 8624 (which it obsoletes) to the [IANA DNS Security Algorithm Numbers](https://www.iana.org/assignments/dns-sec-alg-numbers) and [DS Digest Algorithms](https://www.iana.org/assignments/ds-rr-types) registries. [RFC 9905, section 2](https://www.rfc-editor.org/rfc/rfc9905#section-2) then deprecated SHA-1: RSASHA1 and RSASHA1-NSEC3-SHA1 "MUST NOT be used when creating DNSKEY and RRSIG records", and operators of validating resolvers "MUST treat DNSSEC signing algorithms RSASHA1 and RSASHA1-NSEC3-SHA1 as unsupported, rendering responses insecure". The tool's table:
+
+| Algorithm | Name | Finding |
+| --- | --- | --- |
+| 5, 7 | RSA/SHA-1, RSA/SHA-1 (NSEC3) | FAIL: "Algorithm N: RSA/SHA-1", fix: roll to 13 |
+| 3, 6 | DSA/SHA-1 | FAIL |
+| 12 | GOST R 34.10-2001 | FAIL |
+| 8 | RSA/SHA-256 | none, shown by name |
+| 10 | RSA/SHA-512 | none |
+| 13 | ECDSA P-256/SHA-256 | none (recommended) |
+| 14 | ECDSA P-384/SHA-384 | none |
+| 15 | Ed25519 | none |
+| 16 | Ed448 | none |
+
+Numbers outside the table are shown as "algorithm N" without a judgement. A DS with digest type 1 (SHA-1) gives "DS N uses a SHA-1 digest" (CHECK); types 2 (SHA-256, [RFC 4509](https://www.rfc-editor.org/rfc/rfc4509)) and 4 (SHA-384, [RFC 6605](https://www.rfc-editor.org/rfc/rfc6605)) pass.
+
+A deprecated algorithm produces a failure-level verdict even when the resolver validated the answer. That is a policy weakness, not a claim that validation disagrees, and the verdict says so. When a deprecated algorithm and a structural failure occur together, both appear in "Unsafe DNSSEC algorithm and record issues".
+
+### 6. Signature windows
+
+[RFC 4034, section 3.1.5](https://www.rfc-editor.org/rfc/rfc4034#section-3.1.5): an RRSIG "MUST NOT be used for authentication prior to the inception date and MUST NOT be used for authentication after the expiration date" ([RFC 4035, section 5.3.1](https://www.rfc-editor.org/rfc/rfc4035#section-5.3.1) repeats the check for validators). For every signature read:
+
+| Window | Finding |
+| --- | --- |
+| Expiration before now | FAIL: "Signature over DNSKEY expired N days ago" |
+| Inception after now | FAIL: "Signature over DNSKEY is not valid yet" (check the signer's clock) |
+| Expires within 3 days | CHECK: "Signature over DNSKEY expires in N days" |
+| Otherwise | no finding; the bar shows the window |
+
+### 7. Resolver and records disagree
+
+The verdict and the chain come from separate queries, so during a key rollover they can see different cache states. When the resolver says secure and the records show a structural failure (and no deprecated algorithm), the verdict is "Resolver validation and record checks disagree" at CHECK level, naming the finding.
+
+### 8. Pasted records
+
+Pasted records go through steps 3 to 6 as one level. There is no resolver, so the verdict says whether the records fit together ("The records fit together", "Broken link", "Not signed", or "Unsafe DNSSEC algorithm") and always adds that whether the signatures verify needs a validating resolver.
+
+## Standards and conformance
+
+| Specification | Sections used | How the tool applies them | Where it stops |
+| --- | --- | --- | --- |
+| [RFC 4033](https://www.rfc-editor.org/rfc/rfc4033), DNS security introduction | [Section 2](https://www.rfc-editor.org/rfc/rfc4033#section-2) (terms: chain of trust, island of security) | Vocabulary for the result | |
+| [RFC 4034](https://www.rfc-editor.org/rfc/rfc4034), resource records | 2.1.1 flags, 3.1.5 signature dates, 5.1 DS fields, Appendix B key tag | Parsed and computed in the browser | Signatures and digests are not computed |
+| [RFC 4035](https://www.rfc-editor.org/rfc/rfc4035), protocol | 3.2.1 DO, 3.2.2 CD, 3.2.3 AD, 4.3 security states, 5.2 referrals, 5.3.1 RRSIG validity, 5.5 SERVFAIL | The verdict maps the resolver's reply to the four states; the DS rule applies the tag and algorithm half of 5.2 | Full validation is the resolver's; the tool reads RRSIGs over DNSKEY sets only |
+| [RFC 5011](https://www.rfc-editor.org/rfc/rfc5011) | [Section 7](https://www.rfc-editor.org/rfc/rfc5011#section-7), the REVOKE bit | Revoked keys are marked and not counted as key-signing keys | Trust anchor rollover itself is not followed |
+| [RFC 9904](https://www.rfc-editor.org/rfc/rfc9904) and the IANA registries | Algorithm and digest guidance (obsoletes RFC 8624) | Algorithms 3, 5, 6, 7, 12 fail | Ed448 and private algorithms are shown without a judgement |
+| [RFC 9905](https://www.rfc-editor.org/rfc/rfc9905) | [Section 2](https://www.rfc-editor.org/rfc/rfc9905#section-2), SHA-1 deprecated (updates RFC 4034 and RFC 5155) | RSA/SHA-1 keys fail; an insecure answer over RSA/SHA-1 keys is explained as the deprecation | A SHA-1 DS is reported as CHECK, not FAIL: RFC 9905 says it MUST NOT be created, and a parent that also publishes a SHA-256 DS still validates |
+
+The tool is deliberately more lenient than RFC 9905 on SHA-1 DS records and stricter than many validators on algorithms: a zone still validated today with algorithm 5 or 7 fails here, because the registry now says those algorithms must not be used for signing.
+
+## Finding reference
+
+| Finding | Severity | Source | What it means for people reaching the domain | Fix |
+| --- | --- | --- | --- | --- |
+| Secure: signed from the root to … | PASS | [RFC 4035 4.3](https://www.rfc-editor.org/rfc/rfc4035#section-4.3) | Validating resolvers authenticate the answers | Keep the DS in step with key changes |
+| Bogus: … | FAIL | [RFC 4035 5.5](https://www.rfc-editor.org/rfc/rfc4035#section-5.5) | Users behind validating resolvers cannot resolve the domain at all | See [a bogus zone](#a-bogus-zone) |
+| Not signed | INFO | [RFC 4035 4.3](https://www.rfc-editor.org/rfc/rfc4035#section-4.3) | Answers are not validated; no protection, no outage | Sign the zone and publish the DS |
+| Not determined | CHECK | [RFC 4035 4.3](https://www.rfc-editor.org/rfc/rfc4035#section-4.3) | The resolver could not finish; nothing is established | Check again; look at the nameservers |
+| DS N matches a key | PASS | [RFC 4035 5.2](https://www.rfc-editor.org/rfc/rfc4035#section-5.2) | The parent vouches for a published key | |
+| DS N matches no key | FAIL | [RFC 4035 5.2](https://www.rfc-editor.org/rfc/rfc4035#section-5.2) | The zone is bogus for validators | Replace or remove the DS at the registrar |
+| DS at the parent, but no keys | FAIL | [RFC 4035 5.2](https://www.rfc-editor.org/rfc/rfc4035#section-5.2) | The zone is bogus for validators | Remove the DS, or enable signing first |
+| Signed, but no DS at the parent | CHECK | [RFC 4033 2](https://www.rfc-editor.org/rfc/rfc4033#section-2) (island of security) | Treated as unsigned | Add the DS at the registrar |
+| DS N uses a SHA-1 digest | CHECK | [RFC 9905 2](https://www.rfc-editor.org/rfc/rfc9905#section-2) | Validators may ignore this DS | Publish a SHA-256 DS (type 2) |
+| Algorithm N: name (3, 5, 6, 7, 12) | FAIL | [RFC 9905 2](https://www.rfc-editor.org/rfc/rfc9905#section-2), IANA registry | Validators drop support; the zone becomes unsigned for them | Roll to algorithm 13 |
+| No key-signing key | CHECK | [RFC 4034 2.1.1](https://www.rfc-editor.org/rfc/rfc4034#section-2.1.1) | Usually nothing; confirm the DS names a real key | Compare DS and keys |
+| Signature over DNSKEY expired … | FAIL | [RFC 4034 3.1.5](https://www.rfc-editor.org/rfc/rfc4034#section-3.1.5) | Answers fail validation | Restart re-signing |
+| Signature over DNSKEY is not valid yet | FAIL | [RFC 4034 3.1.5](https://www.rfc-editor.org/rfc/rfc4034#section-3.1.5) | Answers fail validation | Fix the signer's clock |
+| Signature over DNSKEY expires … (3 days or less) | CHECK | [RFC 4035 5.3.1](https://www.rfc-editor.org/rfc/rfc4035#section-5.3.1) | Fails soon unless renewed | Confirm re-signing runs |
+| Unsafe DNSSEC algorithm (verdict) | FAIL | [RFC 9905 2](https://www.rfc-editor.org/rfc/rfc9905#section-2) | As the algorithm finding | Roll to algorithm 13 |
+| Signed, but not validated (verdict) | CHECK | [RFC 4035 4.3](https://www.rfc-editor.org/rfc/rfc4035#section-4.3) | Keys exist but no chain reaches them | Read the finding it names |
+| Resolver validation and record checks disagree (verdict) | CHECK | | Two fetches saw different states, usually mid-rollover | Check again after the TTLs |
+
+## Guide
+
+### A bogus zone
+
+A bogus zone is an outage for everyone behind a validating resolver, which today includes most mobile networks and the large public resolvers.
+
+1. Read the level that fails in the chain. "DS N matches no key" or "DS at the parent, but no keys" at your own zone is the usual case.
+2. If you moved DNS providers or the provider stopped signing, remove the DS at your registrar. The zone becomes unsigned, which is safe; it resolves again once the parent's DS TTL (often a day or two) has passed.
+3. If you want to stay signed, copy the DS (or the DNSKEY of the key-signing key) your provider shows now and replace the DS at the registrar with it.
+4. Confirm: the verdict here turns Secure (or Not signed) and the independent check below returns an answer without SERVFAIL.
+
+### Turning DNSSEC on
+
+1. Enable signing at your DNS provider. Prefer algorithm 13.
+2. Copy the DS record it gives you, digest type 2. Paste it here together with the provider's DNSKEY: "The records fit together" means the tag and algorithm match.
+3. Add the DS at your registrar.
+4. Check the domain here once the registry publishes it: the chain reads Secure.
+
+### Moving DNS providers without an outage
+
+1. Before the move, remove the DS at the registrar and wait for the parent's DS TTL, or ask the new provider to pre-publish your keys (a multi-signer setup) if it supports it.
+2. Move the nameservers.
+3. Enable signing at the new provider and publish its DS.
+4. Check here after each step. The dangerous state is a DS for the old provider's key above a zone served by the new provider.
+
+### Rolling to algorithm 13
+
+Algorithm rollovers keep both algorithms in the zone for a while. Publish and sign with the new keys first, wait for the DNSKEY TTL, then publish the new DS at the registrar, wait for the DS TTL, then remove the old DS, and only then the old keys and signatures. This page shows both algorithms during the overlap; the old one keeps failing its algorithm check until it is gone.
+
+### Expired signatures
+
+Signatures are renewed by the signer, not by you. If they expired, find the system that signs the zone (your DNS provider, or a signer you run) and restart re-signing; if a signature starts in the future, check that machine's clock. A zone that is re-signed on schedule always shows days or weeks of window left.
+
+### Independent check
+
+Reproduce the verdict and the records outside Tamperbox with `dig`:
+
+```sh
+# The resolver's verdict: look for "ad" in the flags line, or SERVFAIL
+dig +dnssec SOA example.com @1.1.1.1
+# The same question with checking disabled: an answer here but SERVFAIL above means bogus
+dig +dnssec +cd SOA example.com @1.1.1.1
+# The DS at the parent and the zone's keys with their tags
+dig +short DS example.com @1.1.1.1
+dig +multi DNSKEY example.com @1.1.1.1
+```
+
+`dig +multi` prints each key's tag in a comment (`; KSK; alg = ECDSAP256SHA256 ; key id = 24895`), which must equal the first number of a DS.
+
+### Break it cases
+
+The page's Break it cases are sample zones on the reserved `.example` zone, because a broken chain is a state of the world rather than an edit to your input. The pasted mismatch is built from your own records when the page has them.
+
+| Case | What it loads | What it shows |
+| --- | --- | --- |
+| DS does not match | `legacy-shop.example` | Bogus; the DS names key 4412, the zone publishes other keys |
+| Not signed | `harbor-blog.example` | Not signed: no keys, no DS |
+| Signatures expired | `old-signing.example` | Bogus; the signatures over the keys expired three days ago |
+| SHA-1 algorithm | `sha1-zone.example` | Unsafe DNSSEC algorithm: RSA/SHA-1 (NSEC3) |
+| Pasted mismatch | Your zone's DS with a key tag the zone does not publish, and its keys | Broken link: DS matches no key, read in the browser |
+
+After a break, Heal it offers "Restore input before this break", and History has Revert and Reset input.
+
+## Worked example
+
+The page opens on `harbor-supply.example`, a sample domain on the reserved `.example` zone. Its keys are generated for the sample and its answers come from the browser, so the example makes no lookup and always shows the same structure; signature dates are set relative to today so it never goes stale.
+
+The verdict is **Secure: signed from the root to harbor-supply.example.** The chain has three levels:
+
+- **The root**: the trust anchor, an RSA/SHA-256 key-signing key and zone-signing key, and a signature over them valid from ten days ago to eleven days ahead.
+- **.example**: a DS at the root that names the zone's key-signing key, both keys RSA/SHA-256, a signature window five days old with nine left.
+- **harbor-supply.example**: DS 24895 with algorithm 13 and a SHA-256 digest, pointing to key-signing key 24895 (ECDSA P-256/SHA-256) next to zone-signing key 45449, and signatures over the keys and the address record.
+
+Every DS matches a key and every window covers today, so the findings fold into "2 checks passed". Take it further offers the registry's DS record for the zone, DANE on its mail servers and the domain health report, each answered from the same sample. Enter your own domain and every section, card and link is rewritten for it.
+
+## For agents
+
+The Tamperbox MCP server runs the same lookup. Search its catalog for the DNSSEC operation, read its input schema, and call it with the domain. Keep these warnings with any conclusion:
+
+- Secure, bogus and insecure are one validating resolver's answer at one moment; the chain is diagnostic.
+- Signatures over records other than the DNSKEY set are not read, and DS digests are not recomputed.
+- Not determined is not evidence that a zone is unsigned or broken.
+
+See [Connect an MCP client](/mcp/connect/) for the calling pattern and [Security and privacy](/reference/security/) for where the domain travels.
+
+## Limits
+
+- One validating resolver, from one place, at one moment. Caches elsewhere may still hold an older state.
+- Signatures are not verified and DS digests are not recomputed by the tool.
+- Only the signatures over each DNSKEY set are read; a lapsed signature on another record is not seen.
+- NSEC and NSEC3 denial of existence are not checked.
+- The sample uses generated keys on the reserved `.example` zone.
+- Nothing is stored.
+
+## References
+
+- [RFC 4033, DNS Security Introduction and Requirements](https://www.rfc-editor.org/rfc/rfc4033), section 2
+- [RFC 4034, Resource Records for the DNS Security Extensions](https://www.rfc-editor.org/rfc/rfc4034), sections 2.1.1, 3.1.5, 5.1 and Appendix B; updated by RFC 9905 among others
+- [RFC 4035, Protocol Modifications for the DNS Security Extensions](https://www.rfc-editor.org/rfc/rfc4035), sections 3.2, 4.3, 5.2, 5.3.1 and 5.5
+- [RFC 4509, SHA-256 in DNSSEC Delegation Signer records](https://www.rfc-editor.org/rfc/rfc4509)
+- [RFC 5011, Automated Updates of DNSSEC Trust Anchors](https://www.rfc-editor.org/rfc/rfc5011), section 7
+- [RFC 6605, ECDSA for DNSSEC](https://www.rfc-editor.org/rfc/rfc6605)
+- [RFC 9904, DNSSEC Cryptographic Algorithm Recommendation Update Process](https://www.rfc-editor.org/rfc/rfc9904) (obsoletes RFC 8624)
+- [RFC 9905, Deprecating SHA-1 in DNSSEC Signature Algorithms](https://www.rfc-editor.org/rfc/rfc9905), section 2
+- [IANA DNS Security Algorithm Numbers](https://www.iana.org/assignments/dns-sec-alg-numbers) and [DS RR Type Digest Algorithms](https://www.iana.org/assignments/ds-rr-types)
