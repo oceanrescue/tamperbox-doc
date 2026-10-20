@@ -1,0 +1,215 @@
+---
+title: Ads.txt & App-Ads.txt Checker
+description: How the ads.txt checker fetches and reads ads.txt and app-ads.txt, the rules it applies to every field, how it cross-checks sellers against each ad system's sellers.json, and how to fix each finding.
+updated: 2026-10-20
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and repair guide for the Tamperbox ads.txt and app-ads.txt checker, which fetches the file from the root of a host on the Tamperbox server, or reads a pasted file in the browser, validates each record against the IAB Tech Lab ads.txt 1.1 layout and cross-checks up to 12 ad systems' sellers.json files.
+prerequisites:
+  - A public host name that publishes ads.txt or app-ads.txt, or the file to paste
+outputs:
+  - A verdict with skipped lines and sellers confirmed, a summary, each record against sellers.json, the file line by line with its variables, findings and repairs
+limitations:
+  - At most 12 ad systems and 100 seller IDs each are looked up; a match is evidence, not proof of an active account; unreadable sellers.json files confirm nothing
+---
+
+The tool page is [tamperbox.dev/ads-txt-checker](https://tamperbox.dev/ads-txt-checker). It opens on a sample shop answered by a fixture, says how many lines buyers will skip and how many sellers sellers.json confirms, and lists every record. This page is the long version: where the file is fetched from, every rule, the sellers.json cross-check, what each finding means for the site's ad revenue, and how to fix it.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> a pasted file is read in your browser. Its sellers are looked up only when you press <strong>Look up sellers</strong>, which sends the ad system domains and seller IDs (not the file) to the Tamperbox server. A host name is sent to the server, which fetches the file and the ad systems' sellers.json files without cookies. Nothing is stored. Sample hosts on the reserved <code>.example</code> zone are answered in the browser from a fixture.</div>
+
+## What the tool answers
+
+1. **Can buyers read the file?** It must be served as text at the root of the host, not as a web page.
+2. **Which lines will buyers skip?** Any record missing a field, with a malformed domain, without a seller ID, or with a relationship other than DIRECT or RESELLER.
+3. **Do the ad systems agree?** Each seller ID is looked up in its ad system's sellers.json: listed, of the type the line claims, and owned by this site for DIRECT lines.
+4. **Is the file tidy?** Duplicates, conflicting relationships, unknown variables.
+
+## Inputs
+
+### A host
+
+`example.com` or a full address; the host is kept. The check runs when you stop typing, or on Enter. The **File** selector in the rail picks `ads.txt` (websites) or `app-ads.txt` (apps); changing it checks again. The usual refusals apply: spaces, other schemes, credentials, non-standard ports, IP addresses and single labels.
+
+### A pasted file
+
+Text with a newline, a line starting `#`, a `NAME=value` variable, or a line with two commas (`greenadexchange.com, 1234, DIRECT`) is read as a file, in the browser. Sellers are not looked up until you press **Look up sellers**. Files up to 2 MiB can be dropped or opened.
+
+A pasted address loses quotes, brackets and trailing punctuation and keeps the host; text that fits nothing stays as pasted.
+
+## Reading the result
+
+### Verdict and chips
+
+"Valid ads.txt, n records for m ad systems, x of y sellers confirmed in sellers.json." or "n lines buyers will skip;" with the same counts. For a missing or HTML file, the verdict says so. Chips count skipped lines, sellers not matching and sellers confirmed, and scroll to the sellers table. Two items say where the input went.
+
+### Findings
+
+Worst first, line findings prefixed with their line; passes fold.
+
+### History
+
+Every Break it and Heal it change, newest first, with Revert and Reset input; the File selector is restored with the input. After a break with no repair, Heal it offers "Restore input before this break".
+
+### Take it further
+
+- **Redirect chain of this file** opens the [redirect checker](https://tamperbox.dev/redirect-checker) on `https://host/ads.txt`. The specification allows at most one redirect to another root domain.
+- **Does this ad system's sellers.json answer?** opens the [website down checker](/tools/website-down-checker/) on the first unreadable `https://adsystem/sellers.json`.
+- **Can the CONTACT address receive mail?** opens the [email domain checker](https://tamperbox.dev/email-domain) on the file's CONTACT address, when it is an email address.
+
+### Summary
+
+Records, DIRECT and RESELLER counts, lines skipped by buyers and sellers confirmed, each with what it means.
+
+### Sellers
+
+One row per record: its line, the ad system and seller ID, the relationship, and the sellers.json answer (the seller's name and type, confidential, not listed, or not looked up).
+
+### File
+
+The file as written, numbered, with issue lines tinted, its variables above, and **Download** for the file as it stands (useful after a repair). Long files show their first 60 lines and every marked line; **Show all n lines** lists the rest.
+
+## Method
+
+### Fetching the file
+
+The server requests `https://<host>/ads.txt` (or `/app-ads.txt`) on the exact host entered: `www.example.com` and `example.com` are separate checks, as the [ads.txt 1.1 specification](https://iabtechlab.com/ads-txt/) ("Access method") places the file at the root of the domain. If the HTTPS connection fails, plain HTTP is tried once. Up to 5 redirects are followed, with at most one crossing to another registrable domain; a second stops the fetch. The first 2 MiB is read.
+
+| Response | Severity |
+| --- | --- |
+| 400 or above | CHECK: no file, so buyers that check cannot confirm any seller |
+| HTML content type or body | FAIL: a catch-all route; no records |
+| A redirect to another host | INFO, per hop |
+| Text with no records | CHECK |
+
+### Reading lines
+
+Following the specification's "File format" section: text after `#` is a comment; a line `NAME=value` with no comma is a variable; any other line is a record, `<domain>, <seller ID>, <DIRECT|RESELLER>[, <certification authority ID>]`, with extension data after `;`.
+
+| Rule | Severity | Repair |
+| --- | --- | --- |
+| Fewer than three fields | FAIL | |
+| Ad system not a bare domain (for example `https://exchange.com/`) | FAIL | Remove https:// from ad systems |
+| Ad system written with `www.` | CHECK | Drop www. from ad systems |
+| No seller account ID | FAIL | Remove lines without a seller ID |
+| Relationship not DIRECT or RESELLER | FAIL; names DIRECT or RESELLER when the value starts with "dir" or "res" | Write DIRECT and RESELLER correctly |
+| Relationship in lower case | INFO | Write DIRECT and RESELLER correctly |
+| Certification authority ID not 9 to 16 hexadecimal characters | INFO | |
+| More than four fields before `;` | CHECK | |
+| Unknown variable (known: CONTACT, SUBDOMAIN, INVENTORYPARTNERDOMAIN, OWNERDOMAIN, MANAGERDOMAIN) | CHECK | |
+| Same ad system and seller ID twice, same relationship | INFO | Remove duplicate lines |
+| Same ad system and seller ID as DIRECT and RESELLER | CHECK | |
+| Byte order mark | INFO | |
+
+A record with any FAIL counts as skipped by buyers: crawlers that read ads.txt drop records they cannot parse, so the account on such a line cannot sell.
+
+### The sellers.json cross-check
+
+For a fetched file, the first 12 distinct ad systems are looked up, each once, asking for the first 100 unique seller IDs the file names for it. The server requests `https://<ad system>/sellers.json` (Google's listing is at `realtimebidding.google.com`), follows up to 5 redirects, and stream-parses up to 32 MiB (128 MiB for Google). It must answer 200 with an object holding a `sellers` array, as the [sellers.json specification](https://iabtechlab.com/sellers-json/) defines; otherwise the system is "No readable sellers.json" (INFO) and its lines are neither confirmed nor rejected.
+
+| Answer for a record | Severity |
+| --- | --- |
+| Seller ID not listed | CHECK, "Not in sellers.json" |
+| DIRECT, but seller_type INTERMEDIARY; RESELLER, but seller_type PUBLISHER | CHECK |
+| DIRECT, listed seller domain differs from OWNERDOMAIN (or the host without www.) | INFO |
+| Listed with a fitting type, or confidential | PASS |
+| ID beyond the 100 checked | INFO, "Seller ID not checked" |
+
+DIRECT expects `PUBLISHER` or `BOTH`; RESELLER expects `INTERMEDIARY` or `BOTH`, matching the sellers.json `seller_type` values.
+
+## Standards and conformance
+
+### IAB Tech Lab ads.txt 1.1
+
+Implemented: the access method at the root of the host with HTTPS first, the redirect allowance (one cross-domain hop), the record and variable formats and the five defined variables. app-ads.txt is read with the same rules, as the app-ads.txt extension of the specification defines. Not implemented: following `SUBDOMAIN` declarations to fetch subdomain files, and `INVENTORYPARTNERDOMAIN` chains for CTV. Stricter than the text: `www.` in an ad system is a CHECK because buyers compare exactly.
+
+### IAB Tech Lab sellers.json 1.0
+
+Implemented: the `sellers` array, `seller_id`, `seller_type`, `name`, `domain` and `is_confidential`. Not checked: the sellers.json file's own validity beyond what the cross-check needs, `identifiers`, and the supply chain object.
+
+Both are industry specifications published as documents by IAB Tech Lab, not RFCs; their pages above are the canonical sources.
+
+## Finding reference
+
+| Finding | Severity | What it means for ad revenue | Fix |
+| --- | --- | --- | --- |
+| No ads.txt (n) | CHECK | Buyers that require it do not bid | Publish the file |
+| ads.txt is a web page | FAIL | No sellers authorised | Serve text at the root |
+| Redirected from a to b | INFO | Allowed within one root domain | Keep redirects within your domain |
+| No records | CHECK | Nobody authorised | Add records |
+| Line n: Missing fields | FAIL | Line skipped | Three fields |
+| Line n: "x" is not a domain | FAIL | Line skipped | Bare domain (Heal it) |
+| Line n: Ad system written as www.x | CHECK | May not match | Drop www. (Heal it) |
+| Line n: No seller account ID | FAIL | Line skipped | Fill in or remove (Heal it) |
+| Line n: "x" is not DIRECT or RESELLER | FAIL | Line skipped | Correct it (Heal it) |
+| Line n: direct written in lower case | INFO | Most buyers accept | Capitals (Heal it) |
+| Line n: Certification ID "x" looks unusual | INFO | | Use the TAG ID |
+| Line n: Extra fields | CHECK | Extensions misread | Put them after `;` |
+| Line n: Unknown variable x | CHECK | Ignored | Use a defined variable |
+| Line n: Duplicate of line m | INFO | Harder to audit | Remove (Heal it) |
+| Line n: Listed as both DIRECT and RESELLER | CHECK | Buyers may distrust both | Keep the true one |
+| Line n: Not in sellers.json | CHECK | Cross-checking buyers skip it | Correct the ID or remove |
+| Line n: DIRECT but INTERMEDIARY, RESELLER but PUBLISHER | CHECK | Red flag for buyers | Fix the relationship or ID |
+| Line n: Seller domain is x | INFO | DIRECT account owned elsewhere | Confirm the account |
+| n seller IDs not checked | INFO | Over the lookup limit | Check them with the ad system |
+| No readable sellers.json for x | INFO | Cannot confirm | Nothing in your file |
+
+## Guide
+
+### Lines buyers skip
+
+1. Filter the File section to the red lines.
+2. Use the repairs in Heal it: each rewrites the whole file and logs the change in History.
+3. **Download** the corrected file and publish it at `/ads.txt`. Confirm outside Tamperbox: `curl -s https://example.com/ads.txt | head`.
+
+### Sellers that do not match sellers.json
+
+1. Open the row: it names what sellers.json says (the seller's name and type, or not listed).
+2. Ask the ad system or your account manager for the exact line, and replace yours.
+3. Check again with **Look up sellers** (pasted) or by re-entering the host.
+
+### The file is missing or served as HTML
+
+Publish a plain text file at the exact path, before any catch-all route, on each host that serves ads. `curl -sI https://example.com/ads.txt` should show `200` and `text/plain`.
+
+### Break it cases
+
+| Case | What it loads | What to look at |
+| --- | --- | --- |
+| Duplicate line | Your first record repeated | Duplicate finding; Heal it removes it |
+| Misspelled DIRECT | Your first DIRECT written DIRCT | Skipped line; Heal it corrects it |
+| Missing seller ID | Your first record without its ID | Skipped line; Heal it removes it |
+| Address, not a domain | Your first ad system written as a URL | Skipped line; Heal it strips it |
+| Served as a web page | A sample single-page app | HTML finding |
+| No ads.txt | A sample host without the file | No ads.txt |
+
+The first four are built from your own file when you entered a host or pasted one.
+
+## Worked example
+
+The page opens on `harbor-supply.example`, a sample shop on the reserved `.example` zone; the file and every ad system's sellers.json are answered by a fixture, and the ad systems are fictional.
+
+- The verdict reports one line buyers will skip among 8 records for 6 ad systems, with 4 of 8 sellers confirmed in sellers.json.
+- Findings: line 11 writes `DIRCT` (skipped); line 12 names `www.yellowssp.example`; line 8 is DIRECT but sellers.json lists the account as INTERMEDIARY; line 10's seller ID is not listed; line 10 writes Reseller in lower case; line 7 duplicates line 6; two ad systems publish no readable sellers.json.
+- Heal it offers three repairs: write DIRECT and RESELLER correctly, drop www. from ad systems, remove duplicate lines.
+- The file declares OWNERDOMAIN and CONTACT.
+- Take it further offers the file's redirect chain, whether `www.yellowssp.example` answers at `/sellers.json`, and whether the CONTACT address can receive mail.
+
+## For agents
+
+The Tamperbox MCP server exposes the site file and sellers lookups; search its catalog for ads.txt or sellers.json and call them with the host. Keep these warnings:
+
+- A sellers.json match corroborates a line; it does not prove an active, paid account.
+- Unreadable sellers.json files confirm nothing either way.
+- At most 12 ad systems and 100 IDs each are checked.
+
+See [Connect an MCP client](/mcp/connect/) and [Security and privacy](/reference/security/).
+
+## Limits
+
+- One fetch of the file (2 MiB) and at most 12 sellers.json files.
+- SUBDOMAIN and INVENTORYPARTNERDOMAIN declarations are listed, not followed.
+- Live checks are rate limited. Nothing is stored.
+
+## References
+
+- [IAB Tech Lab ads.txt specification, version 1.1](https://iabtechlab.com/ads-txt/): access method, file format, variables, app-ads.txt.
+- [IAB Tech Lab sellers.json specification, version 1.0](https://iabtechlab.com/sellers-json/): the sellers object and seller_type.
