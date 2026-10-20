@@ -45,6 +45,7 @@ export default defineConfig({
           { label: 'Website Down Checker', link: '/tools/website-down-checker/' },
           { label: 'Broken Link Checker', link: '/tools/broken-link-checker/' },
           { label: 'Open Graph Preview', link: '/tools/open-graph-preview/' },
+          { label: 'Robots.txt & Sitemap Checker', link: '/tools/robots-txt-checker/' },
         ] },
         { label: 'MCP server', items: [
           { label: 'Overview', link: '/mcp/' },
