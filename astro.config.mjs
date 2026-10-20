@@ -46,6 +46,7 @@ export default defineConfig({
           { label: 'security.txt Checker', link: '/tools/security-txt-checker/' },
           { label: 'Post-Quantum TLS Checker', link: '/tools/post-quantum-checker/' },
           { label: 'Redirect Checker', link: '/tools/redirect-checker/' },
+          { label: 'Mixed Content & Cookie Checker', link: '/tools/mixed-content-checker/' },
         ] },
         { label: 'MCP server', items: [
           { label: 'Overview', link: '/mcp/' },
