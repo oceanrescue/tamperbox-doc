@@ -48,6 +48,12 @@ export default defineConfig({
           { label: 'DNS Provider Lookup', link: '/tools/dns-provider/' },
           { label: 'SaaS Stack Finder', link: '/tools/saas-stack/' },
           { label: 'Subdomain Finder', link: '/tools/subdomain-finder/' },
+          { label: 'Website Down Checker', link: '/tools/website-down-checker/' },
+          { label: 'Broken Link Checker', link: '/tools/broken-link-checker/' },
+          { label: 'Open Graph Preview', link: '/tools/open-graph-preview/' },
+          { label: 'Robots.txt & Sitemap Checker', link: '/tools/robots-txt-checker/' },
+          { label: 'Ads.txt & App-Ads.txt Checker', link: '/tools/ads-txt-checker/' },
+          { label: 'llms.txt Checker & Generator', link: '/tools/llms-txt/' },
         ] },
         { label: 'MCP server', items: [
           { label: 'Overview', link: '/mcp/' },
