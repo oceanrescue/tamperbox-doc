@@ -1,8 +1,8 @@
 ---
 title: Operation catalog
-description: The current Tamperbox MCP catalog groups 58 operations across transforms, diagnostics, and workflow utilities.
-updated: 2026-10-19
-productVersion: "MCP 0.2.0"
+description: The expanded Tamperbox API catalog groups 114 operations across artifact analysis, builders, diagnostics, and workflows.
+updated: 2026-10-20
+productVersion: "MCP 0.3.0"
 agentSummary: Browse Tamperbox operation families and learn which input shapes and evidence boundaries each family uses.
 prerequisites: []
 outputs:
@@ -11,27 +11,39 @@ limitations:
   - Counts and schemas can change with later product releases.
 ---
 
-The bundled catalog contains 58 operations representing all 53 public website tool entries. Use `search` for the exact current schema.
+The expanded catalog contains 114 operations representing all 53 public website tool entries. Use `search` for the exact schema bundled with your MCP server, or read the [REST OpenAPI specification](https://api.tamperbox.dev/v1/openapi.json). Older installed packages can contain an earlier catalog.
+
+Remote artifact operations send inputs to our server, even when they make no network lookup. Use the browser tools for sensitive local documents or secrets. History, clipboard actions and visual rendering are interface features, not REST operations.
 
 ## Transforms
 
 `jwt_decode`, `json_format`, `json_to_yaml`, `timestamp_to_iso`, and `api_convert` accept text artifacts plus operation-specific options. Decoding and conversion do not establish trust or lossless equivalence.
 
+`jwt_verify` requires an explicit algorithm and key; signature and claim checks are separate. `jwt_rebuild` supports HMAC re-signing and explicitly unsigned or stale fixtures. `jwt_fixture` can generate a synthetic asymmetric test token without retaining its private key. None establishes application authorization.
+
+`timestamp_convert` handles batches, units, time zones, exports and nanosecond precision; `timestamp_adjust` supports format input, duration edits, calendar boundaries and code snippets. Nanoseconds are decimal strings in JSON. `api_convert_report` adds environments, redaction options, conversion notes and request previews without executing any requests.
+
 ## Email and DNS
 
 Email-domain, provider, SPF, DMARC, DKIM, MTA-STS, BIMI, and record lookup operations inspect public DNS and related policy evidence. DNS configuration is not proof of mailbox existence or delivery. The browser tools document the full methods for [SPF](/tools/spf-checker/), [DMARC](/tools/dmarc-checker/), [DKIM](/tools/dkim-checker/), [MTA-STS and TLS-RPT](/tools/mta-sts-checker/), and [BIMI](/tools/bimi-checker/), including every finding and its delivery impact. The [Email Header Analyzer](/tools/email-header-analyzer/) documents the separate case of reading route and authentication evidence from a supplied message.
+
+The corresponding `*_analyze` operations accept pasted evidence without resolving its names. Policy `*_build` operations produce drafts without publishing DNS. `dkim_discover` checks a bounded selector list or extracts a selector from a supplied signature header; it cannot discover every possible selector. `ip_enrich` supplies public reverse-DNS and network-ownership evidence.
 
 ## Hosting, TLS, and HTTP
 
 Hosting, technology, CDN, certificate, header, redirect, CORS, mixed-content, HTTP/3, and uptime operations observe public endpoints from the service's vantage point. Proxies, regional differences, and unavailable probes can limit conclusions. The certificate operation's findings are explained one by one in the [SSL Certificate Checker](/tools/ssl-checker/) page.
 
+Artifact counterparts accept supplied headers, HTML, handshake transcripts and certificates. `tls_probe` adds supported mail TLS and STARTTLS ports. Cookie, metadata and post-quantum operations expose analysis and draft repairs or configuration text. Pasted evidence does not independently verify a live server.
+
 ## Network and registration
 
 IP, ASN, BGP, port, TCP, WHOIS, RDAP, reverse-DNS, and domain-availability operations return bounded observations. Caller-context checks can describe the MCP host or shared gateway rather than the human user's device.
 
+`bgp_events` exposes reported potential routing incidents. It requires the incident feed to be configured on the server; `feed_unavailable` does not mean there were no incidents.
+
 ## Published site files
 
-The catalog includes checks for `robots.txt`, `ads.txt`, and `llms.txt`. These operations support documented subsets and do not automatically reproduce every browser editor mode.
+The catalog includes live and pasted checks for `robots.txt`, `ads.txt` and `llms.txt`, explicit formatting repairs, crawler-rule simulation and guide drafting. `site_file_inspect` also supports `app-ads.txt` and `llms-full.txt`; `sitemap_inspect` and `sellers_inspect` expose sitemap and seller evidence. Embedded links are not fetched by artifact-only operations.
 
 ## Workflow utilities
 
