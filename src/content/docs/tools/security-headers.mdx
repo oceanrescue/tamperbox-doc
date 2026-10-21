@@ -14,7 +14,7 @@ limitations:
   - A grade is configuration evidence, not a security assessment of the site
 ---
 
-The tool page is [tamperbox.dev/security-headers](https://tamperbox.dev/security-headers). It opens by grading `tamperbox.dev` live, answers in one sentence with a letter and the headers that cost points, and lists every header under it. This page is the long version: what our server requests, every rule behind the grade, what each finding means, and how to send each header and confirm it.
+The tool page is [tamperbox.dev/security-headers](https://tamperbox.dev/security-headers). It opens by grading `mozilla.org` live, answers in one sentence with a letter and the headers that cost points, and lists every header under it. This page is the long version: what our server requests, every rule behind the grade, what each finding means, and how to send each header and confirm it.
 
 <div class="tb-callout"><strong>Where processing happens:</strong> a website is sent to the Tamperbox server, which requests the page itself, follows up to 10 redirects, removes cookie values and returns the final response's headers. Pasted headers are graded in your browser and never uploaded. Nothing is stored.</div>
 
@@ -213,11 +213,20 @@ When a website was fetched over HTTPS, the result hands its final host on: to th
 
 ## Worked example
 
-The page opens on `tamperbox.dev`, checked live, so the values change with the site; read the result in this order rather than expecting fixed numbers. The verdict gives the letter and, when every slot earns its point, says so; the score line names the final address and any redirects. Findings then show what each header does, with the passes folded. Open them: each pass row shows the value received, for example the HSTS lifetime and whether it covers subdomains, and the CSP row says whether scripts are limited to listed sources.
+The page opens on `mozilla.org`, checked live. It was chosen from a comparison of real runs because its response fills every block of the result, but it is someone else's site and its headers change, so read the result in this order rather than expecting fixed values.
 
-For a contrast, enter `mozilla.org`. When we compared candidates on 21 October 2026 it redirected once to `www.mozilla.org` and lost points on a CSP with `'unsafe-inline'` and a missing Permissions-Policy, which filled every block: a weak and a missing finding, the configuration snippet, a Heal it preview and four Take it further links. Values on a live site change; grade it again rather than relying on that reading.
+### The opening result
 
-To see a fixed result, use Break it: "No security headers" turns any response into an F with six lines to add, and the repair under Heal it brings the grade back.
+1. **Score line.** It names the final address and the redirects that led there; `mozilla.org` moves to its `www` host, so the graded response is not the one you typed.
+2. **Verdict and Findings.** The letter, then the headers that cost points, worst first: a header that lost its whole point comes before one that lost half. Open each row for the value received and the line to send instead.
+3. **Grade.** The six slots show at a glance which headers are set, weak or missing.
+4. **Add the missing headers.** When a header with a suggested line missed its point, the block writes it in your server's syntax.
+5. **Heal it.** "Preview the fixed headers" loads the same response with those lines applied, so you see the grade they would earn; Revert brings the live result back.
+6. **Take it further.** Because the response came over HTTPS after a move to another host, the final host and page are handed to the other checks in the category.
+
+### A fixed contrast
+
+Break it builds on whatever is in the box. "No security headers" removes every security header from the opening response and turns it into an F with six lines to add; the repair under Heal it puts them back. `www.harbor-supply.example` is a reserved sample host graded locally, with fixed, synthetic headers, for a result that never changes.
 
 ## For agents
 
