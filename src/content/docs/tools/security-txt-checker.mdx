@@ -12,7 +12,7 @@ limitations:
   - Only /.well-known/security.txt is requested; OpenPGP signatures are separated but not verified; validity is syntax and rules, not proof that anyone reads the Contact
 ---
 
-The tool page is [tamperbox.dev/security-txt-checker](https://tamperbox.dev/security-txt-checker). It opens by checking `tamperbox.dev` live, answers in one sentence, and shows the file the way a security researcher reads it. This page is the long version: what our server requests, every rule the page applies with the section of [RFC 9116](https://www.rfc-editor.org/rfc/rfc9116) behind it, what each finding means, and how to fix and confirm it.
+The tool page is [tamperbox.dev/security-txt-checker](https://tamperbox.dev/security-txt-checker). It opens by checking `google.com` live, answers in one sentence, and shows the file the way a security researcher reads it. This page is the long version: what our server requests, every rule the page applies with the section of [RFC 9116](https://www.rfc-editor.org/rfc/rfc9116) behind it, what each finding means, and how to fix and confirm it.
 
 <div class="tb-callout"><strong>Where processing happens:</strong> a host name is sent to the Tamperbox server, which requests https://host/.well-known/security.txt once, follows up to five HTTPS redirects, reads at most 64 KiB and returns the file with its status and media type. A pasted or dropped file is read in your browser and never uploaded. The same parser judges both. Nothing is stored.</div>
 
@@ -220,9 +220,27 @@ The first five build on your own file when you checked one; the last two use res
 
 ## Worked example
 
-The page opens on `tamperbox.dev`, checked live. The result depends on what that host serves when you open it, so read it rather than this page. At the time of writing the site did not publish a file, so the opening state shows the outcome most sites see first: "No security.txt.", the status the address answered, the Not served finding, and the draft form with Expires and Canonical already filled. Typing a Contact completes the file and enables Copy and Download.
+The page opens on `google.com`, checked live, because among the candidates compared it shows the most of the tool: a redirect, several fields and one instructive warning. The file belongs to Google and can change at any time, so read the result on the page rather than the details here, which describe the file as it was when this page was written.
 
-To see a full field report, enter a site that publishes one. A typical large site answers after one redirect from the bare domain to `www`, lists two contacts (a web form and a `mailto:`), an Encryption key and a Policy, and sets Expires several years ahead. The checker reports it valid with one warning, Expires more than a year ahead; Heal it offers "Set Expires to" a date 364 days after the check; and Take it further offers the certificate of the key's host, the headers of the report form, mixed content on the policy page and the certificate of the host the redirect ended on.
+### What the opening check shows
+
+The request to `https://google.com/.well-known/security.txt` is redirected once to the `www` host, and the file found there is read field by field:
+
+| Part | What the page shows | Finding |
+| --- | --- | --- |
+| Redirect | "after 1 redirect" in the verdict's detail line | None: the redirect stays on `https://` |
+| Contact | A web form first, then a `mailto:` address, in order of preference | None |
+| Encryption, Policy, Acknowledgments, Hiring | Listed under Encrypt with, Read first, Thanks and Hiring | None |
+| Canonical | "Not set" | None: Canonical is optional |
+| Expires | A date several years ahead on the time axis, past the one-year mark | Expires more than a year ahead (warning) |
+
+### Reading it
+
+The verdict is "Valid security.txt." with a warning chip, because the only finding is a recommendation, not an error. Heal it offers "Set Expires to" a date 364 days after the check, and the corrected file appears under the listing. Take it further offers the certificate of the host serving the key, the security headers of the report page, mixed content on the policy page and the certificate of the host the redirect ended on.
+
+### Other states
+
+`tamperbox.dev` and `gmail.com` publish no file; checking either shows "No security.txt." and the draft form, with Expires and Canonical filled in. The Break it cases show every error on a copy of the file you checked.
 
 ## For agents
 
