@@ -1,7 +1,7 @@
 ---
 title: DKIM Record Checker
 description: How the checker finds every DKIM key a domain publishes without asking for a selector, every rule it applies to a key record, what each finding means for mail delivery, and how to fix and verify each one.
-updated: 2026-10-19
+updated: 2026-10-21
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox DKIM Record Checker, which probes 24 common selectors from the Tamperbox server, reads a pasted DKIM-Signature header to find the exact key behind a message, measures key length from the key bytes, and reports flags, revocation and fingerprints.
 prerequisites:
@@ -12,7 +12,7 @@ limitations:
   - Selectors are not discoverable from DNS, so a domain that signs under a selector of its own shows no key until you paste a message header; a valid key does not prove that any message is signed with it
 ---
 
-The tool page is [tamperbox.dev/dkim-checker](https://tamperbox.dev/dkim-checker). It opens on a working example and never asks for a selector: enter a domain and it finds the keys for you. This page is the long version: how discovery works, every rule applied to a key record, what each finding means, and how to fix and verify each one.
+The tool page is [tamperbox.dev/dkim-checker](https://tamperbox.dev/dkim-checker). It opens on a live check of `tamperbox.dev`; replace that domain to inspect your own. This page is the long version: how discovery works, every rule applied to a key record, what each finding means, and how to fix and verify each one.
 
 <div class="tb-callout"><strong>Where processing happens:</strong> a domain or a message header is sent to the Tamperbox server, which asks public DNS once per selector and returns the records. A pasted key record is decoded and measured in your browser and never uploaded. Nothing is stored.</div>
 
@@ -264,7 +264,9 @@ Each case is built from the key you entered or looked up, so the finding looks t
 
 ## Worked example
 
-The page opens on `harbor-supply.example`, a sample domain on the reserved `.example` zone, answered in the browser so the example costs nothing and never changes. It publishes:
+The page opens on a live check of `tamperbox.dev`. Its published records and findings can change over time.
+
+For the deterministic walkthrough below, enter `harbor-supply.example`. This reserved `.example` domain is answered from synthetic data in your browser; it sends no live lookup. It publishes:
 
 - `google`: a 2048-bit RSA key, inspected. **2048-bit RSA key: valid and strong enough.**
 - `s1`: a 1024-bit RSA key in testing mode, listed beside it and reported as a CHECK finding ("s1: 1024-bit RSA, testing"), because a second service signs for the domain with a weaker key.

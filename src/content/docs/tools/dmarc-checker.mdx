@@ -1,7 +1,7 @@
 ---
 title: DMARC Checker & Generator
 description: How the checker finds and grades a DMARC record, every rule applied to its tags, what each finding means for spoofed and legitimate mail, and how the builder and the path to enforcement write the next record.
-updated: 2026-10-19
+updated: 2026-10-21
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox DMARC Checker & Generator, which reads the _dmarc record through public DNS or parses a pasted one, grades policy, percentage, subdomain policy, report addresses and alignment, and drafts the next record on the path from p=none to p=reject.
 prerequisites:
@@ -12,7 +12,7 @@ limitations:
   - The tool reads the policy, not the aggregate reports, so it cannot tell whether legitimate mail already passes; the exact _dmarc name is looked up without parent-domain inheritance, and external report authorisation records are named but not looked up
 ---
 
-The tool page is [tamperbox.dev/dmarc-checker](https://tamperbox.dev/dmarc-checker). It opens on a working example that monitors with `p=none`, the most common place to get stuck. This page is the long version: how the record is found and read, every rule applied to it, what each finding means, and how the builder and the path to enforcement write the next record.
+The tool page is [tamperbox.dev/dmarc-checker](https://tamperbox.dev/dmarc-checker). It opens on a live check of `tamperbox.dev`; replace that domain to inspect your own. This page is the long version: how the record is found and read, every rule applied to it, what each finding means, and how the builder and the path to enforcement write the next record.
 
 <div class="tb-callout"><strong>Where processing happens:</strong> a domain is sent to the Tamperbox server, which asks public DNS for the TXT record at <code>_dmarc.&lt;domain&gt;</code>. A pasted record is parsed and graded in your browser, and every draft you build stays on the page. Nothing is stored, and copying a draft does not publish it.</div>
 
@@ -191,7 +191,9 @@ Each case is built from the record you entered or looked up.
 
 ## Worked example
 
-The page opens on `harbor-supply.example`, a sample domain on the reserved `.example` zone, answered in the browser so the example costs nothing and never changes. Its record:
+The page opens on a live check of `tamperbox.dev`. Its published records and findings can change over time.
+
+For the deterministic walkthrough below, enter `harbor-supply.example`. This reserved `.example` domain is answered from synthetic data in your browser; it sends no live lookup. Its record:
 
 ```text
 v=DMARC1; p=none; rua=mailto:dmarc@harbor-supply.example; ruf=mailto:forensics@harbor-supply.example; fo=1

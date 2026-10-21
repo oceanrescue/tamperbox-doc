@@ -1,7 +1,7 @@
 ---
 title: SPF Checker
 description: How the checker expands an SPF record through every include and redirect, counts the DNS lookups receivers allow, grades every term, and builds a flattening plan that replaces only the includes it must.
-updated: 2026-10-19
+updated: 2026-10-21
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox SPF Checker, which expands an SPF record through public DNS, counts lookup-causing terms against the limit of 10, reports syntax and hygiene problems, and proposes a flattening plan built from the include tree.
 prerequisites:
@@ -12,7 +12,7 @@ limitations:
   - The count is a bounded static expansion, not an SPF evaluation for a sender address; a, mx and exists targets are not resolved, macros are not expanded, and flattened ranges go stale when a provider changes them
 ---
 
-The tool page is [tamperbox.dev/spf-checker](https://tamperbox.dev/spf-checker). It opens on a working example whose record is one lookup over the limit, so the flattening plan is visible at once. This page is the long version: how the record is expanded, every rule applied to it, what each finding means for mail delivery, and how to fix and verify each one.
+The tool page is [tamperbox.dev/spf-checker](https://tamperbox.dev/spf-checker). It opens on a live check of `tamperbox.dev`; replace that domain to inspect your own. This page is the long version: how the record is expanded, every rule applied to it, what each finding means for mail delivery, and how to fix and verify each one.
 
 <div class="tb-callout"><strong>Where processing happens:</strong> a domain is sent to the Tamperbox server, which asks public DNS for its TXT records and follows every include and redirect the same way, one lookup each. A pasted record is parsed in your browser; only the include and redirect names it contains are looked up. Nothing is stored.</div>
 
@@ -217,7 +217,9 @@ Each case is built from the record you entered or looked up, so the finding look
 
 ## Worked example
 
-The page opens on `harbor-supply.example`, a sample domain on the reserved `.example` zone, answered in the browser so the example costs nothing and never changes. Its record includes four mail services:
+The page opens on a live check of `tamperbox.dev`. Its published records and findings can change over time.
+
+For the deterministic walkthrough below, enter `harbor-supply.example`. This reserved `.example` domain is answered from synthetic data in your browser; it sends no live lookup. Its record includes four mail services:
 
 ```text
 v=spf1 include:_spf.inboxcloud.example include:send.bulkpost.example include:mail.ticketdesk.example include:spf.officesuite.example ip4:198.51.100.24 ~all
