@@ -26,6 +26,8 @@ Use synthetic examples for evaluation. Prefer browser-local tools for sensitive 
 - JWT decoding does not verify signature authenticity or issuer trust.
 - DNS evidence does not prove email delivery or mailbox existence. A published DKIM key, for example, does not prove any message is signed with it ([why](/tools/dkim-checker/#limits)).
 - HTTP headers do not establish the complete security of a site, and one TLS handshake from one location does not establish what every client negotiates ([why](/tools/ssl-checker/#limits)).
+- A redirect trace or a CORS preflight sent from the service is one observation from one place: cookies, client addresses and firewalls can make a visitor's browser see something else ([why](/tools/cors-tester/#limits)).
+- A decoded JWT is readable, not trusted; a signature match proves only that the supplied key verifies those bytes ([why](/tools/jwt/#limits)).
 - A failed probe is not the same as a negative result.
 - Caller-context checks can observe a proxy, shared gateway, or MCP host.
 

@@ -42,6 +42,12 @@ export default defineConfig({
           { label: 'MTA-STS & TLS-RPT Checker', link: '/tools/mta-sts-checker/' },
           { label: 'BIMI Record Checker', link: '/tools/bimi-checker/' },
           { label: 'Email Header Analyzer', link: '/tools/email-header-analyzer/' },
+          { label: 'JWT Decoder & Verifier', link: '/tools/jwt/' },
+          { label: 'Postman Collection Converter', link: '/tools/postman-converter/' },
+          { label: 'Unix Timestamp Converter', link: '/tools/unix-timestamp/' },
+          { label: 'Redirect Checker', link: '/tools/redirect-checker/' },
+          { label: 'HTTP/3 & Compression Checker', link: '/tools/http3-checker/' },
+          { label: 'CORS Tester', link: '/tools/cors-tester/' },
         ] },
         { label: 'MCP server', items: [
           { label: 'Overview', link: '/mcp/' },
