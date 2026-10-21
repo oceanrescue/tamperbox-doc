@@ -48,6 +48,7 @@ export default defineConfig({
           { label: 'Redirect Checker', link: '/tools/redirect-checker/' },
           { label: 'HTTP/3 & Compression Checker', link: '/tools/http3-checker/' },
           { label: 'CORS Tester', link: '/tools/cors-tester/' },
+          { label: 'security.txt Checker', link: '/tools/security-txt-checker/' },
         ] },
         { label: 'MCP server', items: [
           { label: 'Overview', link: '/mcp/' },
