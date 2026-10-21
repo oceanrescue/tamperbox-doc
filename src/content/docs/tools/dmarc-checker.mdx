@@ -9,7 +9,7 @@ prerequisites:
 outputs:
   - A verdict with PASS, CHECK and FAIL chips, the findings with their fixes, the path to enforcement, the builder, the record to publish, and the record tag by tag
 limitations:
-  - The tool reads the policy, not the aggregate reports, so it cannot tell whether legitimate mail already passes; the exact _dmarc name is looked up without parent-domain inheritance, and external report authorisation records are named but not looked up
+  - The tool reads the policy, not the aggregate reports, so it cannot tell whether legitimate mail already passes; a bounded DNS tree walk finds parent-domain policy when needed, and external report authorisation records are named but not looked up; pct is warned as obsolete, and t and psd are recognized
 ---
 
 The tool page is [tamperbox.dev/dmarc-checker](https://tamperbox.dev/dmarc-checker). It opens on a live check of `tamperbox.dev`; replace that domain to inspect your own. This page is the long version: how the record is found and read, every rule applied to it, what each finding means, and how the builder and the path to enforcement write the next record.
@@ -57,11 +57,11 @@ Links that carry a derived value into another tool: the mail route of the report
 
 ### History and Heal it
 
-History logs every change: a rollout step, a builder edit, a Break it case or a Heal it repair, each with the record it replaced. Revert undoes the newest change and returns the draft to the record before it; Reset input returns to the published or pasted record. Heal it offers the repairs the tool found: add `p=none`, correct a misspelt policy, remove an out-of-range `pct`, make `rua` a `mailto:` address, choose which value to keep when a tag is duplicated, move a misplaced version tag to the front.
+History logs every change: a rollout step, a builder edit, a Break it case or a Heal it repair, each with the record it replaced. Revert undoes the newest change and returns the draft to the record before it; Reset input returns to the published or pasted record. Heal it offers the repairs the tool found: add `p=none`, correct a misspelt policy, remove obsolete `pct`, make `rua` a `mailto:` address, choose which value to keep when a tag is duplicated, move a misplaced version tag to the front.
 
 ### Path to enforcement
 
-Four targets, each a complete record built from the current tags: Monitor (`p=none`), Quarantine a quarter (`p=quarantine; pct=25`), Quarantine all (`p=quarantine`), Reject (`p=reject`). The current step is marked "You are here". Choosing a target applies it as a draft.
+Four targets, each a complete record built from the current tags: Monitor (`p=none`), Test quarantine (`p=quarantine; t=y`), Quarantine all (`p=quarantine`), Reject (`p=reject`). The current step is marked "You are here". Choosing a target applies it as a draft. The test step requests one level less enforcement under [RFC 9989 section 4.7](https://www.rfc-editor.org/rfc/rfc9989#section-4.7), so quarantine in test mode requests monitoring.
 
 ### Build the record
 
@@ -77,74 +77,181 @@ Every tag with its label and meaning; unknown tags are marked as ignored by rece
 
 ## Method
 
+Each rule below names the section of [RFC 9989](https://www.rfc-editor.org/rfc/rfc9989), the DMARC specification, that it comes from. RFC 9989 obsoletes RFC 7489, the Informational predecessor; where the tool still follows RFC 7489, the rule says so, and [Standards and conformance](#standards-and-conformance) lists every difference.
+
 ### Finding the record
 
-The server asks public DNS for TXT records at exactly `_dmarc.<domain>` and keeps the ones that begin with `v=DMARC1`. The lookup never moves up to a parent domain; a subdomain without its own record may still be covered by its organisational domain's policy, so a miss is not proof that no policy applies.
+The server asks public DNS, through one DNS-over-HTTPS resolver, for TXT records at exactly `_dmarc.<domain>` ([RFC 9989, section 4.5](https://www.rfc-editor.org/rfc/rfc9989#section-4.5)). A record split into several strings is joined first: "the module performing DMARC evaluation MUST concatenate these strings" (section 4.5). Only records that begin with `v=DMARC1` are kept, as in step 2 of the [DNS tree walk, section 4.10](https://www.rfc-editor.org/rfc/rfc9989#section-4.10).
 
-- Two or more records: FAIL, "N DMARC records". Receivers ignore DMARC entirely in that case. The first record is shown.
+- Two or more records are discarded at that name and discovery continues toward a parent policy, following section 4.10. No first-record-wins policy is inferred.
 - No record: the verdict is "No DMARC record" and a starting draft, `v=DMARC1; p=none`, is prepared for the builder.
 
-### Tag syntax
+The lookup moves up the tree, bounded to eight queries, and stops at an explicit `psd=n` or `psd=y` boundary. [Section 4.10.1](https://www.rfc-editor.org/rfc/rfc9989#section-4.10.1) has receivers walk from the Author Domain to its Organizational Domain and then to a public suffix domain when no record exists at the exact name. The selected source domain is displayed. Domain existence is not queried, so inherited policy is shown for existing subdomains and `np` remains a limitation.
 
-The record is split on semicolons; each part must be `name=value`.
+### Version and tag syntax
 
-- The first tag must be exactly `v=DMARC1`, case-sensitive. Otherwise the record is not read at all: "Not a DMARC record". A misplaced `v=DMARC1` can be moved to the front by Heal it.
+The record is split on semicolons, and each part must be `name=value`, as in the formal definition of [section 4.8](https://www.rfc-editor.org/rfc/rfc9989#section-4.8).
+
+- The first tag must be exactly `v=DMARC1`, case-sensitive. [Section 4.7](https://www.rfc-editor.org/rfc/rfc9989#section-4.7): "This tag MUST be the first tag in the list." If it is not, "the entire record MUST be ignored." The tool stops: "Not a DMARC record". Heal it can move a misplaced `v=DMARC1` to the front.
 - A part without `=`: FAIL, "Not a tag: X".
-- A tag that appears twice: FAIL, "name appears twice". Identical duplicates can be removed; conflicting values get one repair per value ("Keep p=none", "Keep p=reject"). While duplicates remain, the policy is not graded and the builder, the path to enforcement and the record to publish are hidden.
-- `p`, `sp` and `np` accept only `none`, `quarantine` or `reject`; `adkim` and `aspf` only `r` or `s`. Anything else: FAIL, "name=value is not valid".
-- No `p`: FAIL, "No p= policy".
-- `pct` must be a whole number from 0 to 100: FAIL, "pct=X is not 0 to 100".
-- A tag outside `v`, `p`, `sp`, `np`, `pct`, `rua`, `ruf`, `adkim`, `aspf`, `fo`, `rf`, `ri`: CHECK, "Unknown tag X".
+- A tag that appears twice: FAIL, "name appears twice". DMARC uses the DKIM tag-list syntax (section 4.7), and [RFC 6376, section 3.2](https://www.rfc-editor.org/rfc/rfc6376#section-3.2) says "if a tag name does occur more than once, the entire tag-list is invalid." Identical duplicates can be removed; conflicting values get one repair per value ("Keep p=none", "Keep p=reject"). While duplicates remain, the policy is not graded and the builder, the path to enforcement and the record to publish are hidden.
+
+### Tag values
+
+- `p`, `sp` and `np` accept only `none`, `quarantine` or `reject` (the `dmarc-request` rule of section 4.8); `adkim` and `aspf` only `r` or `s` (`dmarc-rors`). Anything else: FAIL, "name=value is not valid".
+- No `p`: INFO, "No p= policy: defaults to none". An otherwise valid record defaults to monitoring under [section 4.7](https://www.rfc-editor.org/rfc/rfc9989#section-4.7).
+- `pct` produces CHECK, "pct=X is obsolete". It never reduces enforcement; [RFC 9989 appendix A.6](https://www.rfc-editor.org/rfc/rfc9989#appendix-A.6) removes percentage sampling.
+- A tag outside `v`, `p`, `sp`, `np`, `t`, `psd`, `pct`, `rua`, `ruf`, `adkim`, `aspf`, `fo`, `rf`, `ri`: CHECK, "Unknown tag X". Section 4.7: "unknown tags MUST be ignored."
 
 ### Policy strength
 
-A missing `pct` counts as 100.
+The grade follows [section 4.7](https://www.rfc-editor.org/rfc/rfc9989#section-4.7). Missing `p` defaults to `none`; `pct` is ignored. Test mode `t=y` reduces reject to quarantine and quarantine to none. The display reports a requested policy, not a guarantee of receiver handling.
 
-| Record | Severity | Title |
-| --- | --- | --- |
-| `p=reject`, pct 100 | PASS | p=reject |
-| `p=quarantine`, pct 100 | PASS | p=quarantine |
-| `p=quarantine`, pct under 100 | CHECK | p=quarantine at N% |
-| `p=reject`, pct under 100 | CHECK | p=reject at N% |
-| `p=none` | CHECK | p=none only monitors |
-| `sp=none` with an enforcing `p` | CHECK | sp=none on subdomains |
-| `adkim=s` or `aspf=s` | INFO | Strict alignment |
+| Record | Severity | Title | Basis |
+| --- | --- | --- | --- |
+| `p=reject`, no test mode | PASS | p=reject | Section 4.7, `p` |
+| `p=quarantine`, no test mode | PASS | p=quarantine | Section 4.7, `p` |
+| `p=quarantine; t=y` | CHECK | DMARC test mode (t=y), p=none only monitors | Section 4.7, `t` |
+| `p=reject; t=y` | CHECK | DMARC test mode (t=y), p=quarantine | Section 4.7, `t` |
+| `p=none` | CHECK | p=none only monitors | [Section 3.2.12](https://www.rfc-editor.org/rfc/rfc9989#section-3.2.12), Monitoring Mode |
+| `sp=none` with an enforcing `p` | CHECK | sp=none on subdomains | Section 4.7, `sp` |
+| `adkim=s` or `aspf=s` | INFO | Strict alignment | [Section 3.2.10.2](https://www.rfc-editor.org/rfc/rfc9989#section-3.2.10.2) |
+
+For `sp`, section 4.7 says: "If both the "sp" tag is absent and the "np" tag is either absent or not applicable, the policy specified by the "p" tag MUST be applied for subdomains." So `sp=none` beside an enforcing `p` opens every existing subdomain on purpose. The `p=none` and `sp=none` grades are Tamperbox recommendations: the specification allows both.
 
 ### Report addresses
 
-- No `rua`: CHECK, "No rua reports".
-- Each comma-separated `rua` entry must be a `mailto:` URI with one `@`, optionally followed by a size limit such as `!10m`. Anything else: FAIL, "Invalid report address X".
-- An address on a domain that is neither the checked domain nor one of its subdomains: INFO, "Reports go to X", naming the authorisation record the receiving domain must publish, `<domain>._report._dmarc.<receiving-domain>`. That record is not looked up. For a pasted record the domain is unknown, so no authorisation note is made.
+- No `rua`: CHECK, "No rua reports". Section 4.7: "If the tag is not provided, Mail Receivers MUST NOT generate aggregate feedback reports for the domain." Reports are optional in the specification; the CHECK is a Tamperbox recommendation, since [section 5.1.5](https://www.rfc-editor.org/rfc/rfc9989#section-5.1.5) has the Domain Owner collect and analyse them before enforcing.
+- Each comma-separated `rua` entry ([section 4.6](https://www.rfc-editor.org/rfc/rfc9989#section-4.6)) must be a `mailto:` URI with one `@`, optionally followed by a size limit such as `!10m`. Anything else: FAIL, "Invalid report address X". This is stricter than the specification, where "Any valid URI can be specified" and "URIs involving schemes not supported by Mail Receivers MUST be ignored" (section 4.7). The size limit is obsolete syntax that reporters ignore (section 4.8).
+- An address on a domain that is neither the checked domain nor one of its subdomains: INFO, "Reports go to X", naming the record the receiving domain must publish, `<domain>._report._dmarc.<receiving-domain>`. [RFC 9990, section 4](https://www.rfc-editor.org/rfc/rfc9990#section-4) says that when the Organizational Domains differ, "the following verification steps MUST be taken". That record is not looked up. For a pasted record the domain is unknown, so no note is made.
 - Otherwise: PASS, "N report addresses".
 
 `ruf`, `fo`, `rf` and `ri` are explained but not validated.
 
 ### The builder and the drafts
 
-The builder writes tags in a fixed order (`v`, `p`, `sp`, `np`, `pct`, `rua`, `ruf`, `adkim`, `aspf`, `fo`, `rf`, `ri`), keeps unknown tags at the end, and leaves out tags that only repeat a default (`pct=100`, `adkim=r`, `aspf=r`, `fo=0`, `rf=afrf`, `ri=86400`). A draft is graded by the same rules as a published record; the problems of the published record (duplicates, multiple records) are not carried into the draft's findings, except the multiple-records finding, which the draft cannot fix.
+The builder writes tags in a fixed order (`v`, `p`, `sp`, `np`, `t`, `psd`, `pct`, `rua`, `ruf`, `adkim`, `aspf`, `fo`, `rf`, `ri`), keeps unknown tags at the end, and leaves out tags that only repeat a default (`pct=100`, `adkim=r`, `aspf=r`, `fo=0`, `rf=afrf`, `ri=86400`). The `adkim`, `aspf` and `fo` defaults are those of [section 4.7](https://www.rfc-editor.org/rfc/rfc9989#section-4.7); the `pct`, `rf` and `ri` defaults are RFC 7489's. Starting with `v=DMARC1` keeps every draft valid under section 4.7.
+
+A draft is graded by the same rules as a published record. The problems of the published record (duplicates, multiple records) are not carried into the draft's findings, except the multiple-records finding, which the draft cannot fix.
+
+## Standards and conformance
+
+The tool reads one DMARC record and grades its text. It is not a mail receiver: it evaluates no message, so SPF and DKIM results and identifier alignment are never computed. This section lists, per specification, what the tool implements, where it stops and where it is stricter or more lenient than the text.
+
+DMARC was published as [RFC 7489](https://www.rfc-editor.org/rfc/rfc7489) (Informational, 2015). In May 2026 three Standards Track documents obsoleted it: [RFC 9989](https://www.rfc-editor.org/rfc/rfc9989) for the mechanism (which also obsoletes RFC 9091, the experimental public suffix domain policy), [RFC 9990](https://www.rfc-editor.org/rfc/rfc9990) for aggregate reports and [RFC 9991](https://www.rfc-editor.org/rfc/rfc9991) for failure reports, which also updates RFC 6591. The tool's tag table still follows RFC 7489 in several places, listed below.
+
+### RFC 9989: finding the record
+
+| Section | Requirement | What the tool does |
+| --- | --- | --- |
+| [4.5](https://www.rfc-editor.org/rfc/rfc9989#section-4.5) | Records are TXT at `_dmarc.<domain>`; strings MUST be concatenated | Looked up on the Tamperbox server through one public resolver; strings joined |
+| [4.10](https://www.rfc-editor.org/rfc/rfc9989#section-4.10), step 2 | Records not starting with `v=DMARC1` are discarded; several records are all discarded | Same filter; multiple records at a name are discarded |
+| [4.10.1](https://www.rfc-editor.org/rfc/rfc9989#section-4.10.1) | Without a record at the Author Domain, walk to the Organizational Domain and the public suffix domain | Implemented with at most eight queries |
+| [4.10](https://www.rfc-editor.org/rfc/rfc9989#section-4.10) | The tree walk replaces the Public Suffix List and stops at a record with `psd=y` or `psd=n` | Implemented; source domain is shown |
+| [3.2.13](https://www.rfc-editor.org/rfc/rfc9989#section-3.2.13) | A non-existent domain is one answering NXDOMAIN; `np` applies to those | Not checked; `np` is only validated |
+| [5.3.1](https://www.rfc-editor.org/rfc/rfc9989#section-5.3.1) | A U-label Author Domain MUST be converted to an A-label | The domain is converted to A-labels before the lookup |
+
+The lookup accepts `v` or `V` as the version tag name but requires the case-sensitive value `DMARC1`, following [section 4.8](https://www.rfc-editor.org/rfc/rfc9989#section-4.8).
+
+### RFC 9989: record format and tag values
+
+All parsing happens in the browser, from the text the server returned or the text you pasted.
+
+| Section | Requirement | What the tool does |
+| --- | --- | --- |
+| [4.7](https://www.rfc-editor.org/rfc/rfc9989#section-4.7), `v` | First tag, value exactly `DMARC1`, else ignore the record | Same: the record is not read |
+| [4.7](https://www.rfc-editor.org/rfc/rfc9989#section-4.7) | Unknown tags MUST be ignored | CHECK finding, record still graded |
+| [4.8](https://www.rfc-editor.org/rfc/rfc9989#section-4.8) | Syntax errors MUST be discarded in favour of defaults or ignored | Stricter: a malformed part or an invalid value is a FAIL and makes the verdict invalid |
+| [4.7](https://www.rfc-editor.org/rfc/rfc9989#section-4.7), `p` | Missing `p` is treated as `p=none` | Defaults to monitoring with an informational finding |
+| [4.10.1](https://www.rfc-editor.org/rfc/rfc9989#section-4.10.1) | Invalid `p`, `sp` or `np` with a valid `rua`: act as `p=none`; otherwise no DMARC processing | Not modelled; the tool reports the record as invalid |
+| [4.7](https://www.rfc-editor.org/rfc/rfc9989#section-4.7), `adkim`, `aspf` | `r` or `s`, default `r` | Validated; default left out of drafts |
+| [4.8](https://www.rfc-editor.org/rfc/rfc9989#section-4.8), `fo` | `0` or `1` with `d` and `s`, colon-separated; ignored without `ruf` | Explained, not validated |
+| [4.6](https://www.rfc-editor.org/rfc/rfc9989#section-4.6), `rua` and `ruf` | Comma-separated URIs; any valid URI | `rua` must be `mailto:`; `ruf` is not checked |
+| [4.8](https://www.rfc-editor.org/rfc/rfc9989#section-4.8) | `!size` suffix is obsolete; reporters ignore it | Accepted without comment |
+
+### RFC 9989: tags removed and added since RFC 7489
+
+[Appendix C.5](https://www.rfc-editor.org/rfc/rfc9989#appendix-C.5) lists the tag changes. Under RFC 9989 a removed tag is simply an unknown tag, so receivers ignore it.
+
+| Tag | Change in RFC 9989 | What the tool does |
+| --- | --- | --- |
+| `pct` | Removed ([appendix C.5.2](https://www.rfc-editor.org/rfc/rfc9989#appendix-C.5.2), [A.6](https://www.rfc-editor.org/rfc/rfc9989#appendix-A.6)) | Warned as obsolete and ignored for grading; no percentage rollout step |
+| `rf` | Removed | Known tag with an explanation; not flagged |
+| `ri` | Removed | Known tag with an explanation; not flagged |
+| `t` | Added: `y` asks receivers to apply one level below the policy; default `n` | Validated and used to downgrade the effective policy |
+| `np` | Added, imported from RFC 9091 | Known; values validated; not graded |
+| `psd` | Added: `y`, `n` or `u`, default `u` | Validated and used to stop discovery |
+
+Appendix A.6 explains the replacement: the `t` values `y` and `n` are "meant to be analogous" to `pct=0` and `pct=100`. A receiver that follows RFC 9989 treats `p=quarantine; pct=25` as full quarantine. Receivers still built on RFC 7489 may apply the percentage, which may differ from the current-policy grade shown here.
+
+### RFC 9989: enforcement guidance
+
+[Section 7.4](https://www.rfc-editor.org/rfc/rfc9989#section-7.4) says "domains that host users who might post messages to mailing lists SHOULD NOT publish Domain Owner Assessment Policies of "p=reject"", and domains that publish `p=reject` "MUST apply valid DKIM signatures to their messages." The tool grades `p=reject` as PASS and offers Reject as the last step of the path to enforcement without this caveat. It cannot know who sends from the domain, so weigh section 7.4 yourself before that step.
+
+[Section 5.1.7](https://www.rfc-editor.org/rfc/rfc9989#section-5.1.7) ties the move to enforcement to "many months of consuming DMARC aggregate reports" in some cases. The tool does not read reports, so it cannot judge readiness.
+
+### RFC 9990 and RFC 9991: reports
+
+| Section | Requirement | What the tool does |
+| --- | --- | --- |
+| [RFC 9990, 3.5](https://www.rfc-editor.org/rfc/rfc9990#section-3.5) | Malformed URIs SHOULD be ignored; deliver to every remaining URI | Flags the first malformed `rua` entry as a FAIL |
+| [RFC 9990, 4](https://www.rfc-editor.org/rfc/rfc9990#section-4) | When the policy's Organizational Domain differs from the destination's, query `<policy-domain>._report._dmarc.<destination-host>` | Names that record for the first external address; does not look it up |
+| [RFC 9990, 4](https://www.rfc-editor.org/rfc/rfc9990#section-4) | The comparison is between Organizational Domains | Approximated: an address outside the checked domain and its subdomains counts as external |
+| [RFC 9991, 5](https://www.rfc-editor.org/rfc/rfc9991#section-5) | The same verification applies to `ruf` | Not done for `ruf` |
+| [RFC 9991, 2](https://www.rfc-editor.org/rfc/rfc9991#section-2) | Failure report options come from `ruf` and `fo` | Explained only |
+
+The approximation errs both ways: a report address at the parent domain of a checked subdomain is called external although it shares the Organizational Domain, and no external note is made for a pasted record.
+
+### Alignment, SPF and DKIM
+
+DMARC passes when SPF ([RFC 7208](https://www.rfc-editor.org/rfc/rfc7208)) or DKIM ([RFC 6376](https://www.rfc-editor.org/rfc/rfc6376)) produces an authenticated identifier aligned with the From domain ([RFC 9989, section 4.4](https://www.rfc-editor.org/rfc/rfc9989#section-4.4)). The tool only reads the `adkim` and `aspf` modes and explains the difference between relaxed and strict alignment ([sections 3.2.10.1](https://www.rfc-editor.org/rfc/rfc9989#section-3.2.10.1) and [3.2.10.2](https://www.rfc-editor.org/rfc/rfc9989#section-3.2.10.2)). It checks no SPF record, no DKIM key and no message; use the SPF and DKIM checkers for those.
+
+### DNS names and internationalized domains
+
+The `_dmarc` label is registered in the "Underscored and Globally Scoped DNS Node Names" registry of [RFC 8552](https://www.rfc-editor.org/rfc/rfc8552); RFC 9989 [section 9.5](https://www.rfc-editor.org/rfc/rfc9989#section-9.5) now holds that registration, and [RFC 8553](https://www.rfc-editor.org/rfc/rfc8553) updated RFC 7489 to use the registry. [RFC 8616, section 6](https://www.rfc-editor.org/rfc/rfc8616#section-6) updated RFC 7489 so that U-labels are converted to A-labels and `rua` and `ruf` hold conventional addresses; RFC 9989 section 5.3.1 carries the A-label rule. The tool converts the domain you enter to A-labels before the lookup and accepts any non-space characters around the `@` of a report address.
 
 ## Finding reference
 
-| Finding | Severity | What it means for mail | Fix |
-| --- | --- | --- | --- |
-| No DMARC record (verdict) | FAIL | Receivers apply no policy and send no reports | Publish the starting draft |
-| N DMARC records | FAIL | Receivers ignore DMARC entirely | Delete all but one |
-| Not a DMARC record (verdict) | FAIL | The text does not begin with v=DMARC1 | Put v=DMARC1 first |
-| Not a tag: X | FAIL | Receivers may reject the record | Write name=value |
-| name appears twice | FAIL | Receivers may reject the record; the policy is not graded | Keep one value |
-| name=value is not valid | FAIL | Receivers treat the record as invalid | Use a valid value |
-| No p= policy | FAIL | Receivers ignore the record | Add p=none |
-| pct=X is not 0 to 100 | FAIL | Receivers treat the record as invalid | Remove pct or use 0 to 100 |
-| Invalid report address X | FAIL | No aggregate reports are sent | Use mailto: |
-| Unknown tag X | CHECK | Receivers ignore it | Remove it |
-| p=none only monitors | CHECK | Spoofed mail is still delivered | Move to quarantine when reports are clean |
-| p=quarantine at N%, p=reject at N% | CHECK | Only part of failing mail is acted on | Raise pct to 100 |
-| sp=none on subdomains | CHECK | Subdomains can be spoofed | Remove sp or match p |
-| No rua reports | CHECK | You cannot see who sends as the domain | Add rua=mailto:… |
-| Reports go to X | INFO | The receiving domain must authorise the reports | Publish the authorisation record there |
-| Strict alignment | INFO | Subdomain-signed or subdomain-bounced mail fails | Relaxed is usually enough |
-| p=reject, p=quarantine | PASS | Failing mail is refused or quarantined | |
-| N report addresses | PASS | Aggregate reports are on | |
+Each finding the checker can emit, grouped by what it judges, with what it means for mail sent as the domain. The RFC section column names the rule behind the finding; "none" marks a Tamperbox recommendation that the specification does not require.
+
+### Record and tag syntax
+
+Problems that make receivers ignore the record or parts of it. Links point to RFC 9989 unless marked.
+
+| Finding | Severity | What it means for mail | Fix | RFC section |
+| --- | --- | --- | --- | --- |
+| No DMARC record (verdict) | FAIL | No policy at this name; a parent policy may apply | Publish the starting draft | [4.10.1](https://www.rfc-editor.org/rfc/rfc9989#section-4.10.1) |
+| N DMARC records | FAIL | Receivers discard every record at the name | Delete all but one | [4.10](https://www.rfc-editor.org/rfc/rfc9989#section-4.10) |
+| Not a DMARC record (verdict) | FAIL | Receivers ignore the whole record | Put v=DMARC1 first | [4.7](https://www.rfc-editor.org/rfc/rfc9989#section-4.7) |
+| Not a tag: X | FAIL | Receivers discard the part | Write name=value | [4.8](https://www.rfc-editor.org/rfc/rfc9989#section-4.8) |
+| name appears twice | FAIL | The tag list is invalid; the policy is not graded | Keep one value | [RFC 6376, 3.2](https://www.rfc-editor.org/rfc/rfc6376#section-3.2) |
+| name=value is not valid | FAIL | Bad `p`, `sp` or `np`: `p=none` if `rua` is valid, else no DMARC; bad `adkim` or `aspf`: default `r` | Use a valid value | [4.10.1](https://www.rfc-editor.org/rfc/rfc9989#section-4.10.1), [4.8](https://www.rfc-editor.org/rfc/rfc9989#section-4.8) |
+| No p= policy: defaults to none | INFO | Receivers act as if `p=none` | Add p=none | [4.7](https://www.rfc-editor.org/rfc/rfc9989#section-4.7) |
+| pct=X is obsolete | CHECK | Current receivers ignore percentage sampling | Remove pct | [A.6](https://www.rfc-editor.org/rfc/rfc9989#appendix-A.6) |
+| Invalid report address X | FAIL | Receivers skip that address | Use mailto: | [4.7](https://www.rfc-editor.org/rfc/rfc9989#section-4.7) |
+| Unknown tag X | CHECK | Receivers ignore it | Review or remove it | [4.7](https://www.rfc-editor.org/rfc/rfc9989#section-4.7) |
+
+### Policy strength
+
+How much of the failing mail the policy acts on.
+
+| Finding | Severity | What it means for mail | Fix | RFC section |
+| --- | --- | --- | --- | --- |
+| p=none only monitors | CHECK | Spoofed mail is still delivered | Move to quarantine when reports are clean | none (Tamperbox recommendation); [3.2.12](https://www.rfc-editor.org/rfc/rfc9989#section-3.2.12) defines the mode |
+| DMARC test mode (t=y) | CHECK | Effective policy is one level below the declared policy | Review reports before disabling test mode | [4.7](https://www.rfc-editor.org/rfc/rfc9989#section-4.7) |
+| sp=none on subdomains | CHECK | Subdomains can be spoofed | Remove sp or match p | none (Tamperbox recommendation); [4.7](https://www.rfc-editor.org/rfc/rfc9989#section-4.7) defines `sp` |
+| p=reject, p=quarantine | PASS | Failing mail is refused or quarantined | | [4.7](https://www.rfc-editor.org/rfc/rfc9989#section-4.7) |
+
+### Reports and alignment
+
+Who receives aggregate reports and how strictly identities must match.
+
+| Finding | Severity | What it means for mail | Fix | RFC section |
+| --- | --- | --- | --- | --- |
+| No rua reports | CHECK | You cannot see who sends as the domain | Add rua=mailto:… | none (Tamperbox recommendation); [4.7](https://www.rfc-editor.org/rfc/rfc9989#section-4.7) makes `rua` optional |
+| Reports go to X | INFO | The receiving domain must authorise the reports | Publish the authorisation record there | [RFC 9990, 4](https://www.rfc-editor.org/rfc/rfc9990#section-4) |
+| Strict alignment | INFO | Subdomain-signed or subdomain-bounced mail fails | Relaxed is usually enough | [3.2.10.2](https://www.rfc-editor.org/rfc/rfc9989#section-3.2.10.2) |
+| N report addresses | PASS | Aggregate reports are on | | [4.6](https://www.rfc-editor.org/rfc/rfc9989#section-4.6) |
 
 ## Guide
 
@@ -153,7 +260,7 @@ The builder writes tags in a fixed order (`v`, `p`, `sp`, `np`, `pct`, `rua`, `r
 1. Make sure `rua` points at a mailbox or a reporting service you read. Raw aggregate reports are XML; a parsing service makes them readable.
 2. Read a few weeks of reports. List every source that sends as the domain: your mail host, newsletter tool, ticketing, invoicing, and anything you forgot.
 3. Make each one pass SPF or DKIM with a domain aligned with the From domain. Check their records with the SPF and DKIM checkers.
-4. Choose Quarantine a quarter in the path to enforcement, copy the draft, publish it at `_dmarc.<domain>`, and check the domain again.
+4. Choose Test quarantine, review the draft `p=quarantine; t=y`, and publish it only after checking receiver compatibility. Current receivers treat this as monitoring. Remove test mode to request quarantine after reviewing legitimate mail.
 5. When the reports stay clean, move to Quarantine all, then Reject, the same way.
 
 ### No DMARC record
@@ -166,7 +273,7 @@ A provider migration usually leaves the old record beside the new one. Delete ev
 
 ### A misspelt policy, a missing p, a bad percentage
 
-Heal it offers the exact repair: the closest valid policy for a misspelling, `p=none` for a missing policy, removing `pct` for an out-of-range value. Each repair is a draft; copy and publish it.
+Heal it offers the exact repair: the closest valid policy for a misspelling, `p=none` for a missing policy, removing obsolete `pct`. Each repair is a draft; copy and publish it.
 
 ### Report addresses
 
@@ -186,7 +293,7 @@ Each case is built from the record you entered or looked up.
 | Policy typo | Misspells the policy (`rejected`, `quarantined`, `nnone`) | Change p=… to the valid value |
 | Version not first | Moves `v=DMARC1` after the first tag | Put corrected v=DMARC1 first |
 | Bad report address | Strips `mailto:` from rua | Make rua a mailto: address |
-| pct out of range | Sets `pct=150` | Apply to 100% of failing mail |
+| Invalid test mode | Sets `t=invalid` | Disable invalid test mode |
 | Duplicate tag | Adds a second, conflicting `p=` | Keep p=none, Keep p=reject |
 
 ## Worked example
@@ -199,28 +306,45 @@ For the deterministic walkthrough below, enter `harbor-supply.example`. This res
 v=DMARC1; p=none; rua=mailto:dmarc@harbor-supply.example; ruf=mailto:forensics@harbor-supply.example; fo=1
 ```
 
-**Monitoring only: p=none delivers spoofed mail.** The findings are "p=none only monitors" (CHECK, with a button to the next step) and "1 report address" (PASS). Choose Quarantine a quarter: the draft becomes `v=DMARC1; p=quarantine; pct=25; rua=…; ruf=…; fo=1`, History logs the change with Revert, and the record to publish shows the draft at `_dmarc.harbor-supply.example`. Replace the sample with your own domain and every section, card and link is rewritten for it.
+**Monitoring only: no DMARC enforcement requested.** The findings are "p=none only monitors" (CHECK, with a button to the next step) and "1 report address" (PASS). Choose Test quarantine: the draft becomes `v=DMARC1; p=quarantine; t=y; rua=…; ruf=…; fo=1`, History logs the change with Revert, and the record to publish shows the draft at `_dmarc.harbor-supply.example`. Replace the sample with your own domain and every section, card and link is rewritten for it.
 
 ## For agents
 
 The Tamperbox MCP server runs the same checks. Search its catalog for the DMARC operation, inspect the input schema, and call it with the domain or the record. Keep the warning block with any conclusion:
 
 - The tool grades the policy text; whether legitimate mail passes is in the aggregate reports.
-- The exact `_dmarc` name is looked up; a parent domain's policy is not resolved.
+- Parent policy is discovered through a bounded DNS tree walk; inherited `np` applicability is not verified because domain existence is not checked.
 - External report authorisation records are named, not looked up.
+- The `pct` tag is obsolete and does not reduce the effective policy. The `t` tag controls test mode.
 
 See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for the calling pattern, and [Security and privacy](/reference/security/) for where the domain travels.
 
 ## Limits
 
 - The policy, not the reports: enforcement readiness is not assessed.
-- Exact name only; no parent-domain inheritance.
+- Parent policy is discovered through a bounded DNS tree walk; inherited `np` applicability is not verified because domain existence is not checked.
 - `ruf`, `fo`, `rf` and `ri` are explained, not validated.
+- The tag table recognizes `t` and `psd`; legacy `rf` and `ri` explanations remain and are not flagged as removed.
 - One DNS answer, from one public resolver, at one moment.
 - Nothing is stored; copying a draft does not publish it.
 
 ## References
 
-- [RFC 7489, DMARC](https://www.rfc-editor.org/rfc/rfc7489), section 6 for the tags and the external report authorisation record
-- [RFC 7208, Sender Policy Framework](https://www.rfc-editor.org/rfc/rfc7208) and [RFC 6376, DKIM](https://www.rfc-editor.org/rfc/rfc6376), the two mechanisms DMARC aligns
+### DMARC
+
+- [RFC 9989, Domain-Based Message Authentication, Reporting, and Conformance (DMARC)](https://www.rfc-editor.org/rfc/rfc9989), Proposed Standard, May 2026. Obsoletes RFC 7489 and RFC 9091. Sections used: 3.2.10 (alignment), 3.2.12 (Monitoring Mode), 3.2.13 (non-existent domains), 4.4 (identifier alignment), 4.5 (the record in DNS), 4.6 (reporting URIs), 4.7 (tags), 4.8 (formal definition), 4.10 and 4.10.1 (DNS tree walk and policy discovery), 5.1.5 and 5.1.7 (Domain Owner actions), 5.3.1 (A-labels), 7.4 (interoperability and `p=reject`), 9.5 (`_dmarc` registration), appendices A.6 (removal of `pct`) and C.5 (tag changes).
+- [RFC 9990, DMARC Aggregate Reporting](https://www.rfc-editor.org/rfc/rfc9990), Proposed Standard, May 2026. Obsoletes RFC 7489 in part. Sections used: 3.5 (report delivery) and 4 (verifying external destinations).
+- [RFC 9991, DMARC Failure Reporting](https://www.rfc-editor.org/rfc/rfc9991), Proposed Standard, May 2026. Obsoletes RFC 7489 in part and updates RFC 6591. Sections used: 2 (failure reports, `ruf` and `fo`) and 5 (verifying external destinations).
+- [RFC 7489, DMARC](https://www.rfc-editor.org/rfc/rfc7489), Informational, March 2015. Obsoleted by RFC 9989, RFC 9990 and RFC 9991. Cited only as the source of the `pct`, `rf` and `ri` tags the tool still knows.
+
+### Authentication and DNS
+
+- [RFC 7208, Sender Policy Framework](https://www.rfc-editor.org/rfc/rfc7208), Proposed Standard, updated by RFC 8616 and RFC 8553. Cited for the SPF identifier that DMARC aligns; not checked by this tool.
+- [RFC 6376, DomainKeys Identified Mail Signatures](https://www.rfc-editor.org/rfc/rfc6376), Internet Standard, updated by RFC 8301, RFC 8463, RFC 8553 and RFC 8616. Section 3.2 (tag lists and duplicate tags).
+- [RFC 8616, Email Authentication for Internationalized Mail](https://www.rfc-editor.org/rfc/rfc8616), Proposed Standard. Section 6 (DMARC and A-labels).
+- [RFC 8552, Scoped Interpretation of DNS Resource Records through "Underscored" Naming of Attribute Leaves](https://www.rfc-editor.org/rfc/rfc8552), Best Current Practice 222. The registry that holds `_dmarc`.
+- [RFC 8553, DNS AttrLeaf Changes: Fixing Specifications That Use Underscored Node Names](https://www.rfc-editor.org/rfc/rfc8553), Best Current Practice 222. Section 2.1 (TXT RRsets, which lists RFC 7489).
+
+### Tamperbox
+
 - Tamperbox guide: [DMARC rollout: from p=none to reject](https://tamperbox.dev/guides/dmarc-monitoring-to-reject)

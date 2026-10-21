@@ -78,65 +78,189 @@ A policy in enforce mode built from the current one: existing mx lines that stil
 
 ## Method
 
+The checker follows the order in which a sending server discovers and applies a policy. Each rule below names the section of the specification it comes from; rules with no section are Tamperbox recommendations and are labelled as such.
+
 ### The _mta-sts record
 
-Exactly one TXT record at `_mta-sts.<domain>` may start with `v=STSv1`; zero or two gives "Publish exactly one MTA-STS record." Within it, `v` must be the first tag and `id` must be 1 to 32 letters or digits, so an id written with dashes fails. A missing record is FAIL, `No record at _mta-sts.<domain>`, with a suggested record whose id is today's date followed by `01`. A lookup that could not be made (as opposed to one that returned nothing) is reported as unavailable and produces no finding.
+Source: [RFC 8461 section 3.1](https://www.rfc-editor.org/rfc/rfc8461#section-3.1). The record is read at `_mta-sts.<domain>`, a CNAME at that name is followed, and a record split into several strings is joined without spaces, as section 3.1 requires. Records that do not begin with `v=STSv1` are discarded, and the rest must number exactly one. The section is explicit about what happens otherwise: "If the number of resulting records is not one, or if the resulting record is syntactically invalid, senders MUST assume the recipient domain does not have an available MTA-STS Policy."
+
+Zero or two records give "Publish exactly one MTA-STS record." Within the record, `v` must be the first tag ("The TXT record MUST begin with the sts-version field") and `id` must be 1 to 32 letters or digits, the `1*32(ALPHA / DIGIT)` rule of the section 3.1 grammar, so an id written with dashes fails. A missing record is FAIL, `No record at _mta-sts.<domain>`, with a suggested record whose id is today's date followed by `01`. A lookup that could not be made (as opposed to one that returned nothing) is reported as unavailable and produces no finding.
 
 ### Fetching the policy file
 
-The server fetches one URL only, `https://mta-sts.<domain>/.well-known/mta-sts.txt`, and refuses or reports a failure when the host resolves to a non-public address or to none, the response is a redirect (redirects are not followed), the status is not a success, the Content-Type is not `text/plain`, the body exceeds 64 KiB, or the whole lookup takes longer than eight seconds. No cookies, credentials or visitor headers are forwarded. A failed fetch gives FAIL, "No policy file", with the reason in the chain, and the verdict "Not protected".
+Source: [RFC 8461 sections 3.2](https://www.rfc-editor.org/rfc/rfc8461#section-3.2) and [3.3](https://www.rfc-editor.org/rfc/rfc8461#section-3.3). The server fetches one URL only, `https://mta-sts.<domain>/.well-known/mta-sts.txt`, the fixed path of section 3.2. It reports a failure when:
+
+- the response is a redirect: "HTTP 3xx redirects MUST NOT be followed" (section 3.3);
+- the status is not a success (section 3.3 accepts only 200; see [where the tool differs](#where-the-tool-differs-from-rfc-8461));
+- the Content-Type is not `text/plain`: "senders SHOULD validate that the media type is "text/plain"" (section 3.2);
+- the body exceeds 64 KiB, the size section 3.3 suggests;
+- the whole lookup takes longer than eight seconds (section 3.3 allows a timeout and suggests one minute).
+
+Two refusals are Tamperbox safety rules with no RFC source: the host must resolve, and only to public addresses. No cookies, credentials or visitor headers are forwarded. A failed fetch gives FAIL, "No policy file", with the reason in the chain, and the verdict "Not protected". Section 3.3 states what a sender then does: with no cached policy, "senders MUST continue with delivery as though the domain has not implemented MTA-STS."
 
 ### Policy file rules
 
-Each line must be `key: value`; any other line is FAIL, "Not a key: value line: X".
+Source: the field list and grammar of [RFC 8461 section 3.2](https://www.rfc-editor.org/rfc/rfc8461#section-3.2). Each line must be `key: value`; any other line is FAIL, "Not a key: value line: X".
 
-| Rule | Severity | Title |
-| --- | --- | --- |
-| `version: STSv1` required | FAIL | version: STSv1 is missing |
-| `mode` must be `enforce`, `testing` or `none` | FAIL | mode: X |
-| `mode: testing` | CHECK | mode: testing |
-| `mode: enforce` with no other problem | PASS | mode: enforce |
-| At least one `mx:` line unless the mode is `none` | FAIL | No mx: lines |
-| Each `mx:` a host name or `*.` plus a host name, at most 253 characters | FAIL | Invalid MX pattern X |
-| `max_age` a whole number of seconds from 0 to 31557600 | FAIL | max_age is missing or out of range |
-| `max_age` under 86400 | CHECK | max_age N s |
-| `version`, `mode` and `max_age` at most once | FAIL | Duplicate X field |
+| Rule | Severity | Title | Source |
+| --- | --- | --- | --- |
+| `version: STSv1` required | FAIL | version: STSv1 is missing | [3.2](https://www.rfc-editor.org/rfc/rfc8461#section-3.2) |
+| `mode` must be `enforce`, `testing` or `none` | FAIL | mode: X | [3.2](https://www.rfc-editor.org/rfc/rfc8461#section-3.2) |
+| `mode: testing` | CHECK | mode: testing | [5](https://www.rfc-editor.org/rfc/rfc8461#section-5); CHECK is Tamperbox's severity |
+| `mode: enforce` with no other problem | PASS | mode: enforce | [5](https://www.rfc-editor.org/rfc/rfc8461#section-5) |
+| At least one `mx:` line unless the mode is `none` | FAIL | No mx: lines | [3.2](https://www.rfc-editor.org/rfc/rfc8461#section-3.2) grammar |
+| Each `mx:` a host name or `*.` plus a host name, at most 253 characters | FAIL | Invalid MX pattern X | [3.2](https://www.rfc-editor.org/rfc/rfc8461#section-3.2), [RFC 5321 4.1.2](https://www.rfc-editor.org/rfc/rfc5321#section-4.1.2) |
+| `max_age` a whole number of seconds from 0 to 31557600 | FAIL | max_age is missing or out of range | [3.2](https://www.rfc-editor.org/rfc/rfc8461#section-3.2) |
+| `max_age` under 86400 | CHECK | max_age N s | none (Tamperbox recommendation) |
+| Repeated `version`, `mode` or `max_age`: first value wins | CHECK | Duplicate X field | [3.2](https://www.rfc-editor.org/rfc/rfc8461#section-3.2) |
+
+#### Why mode decides the verdict
+
+Section 5 defines what each mode makes a sender do. Under enforce, "Sending MTAs MUST NOT deliver the message to hosts that fail MX matching or certificate validation or that do not support STARTTLS." Under testing, "messages may be delivered as though there were no MTA-STS validation failure", which is why testing is a CHECK and not a PASS.
 
 ### MX coverage
 
-Every MX host is compared with the policy's mx patterns. Following RFC 8461, `*.mx.example.net` matches exactly one extra label: `a.mx.example.net`, never `mx.example.net` or `b.a.mx.example.net`. An uncovered host is FAIL under `mode: enforce` ("X is not in the policy": senders refuse to deliver to it) and CHECK otherwise (it would be refused once the policy enforces). A domain with no MX records, a null MX or a failed MX lookup is FAIL, "MX coverage not established".
+Source: [RFC 8461 section 4.1](https://www.rfc-editor.org/rfc/rfc8461#section-4.1). The MX records are sorted by preference, lowest first, as [RFC 5321 section 5.1](https://www.rfc-editor.org/rfc/rfc5321#section-5.1) orders them, and every host is compared with the policy's mx patterns, case-insensitively and ignoring a trailing dot. Section 4.1 limits the wildcard: "the wildcard character '*' may only be used to match the entire left-most label in the presented identifier." So `*.mx.example.net` matches `a.mx.example.net`, never `mx.example.net` or `b.a.mx.example.net`.
+
+An uncovered host is FAIL under `mode: enforce` ("X is not in the policy": senders refuse to deliver to it, section 5) and CHECK otherwise (it would be refused once the policy enforces). Every host is checked, not only the preferred one, because [section 8.4](https://www.rfc-editor.org/rfc/rfc8461#section-8.4) warns that a misconfigured backup MX may only be discovered when the primary fails.
+
+A domain with no MX records, a failed MX lookup or a null MX (the single `0 .` record of [RFC 7505 section 3](https://www.rfc-editor.org/rfc/rfc7505#section-3), which says the domain accepts no mail) is FAIL, "MX coverage not established".
 
 ### TLS-RPT
 
-Exactly one record at `_smtp._tls.<domain>` may start with `v=TLSRPTv1`, with `v` first and at least one `rua` destination; each destination must be a `mailto:` or `https:` URI. A missing record is CHECK, "No TLS-RPT record", with a suggested record; a bad destination is FAIL, "Invalid report address X"; a valid record is PASS, "TLS reports on".
+Source: [RFC 8460 section 3](https://www.rfc-editor.org/rfc/rfc8460#section-3). The record is read at `_smtp._tls.<domain>`; records that do not begin with `v=TLSRPTv1` are discarded and the rest must number exactly one: "If the number of resulting records is not one, senders MUST assume the recipient domain does not implement TLSRPT." `v` must come first and at least one `rua` destination must be present. Section 3 names the two supported schemes, "mailto" and "https", and the tool requires each destination to use one of them.
+
+A missing, duplicated or unparseable record is CHECK, "No TLS-RPT record", with a suggested record; a destination with another scheme is FAIL, "Invalid report address X"; a valid record is PASS, "TLS reports on". Reporting is optional in the specification, so its absence is not a FAIL.
 
 ### The suggested policy
 
-Built only when at least one mx line can be derived. It uses `mode: enforce`, keeps the existing mx lines that still match an MX host (all of them when no MX hosts were read), adds every uncovered host by name, and sets `max_age` to the current value when it is valid and longer than a week, 604800 otherwise.
+The suggested file is a Tamperbox construction, not an RFC rule. It is built only when at least one mx line can be derived. It uses `mode: enforce`, keeps the existing mx lines that still match an MX host (all of them when no MX hosts were read), adds every uncovered host by name, and sets `max_age` to the current value when it is valid and longer than a week, 604800 otherwise. The week follows section 3.2, which expects `max_age` "typically be in the range of weeks or greater". The note under it asks you to change the id after publishing the file, in the order [section 8.1](https://www.rfc-editor.org/rfc/rfc8461#section-8.1) gives: "Recipients SHOULD also update the HTTPS policy body before updating the TXT record".
+
+## Standards and conformance
+
+The checker implements the discovery and policy rules of RFC 8461, the record rules of RFC 8460, and the MX rules of RFC 5321 and RFC 7505 that coverage depends on. Where the work happens:
+
+- **Looked up on our server.** The `_mta-sts`, MX and `_smtp._tls` records are resolved by the Tamperbox server through one public DNS-over-HTTPS resolver, following CNAME chains of up to eight hops.
+- **Fetched on our server.** The policy file is fetched once over HTTPS by the Tamperbox server, which returns the text to your browser.
+- **Parsed locally.** The record grammar, the policy file, MX coverage, TLS-RPT and the suggested policy are all evaluated in your browser, by the same code that checks a pasted file.
+
+It never opens an SMTP connection, so everything that happens between a sender and an MX host is outside what it can see.
+
+### RFC 8461, SMTP MTA Strict Transport Security
+
+Status: Proposed Standard, September 2018, with no updating RFC.
+
+| Section | Requirement | What the tool does |
+| --- | --- | --- |
+| [3.1](https://www.rfc-editor.org/rfc/rfc8461#section-3.1) | One `v=STSv1` TXT record, version first, id of 1 to 32 letters or digits, strings joined, CNAMEs followed | Implemented as written for the version, id, count, joining and CNAMEs |
+| [3.2](https://www.rfc-editor.org/rfc/rfc8461#section-3.2) | Fixed URL; `text/plain` (SHOULD); version, mode, max_age once, mx at least once unless mode is none | Implemented; the media type check is a hard failure, not a warning |
+| [3.3](https://www.rfc-editor.org/rfc/rfc8461#section-3.3) | Certificate valid for the `mta-sts` host; only 200; no redirects; no HTTP caching; timeout and size MAY | Redirects refused, 64 KiB cap, eight-second limit; the certificate is not inspected (below) |
+| [3.3](https://www.rfc-editor.org/rfc/rfc8461#section-3.3), [5.1](https://www.rfc-editor.org/rfc/rfc8461#section-5.1) | Senders cache a policy for up to max_age and apply a cached policy when discovery fails | Not modelled: each check is live and uncached; the verdict notes that cached policies may still apply |
+| [3.4](https://www.rfc-editor.org/rfc/rfc8461#section-3.4) | Never fetch a policy from the parent zone | Only the domain entered is checked |
+| [4.1](https://www.rfc-editor.org/rfc/rfc8461#section-4.1) | Every MX matches an mx pattern; the wildcard covers one left-most label | Implemented for every MX host |
+| [4.2](https://www.rfc-editor.org/rfc/rfc8461#section-4.2), [7.1](https://www.rfc-editor.org/rfc/rfc8461#section-7.1), [7.2](https://www.rfc-editor.org/rfc/rfc8461#section-7.2) | STARTTLS, a valid MX certificate, SNI, TLS 1.2 or later | Not tested; Take it further opens the TLS and DANE checks for the primary MX |
+| [5](https://www.rfc-editor.org/rfc/rfc8461#section-5) | Meaning of enforce, testing and none | Drives the verdict and the severity of uncovered hosts |
+| [8.3](https://www.rfc-editor.org/rfc/rfc8461#section-8.3) | `mode: none` withdraws the policy | Reported as a valid withdrawal, "Policy withdrawn" |
+
+#### The policy host certificate
+
+Section 3.3 says the Policy Host "MUST present an X.509 certificate that is valid for the "mta-sts" DNS-ID". The tool does not examine that certificate. The fetch relies on the TLS validation of the server platform, and a failed handshake surfaces as a generic lookup failure in the chain, not as a named certificate finding. Use the [SSL checker](https://tamperbox.dev/ssl-checker) on `mta-sts.<domain>` to see the certificate itself.
+
+### Where the tool differs from RFC 8461
+
+These differences were confirmed by running the parser on the inputs described.
+
+| Section | What the RFC says | What the tool does |
+| --- | --- | --- |
+| [3.2](https://www.rfc-editor.org/rfc/rfc8461#section-3.2) | A duplicated version, mode or max_age is not an error: "all entries except for the first SHALL be ignored" | CHECK, "Duplicate X field"; the first value is kept, so testing followed by enforce remains testing |
+| [3.2](https://www.rfc-editor.org/rfc/rfc8461#section-3.2) | Field names are case-sensitive (`%s"mode"`) and no space is allowed before the colon | Names are matched case-insensitively and a space before the colon is accepted, so `Mode : enforce` passes here |
+| [3.2](https://www.rfc-editor.org/rfc/rfc8461#section-3.2) | Unknown fields "SHALL be ignored"; names may contain digits, `_`, `-` and `.` | Unknown names with only letters and `_` are ignored; a name with a digit, `-` or `.` is FAIL, "Not a key: value line" |
+| [3.1](https://www.rfc-editor.org/rfc/rfc8461#section-3.1) | Extension tags in the TXT record are allowed and ignored | A tag name with `-` or `.` is reported as a malformed record; spaces around `=` are accepted |
+| [3.2](https://www.rfc-editor.org/rfc/rfc8461#section-3.2) | An mx value is an RFC 5321 `Domain`, which may be a single label | Single-label patterns are FAIL, "Invalid MX pattern" |
+| [3.3](https://www.rfc-editor.org/rfc/rfc8461#section-3.3) | "Policies fetched via HTTPS are only valid if the HTTP response code is 200 (OK)." | Any 2xx status is accepted |
+
+#### max_age limits
+
+The bounds match section 3.2: a non-negative integer up to 31557600. The CHECK for values under 86400 is a Tamperbox recommendation; the RFC sets no lower bound, so `max_age: 0` is valid there and a CHECK here. Section 3.2 expects "weeks or greater", and [section 10.2](https://www.rfc-editor.org/rfc/rfc8461#section-10.2) says implementers "SHOULD prefer policy "max_age" values to be as long as is practical", which is where the one-week suggestion comes from.
+
+### RFC 8460, SMTP TLS Reporting
+
+Status: Proposed Standard, September 2018.
+
+| Section | Requirement | What the tool does |
+| --- | --- | --- |
+| [3](https://www.rfc-editor.org/rfc/rfc8460#section-3) | One record at `_smtp._tls`, beginning `v=TLSRPTv1`, strings joined | Implemented |
+| [3](https://www.rfc-editor.org/rfc/rfc8460#section-3) | `rua` required, a comma-separated list of `mailto` or `https` URIs | Implemented; each destination is checked for one of the two schemes |
+| [3](https://www.rfc-editor.org/rfc/rfc8460#section-3) | Unknown fields "SHALL be ignored" | A field name containing `-` or `.` makes the record unparseable here, reported as "No TLS-RPT record" |
+| [3](https://www.rfc-editor.org/rfc/rfc8460#section-3) | Reports by mail carry a DKIM signature; the key SHOULD declare `s=tlsrpt` | Not checked |
+| [4](https://www.rfc-editor.org/rfc/rfc8460#section-4), [5](https://www.rfc-editor.org/rfc/rfc8460#section-5) | Report format and delivery | Out of scope: no reports are received or read |
+
+Two severity choices are Tamperbox's own. A duplicated or invalid record is folded into the CHECK "No TLS-RPT record" rather than named, because the RFC's consequence is the same as a missing one. An unsupported scheme is FAIL, although the RFC only says which schemes are supported; senders would have nowhere usable to send that report.
+
+### RFC 5321 and RFC 7505, the MX records
+
+[RFC 5321](https://www.rfc-editor.org/rfc/rfc5321) (Draft Standard, October 2008, updated by RFC 7504) defines how senders find mail servers. [Section 5.1](https://www.rfc-editor.org/rfc/rfc5321#section-5.1) says MX preference "MUST be used in sorting", and the coverage table follows that order. The same section says that when no MX records exist, "the address is treated as if it was associated with an implicit MX RR, with a preference of 0, pointing to that host." The tool does not model the implicit MX: a domain without MX records is FAIL, "MX coverage not established", and the domain itself is not compared with the mx lines.
+
+[RFC 7505](https://www.rfc-editor.org/rfc/rfc7505) (Proposed Standard, June 2015) defines the null MX. [Section 3](https://www.rfc-editor.org/rfc/rfc7505#section-3) says "A domain that advertises a null MX MUST NOT advertise any other MX RR." The tool treats any `.` exchange as a null MX and stops; it does not report a null MX mixed with ordinary records as a separate error.
+
+### RFC 9525, service identity
+
+RFC 8461 sections [3.3](https://www.rfc-editor.org/rfc/rfc8461#section-3.3), [4.1](https://www.rfc-editor.org/rfc/rfc8461#section-4.1) and [4.2](https://www.rfc-editor.org/rfc/rfc8461#section-4.2) refer to RFC 6125 for name matching. [RFC 9525](https://www.rfc-editor.org/rfc/rfc9525) (Proposed Standard, November 2023) obsoletes RFC 6125, so its rules now apply. [Section 6.3](https://www.rfc-editor.org/rfc/rfc9525#section-6.3) compares names label by label "using a case-insensitive ASCII comparison" and states that "A wildcard in a presented identifier can only match one label in a reference identifier." The mx matching applies both rules. RFC 8461 also requires the A-label form for internationalized names, and a pattern with non-ASCII characters is reported as an invalid MX pattern. Certificate name matching, the main subject of RFC 9525, is not performed, because no certificate is examined.
+
+### RFC 8552 and RFC 8553, underscored names
+
+`_mta-sts` is listed in the "Underscored and Globally Scoped DNS Node Names" registry created by [RFC 8552 section 4.1](https://www.rfc-editor.org/rfc/rfc8552#section-4.1) (Best Current Practice, BCP 222). [RFC 8553](https://www.rfc-editor.org/rfc/rfc8553), the companion that corrected older specifications, does not update RFC 8461 or RFC 8460: neither appears in its Updates list, and its info page records no such relationship. The only effect on the tool is that the server accepts the underscore labels in both lookup names.
 
 ## Finding reference
 
-| Finding | Severity | What it means for mail | Fix |
-| --- | --- | --- | --- |
-| No record at _mta-sts.domain | FAIL | Senders never look for a policy | Publish v=STSv1; id=… |
-| Publish exactly one MTA-STS record. | FAIL | Senders cannot pick one | Keep one record |
-| The version tag must be first., An MTA-STS record starts with v=STSv1., id= must be 1 to 32 letters or digits. | FAIL | Senders ignore the record | Correct the record |
-| No policy file | FAIL | Senders treat the domain as having no policy | Serve the file at the well-known URL over HTTPS as text/plain |
-| version: STSv1 is missing | FAIL | Senders discard the policy | Add the line |
-| mode: X (invalid) | FAIL | Senders discard the policy | Use enforce, testing or none |
-| mode: testing | CHECK | Failures are reported but mail still delivers over plain text | Switch to enforce when reports are clean |
-| mode: enforce | PASS | Senders require TLS to a listed server | |
-| No mx: lines | FAIL | No server would be allowed | Add one mx line per host |
-| Invalid MX pattern X | FAIL | Senders discard the policy | Fix the line |
-| max_age is missing or out of range | FAIL | Senders discard the policy | Use seconds up to one year |
-| max_age N s | CHECK | Protection lapses quickly | Use a week or more |
-| Not a key: value line: X, Duplicate X field | FAIL | Senders discard the policy | Fix the line |
-| X is not in the policy | FAIL (enforce) or CHECK | Senders refuse that server, or will once enforced | Add mx: X |
-| MX coverage not established | FAIL | No usable MX servers | Publish MX records |
-| No TLS-RPT record | CHECK | You will not hear about failed connections | Publish v=TLSRPTv1; rua=mailto:… |
-| Invalid report address X | FAIL | Senders skip the address | Use mailto: or https: |
-| TLS reports on | PASS | Daily reports go to the listed addresses | |
-| id=X (pasted record) | PASS | The record is valid | Change the id when the file changes |
+Each finding the checker can emit, grouped by the part of the setup it judges, with what it means for mail sent to the domain. The RFC section column links the rule behind each finding; "none" marks a Tamperbox recommendation that the specification does not set.
+
+### The _mta-sts record
+
+The TXT record that tells senders a policy exists and which version to fetch.
+
+| Finding | Severity | What it means for mail | Fix | RFC section |
+| --- | --- | --- | --- | --- |
+| No record at _mta-sts.domain | FAIL | Senders never look for a policy | Publish v=STSv1; id=… | [RFC 8461 3.1](https://www.rfc-editor.org/rfc/rfc8461#section-3.1) |
+| Publish exactly one MTA-STS record. | FAIL | Senders cannot pick one | Keep one record | [RFC 8461 3.1](https://www.rfc-editor.org/rfc/rfc8461#section-3.1) |
+| The version tag must be first., An MTA-STS record starts with v=STSv1., id= must be 1 to 32 letters or digits. | FAIL | Senders ignore the record | Correct the record | [RFC 8461 3.1](https://www.rfc-editor.org/rfc/rfc8461#section-3.1) |
+| id=X (pasted record) | PASS | The record is valid | Change the id when the file changes | [RFC 8461 3.1](https://www.rfc-editor.org/rfc/rfc8461#section-3.1) |
+
+### The policy file
+
+The file at `https://mta-sts.<domain>/.well-known/mta-sts.txt`, line by line.
+
+| Finding | Severity | What it means for mail | Fix | RFC section |
+| --- | --- | --- | --- | --- |
+| No policy file | FAIL | Senders treat the domain as having no policy | Serve the file at the well-known URL over HTTPS as text/plain | [RFC 8461 3.3](https://www.rfc-editor.org/rfc/rfc8461#section-3.3) |
+| version: STSv1 is missing | FAIL | Senders discard the policy | Add the line | [RFC 8461 3.2](https://www.rfc-editor.org/rfc/rfc8461#section-3.2) |
+| mode: X (invalid) | FAIL | Senders discard the policy | Use enforce, testing or none | [RFC 8461 3.2](https://www.rfc-editor.org/rfc/rfc8461#section-3.2) |
+| mode: testing | CHECK | Failures are reported but mail still delivers over plain text | Switch to enforce when reports are clean | [RFC 8461 5](https://www.rfc-editor.org/rfc/rfc8461#section-5) |
+| mode: enforce | PASS | Senders require TLS to a listed server | | [RFC 8461 5](https://www.rfc-editor.org/rfc/rfc8461#section-5) |
+| No mx: lines | FAIL | No server would be allowed | Add one mx line per host | [RFC 8461 3.2](https://www.rfc-editor.org/rfc/rfc8461#section-3.2) |
+| Invalid MX pattern X | FAIL | Senders discard the policy | Fix the line | [RFC 8461 3.2](https://www.rfc-editor.org/rfc/rfc8461#section-3.2) |
+| max_age is missing or out of range | FAIL | Senders discard the policy | Use seconds up to one year | [RFC 8461 3.2](https://www.rfc-editor.org/rfc/rfc8461#section-3.2) |
+| max_age N s | CHECK | Protection lapses quickly | Use a week or more | none (Tamperbox recommendation) |
+| Not a key: value line: X | FAIL | Senders may discard the policy | Fix the line | [RFC 8461 3.2](https://www.rfc-editor.org/rfc/rfc8461#section-3.2) |
+
+### MX coverage
+
+Whether every mail server the domain publishes is allowed by the policy.
+
+| Finding | Severity | What it means for mail | Fix | RFC section |
+| --- | --- | --- | --- | --- |
+| X is not in the policy | FAIL (enforce) or CHECK | Senders refuse that server, or will once enforced | Add mx: X | [RFC 8461 4.1](https://www.rfc-editor.org/rfc/rfc8461#section-4.1), [5](https://www.rfc-editor.org/rfc/rfc8461#section-5) |
+| MX coverage not established | FAIL | No usable MX servers | Publish MX records | [RFC 5321 5.1](https://www.rfc-editor.org/rfc/rfc5321#section-5.1), [RFC 7505 3](https://www.rfc-editor.org/rfc/rfc7505#section-3) |
+
+### TLS reporting
+
+The `_smtp._tls` record that asks senders for daily failure reports.
+
+| Finding | Severity | What it means for mail | Fix | RFC section |
+| --- | --- | --- | --- | --- |
+| No TLS-RPT record | CHECK | You will not hear about failed connections | Publish v=TLSRPTv1; rua=mailto:… | [RFC 8460 3](https://www.rfc-editor.org/rfc/rfc8460#section-3); CHECK is Tamperbox's severity |
+| Invalid report address X | FAIL | Senders skip the address | Use mailto: or https: | [RFC 8460 3](https://www.rfc-editor.org/rfc/rfc8460#section-3) |
+| TLS reports on | PASS | Daily reports go to the listed addresses | | [RFC 8460 3](https://www.rfc-editor.org/rfc/rfc8460#section-3), [4.1](https://www.rfc-editor.org/rfc/rfc8460#section-4.1) |
 
 ## Guide
 
@@ -208,6 +332,11 @@ See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for 
 
 ## References
 
-- [RFC 8461, SMTP MTA Strict Transport Security](https://www.rfc-editor.org/rfc/rfc8461), section 3 for the policy file and the one-label wildcard
-- [RFC 8460, SMTP TLS Reporting](https://www.rfc-editor.org/rfc/rfc8460)
-- [DANE checker](https://tamperbox.dev/dane-checker), the DNSSEC-based alternative for pinning MX certificates
+- [RFC 8461, SMTP MTA Strict Transport Security (MTA-STS)](https://www.rfc-editor.org/rfc/rfc8461), Proposed Standard, September 2018, no updates. Sections used: [3.1](https://www.rfc-editor.org/rfc/rfc8461#section-3.1) for the TXT record, [3.2](https://www.rfc-editor.org/rfc/rfc8461#section-3.2) for the policy file, [3.3](https://www.rfc-editor.org/rfc/rfc8461#section-3.3) for fetching, [3.4](https://www.rfc-editor.org/rfc/rfc8461#section-3.4) for subdomains, [4.1](https://www.rfc-editor.org/rfc/rfc8461#section-4.1) for the one-label wildcard, [4.2](https://www.rfc-editor.org/rfc/rfc8461#section-4.2), [5](https://www.rfc-editor.org/rfc/rfc8461#section-5) and [5.1](https://www.rfc-editor.org/rfc/rfc8461#section-5.1) for the modes, [7.1](https://www.rfc-editor.org/rfc/rfc8461#section-7.1), [7.2](https://www.rfc-editor.org/rfc/rfc8461#section-7.2), [8.1](https://www.rfc-editor.org/rfc/rfc8461#section-8.1), [8.3](https://www.rfc-editor.org/rfc/rfc8461#section-8.3), [8.4](https://www.rfc-editor.org/rfc/rfc8461#section-8.4) and [10.2](https://www.rfc-editor.org/rfc/rfc8461#section-10.2).
+- [RFC 8460, SMTP TLS Reporting](https://www.rfc-editor.org/rfc/rfc8460), Proposed Standard, September 2018. Sections used: [3](https://www.rfc-editor.org/rfc/rfc8460#section-3) for the `_smtp._tls` record, [4](https://www.rfc-editor.org/rfc/rfc8460#section-4) and [4.1](https://www.rfc-editor.org/rfc/rfc8460#section-4.1) for the daily report, [5](https://www.rfc-editor.org/rfc/rfc8460#section-5) for delivery (not checked).
+- [RFC 5321, Simple Mail Transfer Protocol](https://www.rfc-editor.org/rfc/rfc5321), Draft Standard, October 2008, updated by RFC 7504. Sections used: [4.1.2](https://www.rfc-editor.org/rfc/rfc5321#section-4.1.2) for the `Domain` syntax of mx values, [5.1](https://www.rfc-editor.org/rfc/rfc5321#section-5.1) for MX ordering and the implicit MX.
+- [RFC 7505, A "Null MX" No Service Resource Record for Domains That Accept No Mail](https://www.rfc-editor.org/rfc/rfc7505), Proposed Standard, June 2015. Section used: [3](https://www.rfc-editor.org/rfc/rfc7505#section-3).
+- [RFC 9525, Service Identity in TLS](https://www.rfc-editor.org/rfc/rfc9525), Proposed Standard, November 2023, obsoletes RFC 6125, which RFC 8461 cites for name matching. Section used: [6.3](https://www.rfc-editor.org/rfc/rfc9525#section-6.3).
+- [RFC 8552, Scoped Interpretation of DNS Resource Records through "Underscored" Naming of Attribute Leaves](https://www.rfc-editor.org/rfc/rfc8552), Best Current Practice (BCP 222), March 2019. Section used: [4.1](https://www.rfc-editor.org/rfc/rfc8552#section-4.1).
+- [RFC 8553, DNS AttrLeaf Changes](https://www.rfc-editor.org/rfc/rfc8553), Best Current Practice (BCP 222), March 2019; it does not update RFC 8461 or RFC 8460.
+- [DANE checker](https://tamperbox.dev/dane-checker), the DNSSEC-based alternative for pinning MX certificates.

@@ -31,7 +31,9 @@ It does not evaluate a sender address. A real receiver stops at the first matchi
 
 ### A domain
 
-`example.com`. When you stop typing, or on Enter, the server reads the TXT records at the domain and keeps the ones that start with `v=spf1`. Each include and redirect target is looked up the same way, ten levels deep at most and 100 names in total.
+`example.com`. When you stop typing, or on Enter, the server reads the TXT records at the domain and the browser keeps the ones that start with `v=spf1`. Each include and redirect target is looked up the same way, ten levels deep at most and 100 names in total.
+
+A pasted web address or email address, such as `https://example.com/contact` or `postmaster@example.com`, is cleaned to the domain it holds, and the page says what it kept. Text with no usable domain stays as it was, and the field explains what is wrong. A domain with non-ASCII labels is converted to A-labels before it is looked up.
 
 ### An SPF record
 
@@ -77,97 +79,265 @@ Every term with its meaning and whether it costs a lookup; an unknown term is ma
 
 ## Method
 
+Every rule below names the section of [RFC 7208](https://www.rfc-editor.org/rfc/rfc7208) it comes from. Rules that decide a FAIL quote the normative sentence behind them. Rules marked "Tamperbox" are our own recommendations, not RFC requirements.
+
+### Record selection
+
+The server asks public DNS for the TXT records at the name, as [section 4.4](https://www.rfc-editor.org/rfc/rfc7208#section-4.4) prescribes ("querying for type TXT only"), and the browser keeps the answers that start with `v=spf1` followed by whitespace or the end of the record. [Section 4.5](https://www.rfc-editor.org/rfc/rfc7208#section-4.5) decides the outcome: "If the resultant record set includes no records, check_host() produces the "none" result. If the resultant record set includes more than one record, check_host() produces the "permerror" result."
+
+- No TXT record at the name (NXDOMAIN or an empty answer) is FAIL, "No record at domain."
+- TXT records, none of them SPF, is FAIL, "No SPF record at this name."
+- Two or more records is FAIL, "N SPF records: receivers return permerror." The first record is still parsed and expanded, so the rest of the result describes it.
+- A record published as several quoted strings is joined first, as [section 3.3](https://www.rfc-editor.org/rfc/rfc7208#section-3.3) requires: "the record MUST be treated as if those strings are concatenated together without adding spaces."
+
 ### Term syntax
 
-The record must start with `v=spf1`. Each term after it is a mechanism (`all`, `include`, `a`, `mx`, `ptr`, `ip4`, `ip6`, `exists`) with an optional `+`, `-`, `~` or `?` qualifier, or a `name=value` modifier. These are FAIL:
+The record is split on whitespace. Each term after `v=spf1` is a mechanism from [section 4.6.1](https://www.rfc-editor.org/rfc/rfc7208#section-4.6.1) with an optional `+`, `-`, `~` or `?` qualifier, or a `name=value` modifier. Names are compared without case, because "mechanism and modifier names are case-insensitive" (section 4.6.1). Every syntax error is FAIL, because [section 4.6](https://www.rfc-editor.org/rfc/rfc7208#section-4.6) says: "if there are any syntax errors anywhere in the record, check_host() returns immediately with the result "permerror"".
 
-- an unrecognised mechanism, "Unknown term X": one unknown mechanism is a permanent error for the whole record
-- an `ip4` value that is not four octets from 0 to 255, or an `ip6` value that does not parse: "Invalid IPv4 address in X", "Invalid IPv6 address in X"
-- an IPv4 prefix over /32, "Prefix too long in X"; any other bad prefix, "Invalid prefix in X" (IPv4 /0 to /32, IPv6 /0 to /128; the dual `/n//n` form only on `a` and `mx`)
-- `include` or `exists` without a domain, `redirect` or `exp` with an empty value, a value attached to `all`
-- the same modifier twice, "Duplicate X modifier"
+| Rule | Finding | RFC section |
+| --- | --- | --- |
+| A mechanism name outside the eight in 4.6.1 | Unknown term X | [4.6.1](https://www.rfc-editor.org/rfc/rfc7208#section-4.6.1) |
+| `ip4` value that is not four octets from 0 to 255 without leading zeros | Invalid IPv4 address in X | [5.6](https://www.rfc-editor.org/rfc/rfc7208#section-5.6) |
+| `ip6` value that does not parse as an IPv6 address | Invalid IPv6 address in X | [5.6](https://www.rfc-editor.org/rfc/rfc7208#section-5.6) |
+| IPv4 prefix over /32 (also reported as an invalid prefix) | Prefix too long in X | [5.6](https://www.rfc-editor.org/rfc/rfc7208#section-5.6) |
+| IPv6 prefix over /128, the dual `/n//n` form on `ip4` or `ip6`, a prefix on any mechanism other than `ip4`, `ip6`, `a` and `mx` | Invalid prefix in X | [5.6](https://www.rfc-editor.org/rfc/rfc7208#section-5.6) |
+| `include` or `exists` without a domain | include needs a domain, exists needs a domain | [5.2](https://www.rfc-editor.org/rfc/rfc7208#section-5.2), [5.7](https://www.rfc-editor.org/rfc/rfc7208#section-5.7) |
+| `redirect=` or `exp=` with an empty value | redirect needs a domain, exp needs a domain | [6.1](https://www.rfc-editor.org/rfc/rfc7208#section-6.1), [6.2](https://www.rfc-editor.org/rfc/rfc7208#section-6.2) |
+| A value attached to `all` | Invalid all mechanism X | [5.1](https://www.rfc-editor.org/rfc/rfc7208#section-5.1) |
+| The same modifier name twice | Duplicate X modifier | [6](https://www.rfc-editor.org/rfc/rfc7208#section-6) |
 
-An unknown modifier is CHECK, "Unknown modifier X", because receivers skip modifiers they do not know.
+### Modifier rules
+
+The duplicate rule follows [section 6](https://www.rfc-editor.org/rfc/rfc7208#section-6): "These two modifiers MUST NOT appear in a record more than once each. If they do, then check_host() exits with a result of "permerror"." The tool applies it only to `redirect` and `exp`; repeated unknown modifiers are ignored for validity.
+
+An unknown modifier is CHECK, "Unknown modifier X". Section 6 says "Unrecognized modifiers MUST be ignored no matter where, or how often, they appear in a record", so it never breaks the record; the tool reports it because a misspelt `redirect` is silently ignored the same way (Tamperbox).
 
 ### Which terms are evaluated
 
-Receivers stop at the first `all`. Terms after it are not evaluated and not counted. `redirect` is followed only when the record has no `all`. The tool follows the same order.
+[Section 4.6.2](https://www.rfc-editor.org/rfc/rfc7208#section-4.6.2): "Each mechanism is considered in turn from left to right." The tool walks the terms in that order and stops at the first `all`, following [section 5.1](https://www.rfc-editor.org/rfc/rfc7208#section-5.1): "Mechanisms listed after "all" MUST be ignored." Terms after it are not counted. `redirect` is followed only when the record has no `all`, after every mechanism, because [section 6.1](https://www.rfc-editor.org/rfc/rfc7208#section-6.1) says: "Any "redirect" modifier MUST be ignored if there is an "all" mechanism anywhere in the record." The lookup budget numbers the slots in this order, descending into each include as it is reached.
 
 ### The lookup budget
 
-`include`, `a`, `mx`, `ptr`, `exists` and `redirect` each cost one lookup; `ip4`, `ip6`, `all` and `exp` cost nothing. Each include and redirect target is expanded recursively and its cost added. The total is compared with the limit of 10:
+[Section 4.6.4](https://www.rfc-editor.org/rfc/rfc7208#section-4.6.4) lists the terms that cause DNS queries: `include`, `a`, `mx`, `ptr`, `exists` and `redirect`. Each costs one; `ip4`, `ip6`, `all` and `exp` cost nothing. The rule: "SPF implementations MUST limit the total number of those terms to 10 during SPF evaluation, to avoid unreasonable load on the DNS. If this limit is exceeded, the implementation MUST return "permerror"."
 
-| Total | Severity | Title |
-| --- | --- | --- |
-| 11 or more | FAIL | N of 10 DNS lookups |
-| 9 or 10 | CHECK | N of 10 DNS lookups |
-| 8 or fewer | PASS | N of 10 DNS lookups |
+The count is one total for the whole tree, because [section 4.1](https://www.rfc-editor.org/rfc/rfc7208#section-4.1) says the limit "must be tracked as a single global limit for all evaluations, not just for a single instance of a recursive evaluation." An include reached twice through different branches is counted twice.
 
-### Branches that cannot be evaluated
+| Total | Severity | Title | RFC section |
+| --- | --- | --- | --- |
+| 11 or more | FAIL | N of 10 DNS lookups | [4.6.4](https://www.rfc-editor.org/rfc/rfc7208#section-4.6.4) |
+| 9 or 10 | CHECK | N of 10 DNS lookups | none (Tamperbox early warning) |
+| 8 or fewer | PASS | N of 10 DNS lookups | [4.6.4](https://www.rfc-editor.org/rfc/rfc7208#section-4.6.4) |
 
-For each include or redirect target the server asks public DNS for TXT records and keeps the ones starting with `v=spf1`.
+The total is what a receiver spends on a sender that matches nothing, since then every term is evaluated. For a sender matched earlier, "processing ends" at the match (section 4.6.2) and fewer lookups are made.
 
-- A target with no SPF record fails with "No SPF record at the include or redirect target: permerror." It counts as a void lookup only when DNS returned no TXT records at all.
-- Two or more SPF records at one name: "N SPF records: receivers return permerror."
-- A name already being expanded higher in the same branch: "Include loop".
-- A name containing `%`: macros need a sender identity and are not expanded; the branch is marked incomplete.
-- More than ten levels of nesting, or more than 100 names in total: "Expansion limit reached", incomplete.
-- A lookup that errors rather than returning empty marks the tree incomplete.
+### Void lookups
 
-A branch error appears in the findings as "domain: reason", FAIL when the branch was evaluated and found broken, CHECK when it could not be evaluated. An incomplete tree adds "Incomplete lookup tree" (CHECK) and the counts are shown as "at least N". More than two void lookups is FAIL, "N void lookups".
+Section 4.6.4 also limits lookups that return nothing: "SPF implementations SHOULD limit "void lookups" to two." and "Exceeding the limit produces a "permerror" result." The tool counts a void when the TXT query for an include or redirect target returns NXDOMAIN or no TXT records at all. A target that publishes TXT records but no SPF record is not void, though it still fails (see below). More than two voids is FAIL, "N void lookups". The `a`, `mx` and `exists` queries are never made, so their voids are not counted.
+
+### Include and redirect targets
+
+Each target is looked up as in [Record selection](#record-selection). The outcomes, and the rule behind each:
+
+| Outcome | Finding | Severity | RFC section |
+| --- | --- | --- | --- |
+| No SPF record at the target | No SPF record at the include or redirect target: permerror. | FAIL | [5.2](https://www.rfc-editor.org/rfc/rfc7208#section-5.2), [6.1](https://www.rfc-editor.org/rfc/rfc7208#section-6.1) |
+| Two or more SPF records | N SPF records: receivers return permerror. | FAIL | [4.5](https://www.rfc-editor.org/rfc/rfc7208#section-4.5) |
+| A name already being expanded higher in the same branch | Include loop | FAIL | none (Tamperbox; a loop exhausts 4.6.4) |
+| A name containing `%` | SPF macros need a sender IP and envelope identity | CHECK | [7](https://www.rfc-editor.org/rfc/rfc7208#section-7) |
+| More than ten levels, or more than 100 names | Expansion limit reached | CHECK | none (Tamperbox bound) |
+| SERVFAIL, timeout, truncated or inconclusive answer, or a name the server refuses | Lookup incomplete: retry before using this result. | CHECK | [4.4](https://www.rfc-editor.org/rfc/rfc7208#section-4.4) |
+
+For an include, [section 5.2](https://www.rfc-editor.org/rfc/rfc7208#section-5.2) maps a recursive "none" to "return permerror"; for a redirect, section 6.1 says "if no SPF record is found, or if the `<target-name>` is malformed, the result is a "permerror" rather than "none"."
+
+### How branch findings are reported
+
+A branch error appears as "domain: reason". Failing findings inside an included record (syntax errors, broken targets) are carried up to the result; CHECK findings inside it are not, and the hygiene rules below run on the top record only. An incomplete branch adds "Incomplete lookup tree" (CHECK) and every count is shown as "at least N".
 
 ### The all mechanism and record hygiene
 
-| Finding | Severity | Rule |
-| --- | --- | --- |
-| No all mechanism | CHECK | No `all` and no `redirect`: unlisted servers get neutral |
-| +all allows every server on the internet | FAIL | `+all` or bare `all` |
-| ?all makes SPF neutral | CHECK | |
-| Ends in ~all, Ends in -all | PASS | |
-| Mechanisms after all are ignored | CHECK | A mechanism follows `all` |
-| redirect is ignored when all is present | CHECK | |
-| ptr is deprecated | CHECK | |
-| Duplicate X | CHECK | The same term twice; a leading `+` is ignored when comparing |
-| N characters | INFO | The record is longer than one 255-character TXT string |
+These run on the top record. [Section 4.7](https://www.rfc-editor.org/rfc/rfc7208#section-4.7) sets the default: "If none of the mechanisms match and there is no "redirect" modifier, then the check_host() returns a result of "neutral", just as if "?all" were specified as the last directive." For `ptr`, [section 5.5](https://www.rfc-editor.org/rfc/rfc7208#section-5.5): "This mechanism SHOULD NOT be published."
+
+| Finding | Severity | Rule | RFC section |
+| --- | --- | --- | --- |
+| No all mechanism | CHECK | No `all` and no `redirect` | [4.7](https://www.rfc-editor.org/rfc/rfc7208#section-4.7) |
+| +all allows every server on the internet | FAIL | `+all` or bare `all` | none (Tamperbox; the RFC allows it) |
+| ?all makes SPF neutral | CHECK | `?all` | [4.7](https://www.rfc-editor.org/rfc/rfc7208#section-4.7) |
+| Ends in ~all, Ends in -all | PASS | `~all` or `-all` | none (Tamperbox) |
+| Mechanisms after all are ignored | CHECK | A mechanism follows `all` | [5.1](https://www.rfc-editor.org/rfc/rfc7208#section-5.1) |
+| redirect is ignored when all is present | CHECK | Both present | [6.1](https://www.rfc-editor.org/rfc/rfc7208#section-6.1) |
+| ptr is deprecated | CHECK | Any `ptr` | [5.5](https://www.rfc-editor.org/rfc/rfc7208#section-5.5) |
+| Duplicate X | CHECK | The same term twice, compared exactly; a leading `+` is ignored | none (Tamperbox) |
+| N characters | INFO | Longer than one 255-character TXT string | [3.3](https://www.rfc-editor.org/rfc/rfc7208#section-3.3) |
 
 ### Flattening plan
 
-The plan appears when the total is over 10. Candidates are the root record's top-level includes with a pass qualifier. An include is flattenable only when its whole subtree holds nothing but pass-qualified `ip4` and `ip6` terms, pass-qualified nested includes and a non-pass `all`, every lookup in it succeeded, and it has no failing problems; everything else is marked Keep with the reason (uses a, mx or exists; not looked up). Candidates are taken in order of savings (the include plus everything beneath it) until the total is 10 or lower. No plan is chosen when the root record has failures or the tree is incomplete.
+The plan is a Tamperbox method; RFC 7208 neither requires nor describes flattening, though [section 10.1.1](https://www.rfc-editor.org/rfc/rfc7208#section-10.1.1) calls a record of `ip4` terms the "Best record" for DNS cost. It appears when the total is over 10.
 
-Each chosen include is replaced in place by its ranges, so the ranges stay ahead of any `-` or `~` mechanism that follows. The flattened record is split into 255-character strings. If every candidate flattened still leaves the record over 10, the plan says so and suggests moving a sender to a subdomain.
+Candidates are the top record's includes with a pass qualifier. One is flattenable only when its whole subtree holds nothing but pass-qualified `ip4` and `ip6` terms, pass-qualified nested includes and a non-pass `all`, every lookup in it succeeded, and it has no failing problems. That condition keeps the result equivalent under [section 5.2](https://www.rfc-editor.org/rfc/rfc7208#section-5.2): an include matches only when the included record returns pass, so its pass ranges are exactly what it contributes, and a `-all` inside it means "not match", not fail.
+
+Candidates are taken in order of savings (the include plus everything beneath it) until the total is 10 or lower. No plan is chosen when the top record has failures or the tree is incomplete. Each chosen include is replaced in place by its ranges, so they stay ahead of any `-` or `~` mechanism that follows. The flattened record is split into 255-character strings. If every candidate flattened still leaves it over 10, the plan says so and suggests a subdomain.
+
+An include that cannot be flattened is labelled "Keep: uses a, mx or exists" whatever the reason: it may also use `ptr`, `redirect` or a non-pass term, or have failed to resolve. A flattenable include the plan does not need is labelled "Keep: N lookups".
+
+## Standards and conformance
+
+Where each part of the work happens: the server only asks public DNS (Cloudflare's resolver, over DNS over HTTPS) for TXT records and returns the answers. Parsing, the lookup count, the include tree, every finding and the flattening plan are computed in the browser from those answers, by static evaluation: no sender address is tested. A pasted record is parsed in the browser; names under the reserved `.example` domain are answered from synthetic data in the browser.
+
+### RFC 7208: records and selection
+
+| Section | Requirement | What the tool does |
+| --- | --- | --- |
+| [3.1](https://www.rfc-editor.org/rfc/rfc7208#section-3.1) | SPF records are TXT records only | Queries TXT only |
+| [3.2](https://www.rfc-editor.org/rfc/rfc7208#section-3.2), [4.5](https://www.rfc-editor.org/rfc/rfc7208#section-4.5) | One record per name; more is permerror | FAIL, then parses the first record |
+| [3.3](https://www.rfc-editor.org/rfc/rfc7208#section-3.3) | Multiple strings concatenated without spaces | Joins quoted strings before parsing; the flattened record is split back into 255-character strings |
+| [3.4](https://www.rfc-editor.org/rfc/rfc7208#section-3.4) | Answers SHOULD fit in 512 octets (450 for the records) | Not checked |
+| [3.5](https://www.rfc-editor.org/rfc/rfc7208#section-3.5) | Wildcard records are discouraged | Not checked |
+| [4.3](https://www.rfc-editor.org/rfc/rfc7208#section-4.3) | NXDOMAIN gives "none"; IDNs MUST be A-labels | NXDOMAIN is "No SPF record"; names are converted to A-labels before lookup |
+| [4.4](https://www.rfc-editor.org/rfc/rfc7208#section-4.4) | DNS errors give temperror | Marks the branch incomplete (CHECK) |
+| [4.5](https://www.rfc-editor.org/rfc/rfc7208#section-4.5) | Keep records starting with exactly "v=spf1" | Same; `v=spf10` is discarded |
+
+### RFC 7208: syntax
+
+| Section | Requirement | What the tool does |
+| --- | --- | --- |
+| [4.6](https://www.rfc-editor.org/rfc/rfc7208#section-4.6) | Any syntax error is permerror | Every error is a FAIL finding; all are listed, not only the first |
+| [4.6.1](https://www.rfc-editor.org/rfc/rfc7208#section-4.6.1) | Eight mechanisms, `name=value` modifiers, names case-insensitive | Implemented; terms split on any whitespace |
+| [5.1](https://www.rfc-editor.org/rfc/rfc7208#section-5.1) | `all` takes no value | FAIL on a value |
+| [5.2](https://www.rfc-editor.org/rfc/rfc7208#section-5.2), [5.7](https://www.rfc-editor.org/rfc/rfc7208#section-5.7) | `include` and `exists` need a domain-spec | FAIL when empty; the domain-spec itself is not validated |
+| [5.6](https://www.rfc-editor.org/rfc/rfc7208#section-5.6) | `ip4` and `ip6` networks and prefix lengths | Addresses validated; prefix ranges checked |
+| [6](https://www.rfc-editor.org/rfc/rfc7208#section-6) | `redirect` and `exp` at most once; unknown modifiers ignored | Duplicate redirect or exp is FAIL; repeated unknown modifiers are ignored for validity |
+| [7.1](https://www.rfc-editor.org/rfc/rfc7208#section-7.1) | Macro and domain-spec grammar | Not validated |
+
+### RFC 7208: evaluation and limits
+
+| Section | Requirement | What the tool does |
+| --- | --- | --- |
+| [4.1](https://www.rfc-editor.org/rfc/rfc7208#section-4.1) | One global lookup limit across recursion | One total for the tree |
+| [4.6.2](https://www.rfc-editor.org/rfc/rfc7208#section-4.6.2) | Mechanisms left to right; stop at the first match | Left to right; no match is simulated, so every term is counted |
+| [4.6.4](https://www.rfc-editor.org/rfc/rfc7208#section-4.6.4) | At most 10 DNS-querying terms | Counted statically; FAIL above 10 |
+| [4.6.4](https://www.rfc-editor.org/rfc/rfc7208#section-4.6.4) | At most 10 address records per MX or PTR record | Not checked (no address queries) |
+| [4.6.4](https://www.rfc-editor.org/rfc/rfc7208#section-4.6.4) | SHOULD limit void lookups to two | Counts TXT voids only; FAIL above two |
+| [4.7](https://www.rfc-editor.org/rfc/rfc7208#section-4.7) | No match and no redirect gives neutral | CHECK "No all mechanism" |
+| [5.1](https://www.rfc-editor.org/rfc/rfc7208#section-5.1), [6.1](https://www.rfc-editor.org/rfc/rfc7208#section-6.1) | Ignore terms after `all`; ignore `redirect` when `all` is present | Same order and exclusions |
+| [5.2](https://www.rfc-editor.org/rfc/rfc7208#section-5.2) | include of a domain without SPF is permerror | FAIL |
+| [5.5](https://www.rfc-editor.org/rfc/rfc7208#section-5.5) | `ptr` SHOULD NOT be published | CHECK |
+| [6.1](https://www.rfc-editor.org/rfc/rfc7208#section-6.1) | redirect to a domain without SPF is permerror | FAIL |
+
+### RFC 7208: not evaluated
+
+The tool reads records; it does not run `check_host()` for a connection. Not covered:
+
+- the `<ip>` and `<sender>` arguments of [section 4.1](https://www.rfc-editor.org/rfc/rfc7208#section-4.1), so no pass, fail or softfail result is produced for any address
+- the address, MX, PTR and A queries of `a`, `mx`, `ptr` and `exists` ([sections 5.3 to 5.7](https://www.rfc-editor.org/rfc/rfc7208#section-5)), and the MX and PTR sub-limits of section 4.6.4
+- macro expansion ([section 7](https://www.rfc-editor.org/rfc/rfc7208#section-7)): a branch whose name holds `%` is left unexpanded
+- the explanation lookup of `exp` ([section 6.2](https://www.rfc-editor.org/rfc/rfc7208#section-6.2))
+- the HELO identity ([section 2.3](https://www.rfc-editor.org/rfc/rfc7208#section-2.3)), result handling ([section 8](https://www.rfc-editor.org/rfc/rfc7208#section-8)) and the Received-SPF header ([section 9](https://www.rfc-editor.org/rfc/rfc7208#section-9))
+- the elapsed-time limit of section 4.6.4 (the server stops each lookup after 8 seconds instead)
+
+### Stricter than the RFC
+
+- **The count covers every path.** Receivers stop at the first match, so mail matched early can pass a record the tool scores as over the limit.
+- **+all is FAIL.** RFC 7208 allows it; it makes SPF meaningless, so the tool treats it as broken.
+- **Includes in a record with syntax errors are still expanded and counted.** A receiver returns permerror before looking any of them up.
+
+### More lenient than the RFC
+
+- **Separators.** Terms split on any whitespace; [section 4.6.1](https://www.rfc-editor.org/rfc/rfc7208#section-4.6.1) allows only spaces.
+- **Prefix lengths with leading zeros** such as `/024` are accepted; the ABNF in section 5.6 rejects them.
+- **Malformed targets.** A domain-spec is not checked against section 7.1. A malformed include or redirect target is refused by the server and shown as an incomplete branch (CHECK), where receivers return permerror.
+- **DNS errors** are shown as incomplete (CHECK), not as the temperror of section 4.4.
+- **Void lookups** are counted for TXT queries only, so a record whose `a` or `mx` names do not exist may pass the void check here and fail at a receiver.
+- **U-labels** in a record's include or redirect target are converted to A-labels when looked up, not reported; section 4.3 says IDNs in a record "MUST be encoded as A-labels".
+
+### Updates to RFC 7208
+
+RFC 7208 is a Proposed Standard, updated by three documents:
+
+- [RFC 8616](https://www.rfc-editor.org/rfc/rfc8616), [section 4](https://www.rfc-editor.org/rfc/rfc8616#section-4): "All U-labels MUST be converted to A-labels before being used for an SPF validation." A domain typed with non-ASCII labels is converted to A-labels before it is looked up. Its rule on the `%{s}` and `%{l}` macros does not apply, since macros are not expanded.
+- [RFC 7372](https://www.rfc-editor.org/rfc/rfc7372), [section 3.2](https://www.rfc-editor.org/rfc/rfc7372#section-3.2): SMTP enhanced status codes for SPF failures. Not relevant: the tool sends no mail.
+- [RFC 8553](https://www.rfc-editor.org/rfc/rfc8553), [section 2.1](https://www.rfc-editor.org/rfc/rfc8553#section-2.1): registers underscored TXT names. It changes nothing the tool checks.
+
+### RFC 9989: how SPF feeds DMARC
+
+The findings that mention DMARC follow [RFC 9989](https://www.rfc-editor.org/rfc/rfc9989), which obsoleted RFC 7489 in May 2026. The tool does not evaluate DMARC; it uses these sections to explain consequences:
+
+- [Section 4.4.2](https://www.rfc-editor.org/rfc/rfc9989#section-4.4.2): "DMARC relies solely on SPF validation of the MAIL FROM identity", and only an aligned SPF pass counts.
+- [Section 5.3.5](https://www.rfc-editor.org/rfc/rfc9989#section-5.3.5): a message fails DMARC when no authenticated identifier aligns. A broken SPF record therefore leaves DKIM as the only path to a DMARC pass.
+- [Section 7.1](https://www.rfc-editor.org/rfc/rfc9989#section-7.1): `-all` can get mail rejected before DMARC runs, even mail an aligned DKIM signature would pass. This is why the guide suggests `~all` while DMARC is being rolled out.
+
+### RFC 1035: TXT strings
+
+[RFC 1035 section 3.3](https://www.rfc-editor.org/rfc/rfc1035#section-3.3) defines a character-string as one length octet followed by at most 255 characters, and [section 3.3.14](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.14) defines TXT data as one or more of them. That is the "255-octet maximum length of a character-string" RFC 7208 section 3.3 refers to, and the basis for the INFO finding and the 255-character split of the flattened record. The tool counts characters, which equals octets for the ASCII text section 3.1 requires.
 
 ## Finding reference
 
-| Finding | Severity | What it means for mail | Fix |
-| --- | --- | --- | --- |
-| N of 10 DNS lookups (11 or more) | FAIL | Evaluations reaching the eleventh lookup return permerror; under DMARC that mail can fail | Remove unused includes, flatten, or move a sender to a subdomain |
-| N of 10 DNS lookups (9 or 10) | CHECK | The next include breaks the record | Make room before adding a service |
-| N of 10 DNS lookups (8 or fewer) | PASS | Within the limit | |
-| N void lookups | FAIL | More than two empty answers is a permanent error | Remove includes whose target has no record |
-| No SPF record at this name. | FAIL | SPF never passes; DMARC relies on DKIM alone | Publish one record |
-| An SPF record starts with v=spf1. | FAIL | The text is not an SPF record | Start with v=spf1 |
-| N SPF records: receivers return permerror. | FAIL | Every message fails SPF | Merge into one record |
-| Unknown term X | FAIL | Permanent error for every receiver | Correct the term |
-| Invalid IPv4 address in X, Invalid IPv6 address in X | FAIL | Permanent error | Correct or remove the term |
-| Prefix too long in X, Invalid prefix in X | FAIL | Permanent error | Use a valid prefix |
-| include needs a domain, exists needs a domain, redirect needs a domain, exp needs a domain | FAIL | Permanent error | Add the domain |
-| Invalid all mechanism X | FAIL | `all` takes no value | Remove the value |
-| Duplicate X modifier | FAIL | A modifier may appear once | Remove one |
-| Unknown modifier X | CHECK | Receivers ignore it | Remove it |
-| No all mechanism | CHECK | Unlisted servers get neutral; SPF never fails | Add ~all or -all |
-| +all allows every server on the internet | FAIL | Anyone passes SPF for the domain | Use ~all or -all |
-| ?all makes SPF neutral | CHECK | Unlisted servers are neither allowed nor refused | Use ~all or -all |
-| Ends in ~all, Ends in -all | PASS | Unlisted servers soft-fail or fail | |
-| Mechanisms after all are ignored | CHECK | Those senders are not allowed | Move all to the end |
-| redirect is ignored when all is present | CHECK | The redirect never runs | Remove one |
-| ptr is deprecated | CHECK | Slow, unreliable, skipped by some receivers | Replace with ip4/ip6 |
-| Duplicate X | CHECK | The copy costs a lookup | Remove one |
-| N characters | INFO | Longer than one TXT string | Publish as several quoted strings |
-| Incomplete lookup tree | CHECK | Counts are a lower bound | Retry before changing DNS |
-| domain: No SPF record at the include or redirect target: permerror. | FAIL | The include breaks the record | Remove the include |
-| domain: Include loop | FAIL | The include refers back to a record above it | Break the loop |
-| domain: Expansion limit reached | CHECK | Too deep or too many names to inspect | Simplify the record |
-| domain: SPF macros need a sender IP and envelope identity | CHECK | The branch is not expanded | Nothing; evaluate with a real sender |
+Each finding the checker can emit, grouped by what it judges, with what it means for mail sent as the domain and the RFC section behind it. "none" marks a Tamperbox recommendation rather than an RFC rule.
+
+### Lookup limits
+
+The budget [RFC 7208 section 4.6.4](https://www.rfc-editor.org/rfc/rfc7208#section-4.6.4) sets: ten DNS-querying terms and two void lookups per evaluation.
+
+| Finding | Severity | What it means for mail | Fix | RFC section |
+| --- | --- | --- | --- | --- |
+| N of 10 DNS lookups (11 or more) | FAIL | Evaluations reaching the eleventh lookup return permerror; under DMARC that mail can fail | Remove unused includes, flatten, or move a sender to a subdomain | [4.6.4](https://www.rfc-editor.org/rfc/rfc7208#section-4.6.4) |
+| N of 10 DNS lookups (9 or 10) | CHECK | The next include breaks the record | Make room before adding a service | none |
+| N of 10 DNS lookups (8 or fewer) | PASS | Within the limit | | [4.6.4](https://www.rfc-editor.org/rfc/rfc7208#section-4.6.4) |
+| N void lookups | FAIL | More than two empty answers is a permanent error | Remove includes whose target has no record | [4.6.4](https://www.rfc-editor.org/rfc/rfc7208#section-4.6.4) |
+
+### Record and term syntax
+
+Problems that make the record itself unusable or ambiguous to a receiver.
+
+| Finding | Severity | What it means for mail | Fix | RFC section |
+| --- | --- | --- | --- | --- |
+| No record at domain. | FAIL | Nothing is published at the name, so SPF never passes | Publish one record | [4.3](https://www.rfc-editor.org/rfc/rfc7208#section-4.3), [4.5](https://www.rfc-editor.org/rfc/rfc7208#section-4.5) |
+| No SPF record at this name. | FAIL | SPF never passes; DMARC relies on DKIM alone | Publish one record | [4.5](https://www.rfc-editor.org/rfc/rfc7208#section-4.5) |
+| An SPF record starts with v=spf1. | FAIL | The text is not an SPF record | Start with v=spf1 | [4.5](https://www.rfc-editor.org/rfc/rfc7208#section-4.5) |
+| N SPF records: receivers return permerror. | FAIL | Every message fails SPF | Merge into one record | [4.5](https://www.rfc-editor.org/rfc/rfc7208#section-4.5) |
+| Unknown term X | FAIL | Permanent error for every receiver | Correct the term | [4.6.1](https://www.rfc-editor.org/rfc/rfc7208#section-4.6.1) |
+| Invalid IPv4 address in X, Invalid IPv6 address in X | FAIL | Permanent error | Correct or remove the term | [5.6](https://www.rfc-editor.org/rfc/rfc7208#section-5.6) |
+| Prefix too long in X, Invalid prefix in X | FAIL | Permanent error | Use a valid prefix | [5.6](https://www.rfc-editor.org/rfc/rfc7208#section-5.6) |
+| include needs a domain, exists needs a domain, redirect needs a domain, exp needs a domain | FAIL | Permanent error | Add the domain | [5.2](https://www.rfc-editor.org/rfc/rfc7208#section-5.2), [5.7](https://www.rfc-editor.org/rfc/rfc7208#section-5.7), [6.1](https://www.rfc-editor.org/rfc/rfc7208#section-6.1), [6.2](https://www.rfc-editor.org/rfc/rfc7208#section-6.2) |
+| Invalid all mechanism X | FAIL | `all` takes no value | Remove the value | [5.1](https://www.rfc-editor.org/rfc/rfc7208#section-5.1) |
+| Duplicate X modifier | FAIL | Permanent error for `redirect` and `exp`; other modifiers may repeat under the RFC | Remove one | [6](https://www.rfc-editor.org/rfc/rfc7208#section-6) |
+| Unknown modifier X | CHECK | Receivers ignore it | Remove it | [6](https://www.rfc-editor.org/rfc/rfc7208#section-6) |
+
+### The all mechanism and redirect
+
+How the record ends decides what happens to servers it does not list.
+
+| Finding | Severity | What it means for mail | Fix | RFC section |
+| --- | --- | --- | --- | --- |
+| No all mechanism | CHECK | Unlisted servers get neutral; SPF never fails | Add ~all or -all | [4.7](https://www.rfc-editor.org/rfc/rfc7208#section-4.7) |
+| +all allows every server on the internet | FAIL | Anyone passes SPF for the domain | Use ~all or -all | none |
+| ?all makes SPF neutral | CHECK | Unlisted servers are neither allowed nor refused | Use ~all or -all | [4.7](https://www.rfc-editor.org/rfc/rfc7208#section-4.7) |
+| Ends in ~all, Ends in -all | PASS | Unlisted servers soft-fail or fail | | none |
+| Mechanisms after all are ignored | CHECK | Those senders are not allowed | Move all to the end | [5.1](https://www.rfc-editor.org/rfc/rfc7208#section-5.1) |
+| redirect is ignored when all is present | CHECK | The redirect never runs | Remove one | [6.1](https://www.rfc-editor.org/rfc/rfc7208#section-6.1) |
+
+### Costly or redundant terms
+
+Terms that work but spend lookups or bytes for nothing.
+
+| Finding | Severity | What it means for mail | Fix | RFC section |
+| --- | --- | --- | --- | --- |
+| ptr is deprecated | CHECK | Slow, unreliable, skipped by some receivers | Replace with ip4/ip6 | [5.5](https://www.rfc-editor.org/rfc/rfc7208#section-5.5) |
+| Duplicate X | CHECK | The copy costs a lookup | Remove one | none |
+| N characters | INFO | Longer than one TXT string | Publish as several quoted strings | [3.3](https://www.rfc-editor.org/rfc/rfc7208#section-3.3) |
+
+### Include and redirect targets
+
+Findings about the records the tool follows, prefixed with the name they were found at.
+
+| Finding | Severity | What it means for mail | Fix | RFC section |
+| --- | --- | --- | --- | --- |
+| Incomplete lookup tree | CHECK | Counts are a lower bound | Retry before changing DNS | [4.4](https://www.rfc-editor.org/rfc/rfc7208#section-4.4) |
+| domain: No SPF record at the include or redirect target: permerror. | FAIL | The include breaks the record | Remove the include | [5.2](https://www.rfc-editor.org/rfc/rfc7208#section-5.2), [6.1](https://www.rfc-editor.org/rfc/rfc7208#section-6.1) |
+| domain: N SPF records: receivers return permerror. | FAIL | The include breaks the record | Ask the provider to merge them | [4.5](https://www.rfc-editor.org/rfc/rfc7208#section-4.5) |
+| domain: Include loop | FAIL | The include refers back to a record above it | Break the loop | none |
+| domain: Expansion limit reached | CHECK | Too deep or too many names to inspect | Simplify the record | none |
+| domain: SPF macros need a sender IP and envelope identity | CHECK | The branch is not expanded | Nothing; evaluate with a real sender | [7](https://www.rfc-editor.org/rfc/rfc7208#section-7) |
+| domain: Lookup incomplete: retry before using this result. | CHECK | The branch was not read | Retry | [4.4](https://www.rfc-editor.org/rfc/rfc7208#section-4.4) |
 
 ## Guide
 
@@ -241,12 +411,17 @@ See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for 
 
 - A bounded static expansion: ten levels, 100 names, no sender address, no macros, no `a`, `mx` or `exists` resolution.
 - Void lookups are counted only for the TXT queries the tool makes.
+- DNS errors and malformed target names are reported as an incomplete tree, not as the temperror or permerror a receiver would return; see [Standards and conformance](#standards-and-conformance).
 - Duplicate detection compares whole terms; an explicit `+` is treated as the default qualifier.
 - One DNS answer, from one public resolver, at one moment.
 - Nothing is stored.
 
 ## References
 
-- [RFC 7208, Sender Policy Framework](https://www.rfc-editor.org/rfc/rfc7208), section 4.6.4 for the lookup and void limits
-- [RFC 7489, DMARC](https://www.rfc-editor.org/rfc/rfc7489), for how SPF alignment feeds DMARC
+- [RFC 7208, Sender Policy Framework (SPF) for Authorizing Use of Domains in Email, Version 1](https://www.rfc-editor.org/rfc/rfc7208). Proposed Standard, updated by RFC 7372, RFC 8553 and RFC 8616. Sections used: [2.3](https://www.rfc-editor.org/rfc/rfc7208#section-2.3), [3.1](https://www.rfc-editor.org/rfc/rfc7208#section-3.1), [3.2](https://www.rfc-editor.org/rfc/rfc7208#section-3.2), [3.3](https://www.rfc-editor.org/rfc/rfc7208#section-3.3), [3.4](https://www.rfc-editor.org/rfc/rfc7208#section-3.4), [3.5](https://www.rfc-editor.org/rfc/rfc7208#section-3.5), [4.1](https://www.rfc-editor.org/rfc/rfc7208#section-4.1), [4.3](https://www.rfc-editor.org/rfc/rfc7208#section-4.3), [4.4](https://www.rfc-editor.org/rfc/rfc7208#section-4.4), [4.5](https://www.rfc-editor.org/rfc/rfc7208#section-4.5), [4.6](https://www.rfc-editor.org/rfc/rfc7208#section-4.6), [4.6.1](https://www.rfc-editor.org/rfc/rfc7208#section-4.6.1), [4.6.2](https://www.rfc-editor.org/rfc/rfc7208#section-4.6.2), [4.6.4](https://www.rfc-editor.org/rfc/rfc7208#section-4.6.4), [4.7](https://www.rfc-editor.org/rfc/rfc7208#section-4.7), [5.1](https://www.rfc-editor.org/rfc/rfc7208#section-5.1), [5.2](https://www.rfc-editor.org/rfc/rfc7208#section-5.2), [5.5](https://www.rfc-editor.org/rfc/rfc7208#section-5.5), [5.6](https://www.rfc-editor.org/rfc/rfc7208#section-5.6), [5.7](https://www.rfc-editor.org/rfc/rfc7208#section-5.7), [6](https://www.rfc-editor.org/rfc/rfc7208#section-6), [6.1](https://www.rfc-editor.org/rfc/rfc7208#section-6.1), [6.2](https://www.rfc-editor.org/rfc/rfc7208#section-6.2), [7](https://www.rfc-editor.org/rfc/rfc7208#section-7), [7.1](https://www.rfc-editor.org/rfc/rfc7208#section-7.1), [8](https://www.rfc-editor.org/rfc/rfc7208#section-8), [9](https://www.rfc-editor.org/rfc/rfc7208#section-9), [10.1.1](https://www.rfc-editor.org/rfc/rfc7208#section-10.1.1)
+- [RFC 8616, Email Authentication for Internationalized Mail](https://www.rfc-editor.org/rfc/rfc8616). Proposed Standard, updates RFC 7208. Section used: [4](https://www.rfc-editor.org/rfc/rfc8616#section-4)
+- [RFC 7372, Email Authentication Status Codes](https://www.rfc-editor.org/rfc/rfc7372). Proposed Standard, updates RFC 7208. Section noted: [3.2](https://www.rfc-editor.org/rfc/rfc7372#section-3.2)
+- [RFC 8553, DNS AttrLeaf Changes](https://www.rfc-editor.org/rfc/rfc8553). Best Current Practice (BCP 222), updates RFC 7208. Section noted: [2.1](https://www.rfc-editor.org/rfc/rfc8553#section-2.1)
+- [RFC 9989, Domain-based Message Authentication, Reporting, and Conformance (DMARC)](https://www.rfc-editor.org/rfc/rfc9989). Standards Track, May 2026; obsoletes RFC 7489 and RFC 9091. Sections used: [4.4.2](https://www.rfc-editor.org/rfc/rfc9989#section-4.4.2), [5.3.5](https://www.rfc-editor.org/rfc/rfc9989#section-5.3.5), [7.1](https://www.rfc-editor.org/rfc/rfc9989#section-7.1)
+- [RFC 1035, Domain Names: Implementation and Specification](https://www.rfc-editor.org/rfc/rfc1035). Internet Standard. Sections used: [3.3](https://www.rfc-editor.org/rfc/rfc1035#section-3.3), [3.3.14](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.14)
 - Tamperbox guides: [Fix SPF PermError: too many DNS lookups](https://tamperbox.dev/guides/fix-spf-too-many-dns-lookups) and [DMARC rollout: from p=none to reject](https://tamperbox.dev/guides/dmarc-monitoring-to-reject)

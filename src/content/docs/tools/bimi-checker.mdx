@@ -27,6 +27,8 @@ BIMI lets a domain publish a logo that supporting mailbox providers show next to
 
 It does not verify certificate trust, revocation or the hash of the embedded logo, and no provider's display decision is predicted.
 
+BIMI is not an RFC. The checker follows the individual Internet-Draft draft-brand-indicators-for-message-identification-14, its companion drafts for the logo profile and the mark certificate, the BIMI Group's published guidance where the code applies it, and RFC 9989 for DMARC. [Standards and conformance](#standards-and-conformance) lists what is implemented and where the tool differs.
+
 ## Inputs
 
 ### A domain
@@ -81,59 +83,229 @@ The certificate as rows: subject, valid until, logotype extension, the domains i
 
 ## Method
 
-### The record
+Each rule below names the document it comes from. BIMI sections refer to [draft-brand-indicators-for-message-identification-14](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html) ("BIMI draft"), logo sections to [draft-svg-tiny-ps-abrotman-12](https://www.ietf.org/archive/id/draft-svg-tiny-ps-abrotman-12.html) ("SVG Tiny PS draft") and certificate sections to [draft-fetch-validation-vmc-wchuang-11](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html) ("VMC draft"). A rule marked "Tamperbox" is this checker's own choice, not a requirement of any specification.
 
-The server reads TXT records at `default._bimi.<domain>`; other selectors are not looked up. Exactly one must start with `v=BIMI1`, with `v` first; malformed or repeated tags fail. `l=` must be an `https://` URL, otherwise FAIL, "No logo URL". A record without `a=` is CHECK, "No certificate (a=)".
+### Finding the record
+
+The server reads TXT records at `default._bimi.<domain>`, the name the [BIMI draft §7.2](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-7.2) step 2 builds when a message names no selector: "Otherwise the value 'default' MUST be used for the selector." Other selectors, local-part selectors ([§4.5](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-4.5)) and the fallback to the organizational domain (§7.2 step 6) are not looked up. A record published as several strings is joined without spaces, as [§4](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-4) requires by pointing at [RFC 7208 §3.3](https://www.rfc-editor.org/rfc/rfc7208#section-3.3).
+
+Only records whose joined text starts exactly with `v=BIMI1`, followed by `;` or the end of the record, are kept, and exactly one must remain. §7.2 step 9: "If the remaining set contains multiple records or no records, Assertion Record Discovery terminates and BIMI processing MUST NOT be performed for this message." No TXT record at all is FAIL, "No BIMI record"; zero or several matching records among other TXT records are FAIL, "Publish exactly one BIMI record."
+
+### Record syntax
+
+The record is read as a tag list, the DKIM syntax that [§4.3](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-4.3) adopts. The version tag decides whether the record counts: "It MUST be the first tag in the list." Its value must be exactly `BIMI1`. A tag that appears twice fails the record, following [RFC 6376 §3.2](https://www.rfc-editor.org/rfc/rfc6376#section-3.2): "if a tag name does occur more than once, the entire tag-list is invalid." A part without `=` fails as "Malformed tag". Unknown tags are ignored, as §4.3 requires.
+
+`l=` must start with `https://`, otherwise FAIL, "No logo URL". [§7.3](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-7.3) step 1: "The bimi-location entry MUST be a URI with a HTTPS transport." An empty `l=` gets the same finding, including the declination record `v=BIMI1; l=; a=;` that [§4.3.1](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-4.3.1) defines as an explicit refusal; the tool does not name declination separately.
+
+A record without `a=` is CHECK, "No certificate (a=)". The tag is OPTIONAL in §4.3, so this is a Tamperbox reminder that some providers require a mark certificate. `a=` is not tested for HTTPS in the browser; the server refuses to fetch any URL that is not HTTPS. `avp=` is read and not judged; `lps=` is ignored.
 
 ### Fetching the logo and the certificate
 
-The server fetches a URL only if it is exactly the `l=` or `a=` value of the domain's single record. The URL must be HTTPS on the default port without credentials or fragment, the host must resolve to public addresses only, redirects are not followed, the logo must be served as `image/svg+xml`, each file is limited to 256 KiB, and the certificate must contain a PEM `BEGIN CERTIFICATE` block. A failed fetch is FAIL, "Logo not checked" or "Certificate not checked", with the reason.
+The server fetches a URL only if it is exactly the `l=` or `a=` value of the domain's single record. Each condition below fails the fetch, which is FAIL, "Logo not checked" or "Certificate not checked", with the reason.
+
+| Condition | Source |
+| --- | --- |
+| The URL is not HTTPS | [BIMI draft §4.3](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-4.3), HTTPS only for `l=` and `a=` |
+| The URL has a custom port, credentials or a fragment | Tamperbox |
+| The host resolves to any non-public address | Tamperbox, server safety |
+| The server answers with a redirect | Tamperbox; none of the drafts addresses redirects |
+| The logo is not served as `image/svg+xml` | Tamperbox, standing in for the SVG-only rule of [§4.3.2](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-4.3.2) |
+| The file exceeds 256 KiB | [§7.6](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-7.6) step 1 allows a size limit applied at retrieval |
+| The certificate file has no `BEGIN CERTIFICATE` block | [VMC draft §3.3](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-3.3): "Certificates fetched from the hosting service MUST be in PEM encoding" |
+
+The fetch uses the server's standard HTTPS client without turning off TLS certificate verification, and sends no cookies, credentials or visitor headers.
 
 ### SVG Tiny PS checks
 
-The logo is checked as text; nothing is rendered for the checks.
+The logo is checked as text with pattern matching; it is neither parsed as XML nor rendered for the checks.
 
-| Check | PASS title | FAIL title |
+| Check | FAIL title | Source |
 | --- | --- | --- |
-| Root `svg` element present | | Not an SVG document |
-| `baseProfile="tiny-ps"` | baseProfile="tiny-ps" | baseProfile is not tiny-ps |
-| `version="1.2"` | version="1.2" | version="…" |
-| A `title` element with text | Has a `<title>` | No `<title>` |
-| Square `viewBox`, width equal to height, over zero | Square viewBox | viewBox is not square |
-| No `x` or `y` on the root | | x or y on `<svg>` |
-| No `script`, `foreignObject`, `image`, animation elements, event attributes, or `href` not starting with `#` | | Contains `<script>`, embedded images, animation, event handlers, external references |
-| At most 32 KiB in UTF-8 | N KiB | N KiB |
+| Root `svg` element present | Not an SVG document | [BIMI draft §7.6](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-7.6) step 2 |
+| `baseProfile="tiny-ps"` | baseProfile is not tiny-ps | [SVG Tiny PS draft §2.1](https://www.ietf.org/archive/id/draft-svg-tiny-ps-abrotman-12.html#section-2.1) |
+| `version="1.2"` | version="…" | [SVG Tiny PS draft §2.1](https://www.ietf.org/archive/id/draft-svg-tiny-ps-abrotman-12.html#section-2.1) |
+| A `title` element with text | No `<title>` | [SVG Tiny PS draft §2.1](https://www.ietf.org/archive/id/draft-svg-tiny-ps-abrotman-12.html#section-2.1) |
+| Square `viewBox`, width equal to height, over zero | viewBox is not square | [BIMI Group SVG guidance](https://bimigroup.org/creating-bimi-svg-logo-files/) |
+| No `x` or `y` on the root | x or y on `<svg>` | [SVG Tiny PS draft §6.2](https://www.ietf.org/archive/id/draft-svg-tiny-ps-abrotman-12.html#section-6.2) and the root element in [§7](https://www.ietf.org/archive/id/draft-svg-tiny-ps-abrotman-12.html#section-7) |
+| No `script`, `foreignObject`, `image`, animation elements, event attributes, or `href` not starting with `#` | Contains … | [SVG Tiny PS draft §2.3](https://www.ietf.org/archive/id/draft-svg-tiny-ps-abrotman-12.html#section-2.3) |
+| At most 32 KiB in UTF-8 | N KiB | [SVG Tiny PS draft §2.4](https://www.ietf.org/archive/id/draft-svg-tiny-ps-abrotman-12.html#section-2.4) |
 
-### Mark certificate
+#### The rules behind the SVG verdict
 
-The first certificate in the PEM is decoded. Checks: the logotype extension (OID 1.3.6.1.5.5.7.1.12) must be present, otherwise FAIL, "No logotype extension"; the validity window: FAIL when expired or not yet valid, CHECK "Valid until …" when under 30 days remain, PASS otherwise; for a domain lookup, the domain must appear exactly among the DNS subject alternative names, otherwise FAIL, "Does not name X". Every inspected certificate also carries CHECK, "Certificate trust not verified": the chain, revocation, mark authorisation and the embedded logo's hash are not checked.
+§2.1 requires the profile attributes and the title: "The `<title>` element MUST be present and its contents MUST NOT be empty." §2.3 lists the forbidden image, scripting, linking and animation sections, which "MUST NOT be present in an SVG Tiny PS document". §2.4 is softer, "SHOULD NOT exceed 32 kilobytes", measured uncompressed; the tool counts 32,768 bytes and makes an excess FAIL. The square rule is BIMI Group guidance, "The image should be a square aspect ratio", which the tool also makes FAIL.
 
-### DMARC enforcement
+#### What the SVG checks leave out
 
-The exact `_dmarc` name is read, without parent-domain fallback. It needs exactly one `v=DMARC1` record with no syntax failures, and the policy passes only when `p` is `quarantine` or `reject`, `pct` is 100 or absent, and `sp` is not `none`, compared without regard to case. A non-enforcing policy is FAIL, "DMARC p=none blocks the logo", "DMARC pct=25 blocks the logo" or "DMARC sp=none blocks the logo", naming the condition that blocks. Missing, multiple and invalid records are FAIL with their own titles; a failed lookup is CHECK, "DMARC not checked", and never claims enforcement.
+Not checked: the `xmlns` attribute, a single title of at most 64 characters (§2.1), the `switch` element and the fixed values of `zoomAndPan` and similar attributes (§2.3), at least two colours (§2.4), and full validation against the RELAX NG schema in §7. An SVGZ file is not decompressed.
+
+### Mark certificate checks
+
+Only the first certificate in the PEM is decoded, locally in the browser.
+
+| Check | Result | Source |
+| --- | --- | --- |
+| Logotype extension, OID 1.3.6.1.5.5.7.1.12 | FAIL "No logotype extension" when absent | [VMC draft §4.1](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-4.1); OID from [RFC 9399 §4.1](https://www.rfc-editor.org/rfc/rfc9399#section-4.1) |
+| Validity window, notBefore to notAfter inclusive | FAIL "Expired …" or "Not valid until …" | [RFC 5280 §4.1.2.5](https://www.rfc-editor.org/rfc/rfc5280#section-4.1.2.5); [VMC draft §4.5](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-4.5) |
+| Under 30 days to notAfter | CHECK "Valid until …" | Tamperbox |
+| The checked domain among the DNS subject alternative names, ignoring case | FAIL "Does not name X" | [VMC draft §4.3](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-4.3); [RFC 5280 §4.2.1.6](https://www.rfc-editor.org/rfc/rfc5280#section-4.2.1.6) |
+| Trust not evaluated | CHECK "Certificate trust not verified" on every certificate | [VMC draft §5.1](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-5.1) |
+
+#### The rules behind the certificate verdict
+
+VMC draft §4.1: "Verified Mark Certificates MUST use logotype extension to carry the Indicators in the certificate". RFC 5280 §4.1.2.5: "The validity period for a certificate is the period of time from notBefore through notAfter, inclusive." Two-digit UTCTime years under 50 are read as 20YY, as the same section requires. VMC draft §4.3: "A Verified Mark Certificate MUST define one or more Subject Alternative Name (SAN) extension dNSName domain".
+
+#### What the certificate checks leave out
+
+VMC draft §5.1 lists what a receiver MUST verify; the tool performs none of these steps: the path to a trusted BIMI root ([RFC 5280 §6.1](https://www.rfc-editor.org/rfc/rfc5280#section-6.1)), revocation ([RFC 5280 §6.3](https://www.rfc-editor.org/rfc/rfc5280#section-6.3)) and the CRL distribution point of §4.5, the Certificate Transparency proof of §4.6, and the BIMI extended key usage of [§4.4](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-4.4). The SVG inside the logotype extension is not extracted or compared with the `l=` logo ([§5.3](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-5.3) step 7). Name matching differs from [§5.2](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-5.2): a SAN of the form `default._bimi.<domain>` or an organizational domain that §5.2 accepts is reported as "Does not name X".
+
+### DMARC record
+
+The server reads the exact name `_dmarc.<domain>`. There is no DNS tree walk to the organizational domain, which [RFC 9989 §4.10.1](https://www.rfc-editor.org/rfc/rfc9989#section-4.10.1) performs when the Author Domain has no record, so a subdomain that inherits its policy shows "No DMARC record". Records that start with `v=DMARC1` are kept. Several are FAIL, "Multiple DMARC records", matching [§4.10](https://www.rfc-editor.org/rfc/rfc9989#section-4.10) step 2: "If multiple DMARC Policy Records are returned for a single target, they are all discarded." A record with a syntax failure, such as a `p` value outside none, quarantine and reject or a missing `p`, is FAIL, "Invalid DMARC record". [§4.7](https://www.rfc-editor.org/rfc/rfc9989#section-4.7) treats a missing `p` as `p=none`; both readings fail BIMI. A failed lookup is CHECK, "DMARC not checked", and never claims enforcement.
+
+### DMARC policy rule
+
+The policy passes only when `p` is `quarantine` or `reject`, `t` is not `y`, and `sp` is not `none`, compared without regard to case. The conditions come from [BIMI draft §7.1](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-7.1):
+
+- Step 7: "If the DMARC [RFC7489] policy for the Author Domain or Author Organizational Domain is p=none then BIMI processing MUST NOT be performed for this message."
+- Step 8: "and that subdomain policy is sp=none then BIMI processing MUST NOT be performed for this message."
+- Step 9, for `p=quarantine`: "then that tag MUST be pct=100".
+
+The FAIL title names the condition that blocks: "DMARC p=none blocks the logo", "DMARC t=y blocks the logo" or "DMARC sp=none blocks the logo". Steps 1 to 6 of §7.1 judge a delivered message's DMARC result and cannot be checked from DNS.
+
+#### pct and t under RFC 9989
+
+The checker evaluates current DMARC enforcement: `pct` is ignored under [RFC 9989 appendix A.6](https://www.rfc-editor.org/rfc/rfc9989#appendix-A.6), and `t=y` conservatively blocks readiness because it requests testing. This differs from the BIMI draft's legacy pct condition and does not prove eligibility at providers that still enforce that condition.
+
+## Standards and conformance
+
+BIMI is not an RFC. The tool follows Internet-Drafts for BIMI itself, the logo profile and the mark certificate, plus the BIMI Group's published guidance where the code applies it, and RFCs for DMARC, certificates and record syntax. Domain lookups and fetches run on the Tamperbox server; every rule is evaluated in the browser on what came back, or on what you pasted.
+
+### BIMI draft -14
+
+[draft-brand-indicators-for-message-identification-14](https://datatracker.ietf.org/doc/draft-brand-indicators-for-message-identification/), 1 May 2026, is an individual Internet-Draft. It "is not endorsed by the IETF and has no formal standing", expires on 2 November 2026, and still cites the obsoleted RFC 7489 for DMARC.
+
+| Section | Requirement | What the tool does |
+| --- | --- | --- |
+| [§4](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-4) | Join multiple TXT strings as SPF does | Joined without spaces |
+| [§4.3](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-4.3) | `v=BIMI1` first, exact; unknown tags ignored; HTTPS URIs | Implemented; `a=` HTTPS enforced only by the server fetch |
+| [§4.3](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-4.3) | "Mail receivers MUST NOT attempt to fix syntactical or capitalization errors" | Differs: a pasted record's tag names are read without regard to case, so `V=BIMI1` passes |
+| [§4.3](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-4.3) | ABNF allows spaces around `=` in `v=BIMI1` | Differs: a published `v = BIMI1` is not recognised |
+| [§4.3.1](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-4.3.1) | Empty `l=` and `a=` declines BIMI | Reported as "No logo URL" |
+| [§4.4](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-4.4), [§4.5](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-4.5) | Selectors and local-part selectors | Only `default` |
+| [§7.1](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-7.1) | DMARC policy conditions, steps 7 to 9 | Checked on the exact `_dmarc` record; test mode blocks readiness and obsolete pct does not limit current DMARC enforcement |
+| [§7.2](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-7.2) | Discard other versions; exactly one record | Implemented; no organizational-domain fallback |
+| [§7.3](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-7.3) | `l=` is an HTTPS URI | Implemented |
+| [§7.6](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-7.6) | Size limit; valid SVG | 256 KiB fetch cap, 32 KiB check; root element present, no XML validation |
+
+Header fields (§5) and Authentication-Results (§7.7) concern delivered messages and are outside a DNS check.
+
+### SVG Tiny PS draft -12
+
+[draft-svg-tiny-ps-abrotman-12](https://datatracker.ietf.org/doc/draft-svg-tiny-ps-abrotman/), 1 May 2026, is an individual Internet-Draft with no formal standing that expires on 2 November 2026. The BIMI draft defers SVG rules to it ("Further restrictions apply to the SVG; these are documented elsewhere", §4.3.2).
+
+| Section | Requirement | What the tool does |
+| --- | --- | --- |
+| [§2.1](https://www.ietf.org/archive/id/draft-svg-tiny-ps-abrotman-12.html#section-2.1) | `version="1.2"`, `baseProfile="tiny-ps"`, `xmlns` | First two checked; `xmlns` not checked |
+| [§2.1](https://www.ietf.org/archive/id/draft-svg-tiny-ps-abrotman-12.html#section-2.1) | Non-empty title, exactly once, up to 64 characters | Presence and text checked; count and length not checked |
+| [§2.2](https://www.ietf.org/archive/id/draft-svg-tiny-ps-abrotman-12.html#section-2.2) | Restrictions on paths, shapes, text, painting | Not checked except through the animation ban |
+| [§2.3](https://www.ietf.org/archive/id/draft-svg-tiny-ps-abrotman-12.html#section-2.3) | No image, multimedia, interactivity, linking, scripting, animation | `script`, `foreignObject`, `image`, animation elements, `on…` attributes and non-`#` `href` checked; `switch` and attribute values not |
+| [§2.4](https://www.ietf.org/archive/id/draft-svg-tiny-ps-abrotman-12.html#section-2.4) | Up to 32 KB uncompressed (SHOULD); at least two colours | Size enforced as FAIL; colours not checked |
+| [§6.2](https://www.ietf.org/archive/id/draft-svg-tiny-ps-abrotman-12.html#section-6.2), [§7](https://www.ietf.org/archive/id/draft-svg-tiny-ps-abrotman-12.html#section-7) | No `x`/`y` on the root; RELAX NG schema | `x`/`y` checked; schema not applied |
+
+### VMC draft -11
+
+[draft-fetch-validation-vmc-wchuang-11](https://datatracker.ietf.org/doc/draft-fetch-validation-vmc-wchuang/), 1 May 2026, is an individual Internet-Draft with no formal standing that expires on 2 November 2026. The content of the logotype extension is defined by the BIMI Group's [VMC Guidelines](https://bimigroup.org/resources/VMC_Guidelines_latest.pdf), which the tool does not check.
+
+| Section | Requirement | What the tool does |
+| --- | --- | --- |
+| [§3.3](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-3.3) | PEM with the full issuance chain | PEM required; only the first certificate read; the count is shown |
+| [§4.1](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-4.1) | Logotype extension | Presence checked; content not decoded |
+| [§4.3](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-4.3), [§5.2](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-5.2) | SAN dNSName matches the record's domain or selector name | Exact domain only |
+| [§4.4](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-4.4) | BIMI extended key usage | Not checked |
+| [§4.5](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-4.5) | Validity dates; CRL distribution point | Dates checked; CRL point not checked |
+| [§4.6](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-4.6) | SCT extension | Not checked |
+| [§5.1](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-5.1), [§5.3](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-5.3) | Path, revocation, CT, logo comparison | Not checked; reported as "Certificate trust not verified" |
+
+### BIMI Group guidance
+
+The BIMI Group publishes operational guidance, not a standard. The tool applies two items from it: the square aspect ratio from [Creating BIMI SVG logo files](https://bimigroup.org/creating-bimi-svg-logo-files/), while the legacy `pct=100` condition in the [implementation guide](https://bimigroup.org/implementation-guide/) is not a current DMARC sampling rule. The guide also asks for enforcement on subdomains; the tool tests only that `sp` is not `none`.
+
+### RFC 9989, DMARC
+
+[RFC 9989](https://www.rfc-editor.org/info/rfc9989), May 2026, Proposed Standard, obsoletes RFC 7489 and RFC 9091; RFC 9990 and RFC 9991 complete the replacement of RFC 7489 for reporting.
+
+| Section | Requirement | What the tool does |
+| --- | --- | --- |
+| [§4.7](https://www.rfc-editor.org/rfc/rfc9989#section-4.7) | `v=DMARC1` first; `p`, `sp`, `np` values; `t` test mode | Values validated; `t=y` blocks readiness |
+| [§4.10](https://www.rfc-editor.org/rfc/rfc9989#section-4.10) | Several records for one name are discarded | FAIL, "Multiple DMARC records" |
+| [§4.10.1](https://www.rfc-editor.org/rfc/rfc9989#section-4.10.1) | Tree walk when the Author Domain has no record | Not performed |
+| [Appendix A.6](https://www.rfc-editor.org/rfc/rfc9989#appendix-A.6) | `pct` removed | Ignored for current DMARC grading; legacy BIMI receiver compatibility is not established |
+
+### Certificate and record syntax RFCs
+
+[RFC 5280](https://www.rfc-editor.org/info/rfc5280), Proposed Standard, is updated by RFC 6818, 8398, 8399, 9549, 9598, 9608, 9618, 9925 and 10007; the tool uses §4.1.2.5 for dates and §4.2.1.6 for names, and none of §6. [RFC 9399](https://www.rfc-editor.org/info/rfc9399), Proposed Standard, May 2023, obsoletes RFC 3709 and RFC 6170, which the VMC draft still cites; the tool uses its §4.1 OID. [RFC 6376](https://www.rfc-editor.org/info/rfc6376), Internet Standard, supplies the tag-list rule of §3.2, and [RFC 7208](https://www.rfc-editor.org/info/rfc7208), Proposed Standard, the string joining of §3.3.
 
 ## Finding reference
 
-| Finding | Severity | What it means for the logo | Fix |
-| --- | --- | --- | --- |
-| No BIMI record | FAIL | Providers have nothing to fetch | Publish the record |
-| Publish exactly one BIMI record., The version tag must be first., A BIMI record starts with v=BIMI1., Malformed tag: X, X appears twice | FAIL | The record is unreadable | Publish one valid record |
-| No logo URL | FAIL | Nothing to fetch | Set l= to an https:// URL |
-| Logo not checked | FAIL | Providers cannot fetch the logo either | Serve it at the URL, over HTTPS, as image/svg+xml, without redirect |
-| Published resources not checked | CHECK | Only a pasted record was checked | Enter the domain |
-| Not an SVG document, baseProfile is not tiny-ps, version="…", No `<title>`, viewBox is not square, x or y on `<svg>`, Contains …, N KiB (over 32) | FAIL | Providers refuse the logo | Export as SVG Tiny PS; Heal it fixes attributes |
-| Certificate not checked | FAIL | Providers that require a certificate show nothing | Serve the PEM at the URL |
-| No logotype extension | FAIL | Not a mark certificate | Publish a VMC or CMC |
-| Expired …, Not valid until … | FAIL | Providers stop showing the logo | Renew |
-| Does not name X | FAIL | The certificate is for another domain | Request one that names the domain |
-| Certificate validity dates are missing or invalid, No PEM certificate found…, The certificate could not be read. | FAIL | The file is not a readable certificate | Publish the issued PEM |
-| Valid until … (under 30 days) | CHECK | Expires soon | Renew now |
-| Certificate trust not verified | CHECK | Trust, revocation and logo hash are outside this check | Nothing here |
-| No certificate (a=) | CHECK | Some providers require one | Add a mark certificate |
-| DMARC p=…, pct=…, sp=none blocks the logo | FAIL | Providers show logos only on top of enforcement | Enforce DMARC |
-| No DMARC record, Multiple DMARC records, Invalid DMARC record | FAIL | BIMI needs a valid, enforcing record | Fix DMARC first |
-| DMARC not checked | CHECK | The lookup failed | Retry |
-| Nothing to fix | PASS | Every part checked passes | |
+Each finding the checker can emit, grouped by the part of BIMI it judges, with what it means for the logo and the section it rests on. "none" marks a Tamperbox finding.
+
+### BIMI record
+
+The TXT record at `default._bimi` and what it points to.
+
+| Finding | Severity | What it means for the logo | Fix | Source |
+| --- | --- | --- | --- | --- |
+| No BIMI record | FAIL | Providers have nothing to fetch | Publish the record | [BIMI §7.2](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-7.2) |
+| Publish exactly one BIMI record. | FAIL | Discovery stops | Keep one `v=BIMI1` record | [BIMI §7.2](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-7.2) |
+| The version tag must be first., A BIMI record starts with v=BIMI1. | FAIL | The record is ignored | Start with `v=BIMI1` | [BIMI §4.3](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-4.3) |
+| Malformed tag: X, X appears twice | FAIL | The record is unreadable | Publish one valid record | [RFC 6376 §3.2](https://www.rfc-editor.org/rfc/rfc6376#section-3.2) |
+| No logo URL | FAIL | Nothing to fetch | Set l= to an https:// URL | [BIMI §7.3](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-7.3) |
+| Published resources not checked | CHECK | Only a pasted record was checked | Enter the domain | none |
+
+### Logo file
+
+The SVG at the `l=` address, against the SVG Tiny Portable/Secure profile.
+
+| Finding | Severity | What it means for the logo | Fix | Source |
+| --- | --- | --- | --- | --- |
+| Logo not checked | FAIL | Providers cannot fetch the logo either | Serve it at the URL, over HTTPS, as image/svg+xml, without redirect | [BIMI §7.5](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-7.5) |
+| Not an SVG document | FAIL | Not an SVG | Publish the SVG file | [BIMI §7.6](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-7.6) |
+| baseProfile is not tiny-ps, version="…", No `<title>` | FAIL | Providers refuse the logo | Export as SVG Tiny PS; Heal it fixes attributes | [SVG Tiny PS §2.1](https://www.ietf.org/archive/id/draft-svg-tiny-ps-abrotman-12.html#section-2.1) |
+| viewBox is not square | FAIL | Cropped or refused | Pad the viewBox | [BIMI Group](https://bimigroup.org/creating-bimi-svg-logo-files/) |
+| x or y on `<svg>` | FAIL | Providers refuse the logo | Remove the attributes | [SVG Tiny PS §6.2](https://www.ietf.org/archive/id/draft-svg-tiny-ps-abrotman-12.html#section-6.2) |
+| Contains … | FAIL | Providers refuse the logo | Remove the element | [SVG Tiny PS §2.3](https://www.ietf.org/archive/id/draft-svg-tiny-ps-abrotman-12.html#section-2.3) |
+| N KiB (over 32) | FAIL | Providers may refuse it | Simplify the artwork | [SVG Tiny PS §2.4](https://www.ietf.org/archive/id/draft-svg-tiny-ps-abrotman-12.html#section-2.4) |
+
+### Mark certificate
+
+The PEM at the `a=` address, when one is published.
+
+| Finding | Severity | What it means for the logo | Fix | Source |
+| --- | --- | --- | --- | --- |
+| Certificate not checked | FAIL | Providers that require a certificate show nothing | Serve the PEM at the URL | [VMC §3.3](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-3.3) |
+| No logotype extension | FAIL | Not a mark certificate | Publish a VMC or CMC | [VMC §4.1](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-4.1) |
+| Expired …, Not valid until … | FAIL | Providers stop showing the logo | Renew | [RFC 5280 §4.1.2.5](https://www.rfc-editor.org/rfc/rfc5280#section-4.1.2.5) |
+| Does not name X | FAIL | The certificate is for another domain | Request one that names the domain | [VMC §4.3](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-4.3) |
+| Certificate validity dates are missing or invalid, The certificate validity dates could not be read. | FAIL | The file is not a usable certificate | Publish the issued PEM | [RFC 5280 §4.1.2.5](https://www.rfc-editor.org/rfc/rfc5280#section-4.1.2.5) |
+| No PEM certificate found…, The certificate could not be read. | FAIL | The file is not a readable certificate | Publish the issued PEM | [VMC §3.3](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-3.3) |
+| Valid until … (under 30 days) | CHECK | Expires soon | Renew now | none |
+| Certificate trust not verified | CHECK | Trust, revocation and logo hash are outside this check | Nothing here | [VMC §5.1](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-5.1) |
+| No certificate (a=) | CHECK | Some providers require one | Add a mark certificate | none |
+
+### DMARC and the overall result
+
+BIMI is shown only on top of an enforcing DMARC policy.
+
+| Finding | Severity | What it means for the logo | Fix | Source |
+| --- | --- | --- | --- | --- |
+| DMARC p=… blocks the logo | FAIL | Providers show logos only on top of enforcement | Enforce DMARC | [BIMI §7.1](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-7.1) step 7 |
+| DMARC sp=none blocks the logo | FAIL | Subdomains are unprotected | Remove sp=none | [BIMI §7.1](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-7.1) step 8 |
+| DMARC t=y blocks the logo | FAIL | Testing requests reduced enforcement | Review reports before disabling test mode | [RFC 9989 §4.7](https://www.rfc-editor.org/rfc/rfc9989#section-4.7), conservative Tamperbox readiness rule |
+| No DMARC record | FAIL | No policy at this exact name | Publish `_dmarc` | [RFC 9989 §4.10.1](https://www.rfc-editor.org/rfc/rfc9989#section-4.10.1) |
+| Multiple DMARC records | FAIL | Receivers discard them all | Keep one record | [RFC 9989 §4.10](https://www.rfc-editor.org/rfc/rfc9989#section-4.10) |
+| Invalid DMARC record | FAIL | BIMI needs a valid, enforcing record | Fix DMARC first | [RFC 9989 §4.7](https://www.rfc-editor.org/rfc/rfc9989#section-4.7) |
+| DMARC not checked | CHECK | The lookup failed | Retry | none |
+| Nothing to fix | PASS | Every part checked passes | | none |
 
 ## Guide
 
@@ -188,15 +360,33 @@ See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for 
 
 ## Limits
 
-- Text checks of the SVG; no rendering-based validation.
-- Certificate fields only; no chain, revocation or logo hash.
-- Default selector only; exact `_dmarc` name only.
+- Text checks of the SVG; no XML parsing, schema validation or rendering-based validation.
+- Certificate fields only; no chain, revocation, extended key usage, Certificate Transparency or logo hash.
+- Default selector only; exact `_dmarc` name only, without the RFC 9989 tree walk.
+- The DMARC `t=` tag is ignored, and a declination record is reported as a missing logo URL.
 - One DNS answer and one fetch per file, at one moment.
 - Nothing is stored.
 
 ## References
 
-- [BIMI Group implementation guide](https://bimigroup.org/implementation-guide/)
-- [SVG Tiny Portable/Secure profile](https://bimigroup.org/resources/), published by the BIMI Group
-- [RFC 7489, DMARC](https://www.rfc-editor.org/rfc/rfc7489), the enforcement BIMI depends on
-- [DMARC Checker & Generator](/tools/dmarc-checker/), for the path to enforcement
+### BIMI specifications
+
+- [draft-brand-indicators-for-message-identification-14](https://datatracker.ietf.org/doc/draft-brand-indicators-for-message-identification/), Brand Indicators for Message Identification (BIMI), 1 May 2026. Individual Internet-Draft, no formal standing, expires 2 November 2026. Sections used: [§4](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-4), [§4.3](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-4.3), [§4.3.1](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-4.3.1), [§4.3.2](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-4.3.2), [§4.4](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-4.4), [§4.5](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-4.5), [§7.1](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-7.1), [§7.2](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-7.2), [§7.3](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-7.3), [§7.5](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-7.5), [§7.6](https://www.ietf.org/archive/id/draft-brand-indicators-for-message-identification-14.html#section-7.6).
+- [draft-svg-tiny-ps-abrotman-12](https://datatracker.ietf.org/doc/draft-svg-tiny-ps-abrotman/), SVG Tiny Portable/Secure, 1 May 2026. Individual Internet-Draft, no formal standing, expires 2 November 2026. Sections used: [§2.1](https://www.ietf.org/archive/id/draft-svg-tiny-ps-abrotman-12.html#section-2.1), [§2.3](https://www.ietf.org/archive/id/draft-svg-tiny-ps-abrotman-12.html#section-2.3), [§2.4](https://www.ietf.org/archive/id/draft-svg-tiny-ps-abrotman-12.html#section-2.4), [§6.2](https://www.ietf.org/archive/id/draft-svg-tiny-ps-abrotman-12.html#section-6.2), [§7](https://www.ietf.org/archive/id/draft-svg-tiny-ps-abrotman-12.html#section-7).
+- [draft-fetch-validation-vmc-wchuang-11](https://datatracker.ietf.org/doc/draft-fetch-validation-vmc-wchuang/), Fetch and Validation of Verified Mark Certificates, 1 May 2026. Individual Internet-Draft, no formal standing, expires 2 November 2026. Sections used: [§3.3](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-3.3), [§4.1](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-4.1), [§4.3](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-4.3), [§4.5](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-4.5), [§5.1](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-5.1), [§5.2](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-5.2), [§5.3](https://www.ietf.org/archive/id/draft-fetch-validation-vmc-wchuang-11.html#section-5.3).
+
+### RFCs
+
+- [RFC 9989](https://www.rfc-editor.org/info/rfc9989), DMARC, May 2026, Proposed Standard; obsoletes RFC 7489 and RFC 9091. Sections used: [§4.7](https://www.rfc-editor.org/rfc/rfc9989#section-4.7), [§4.10](https://www.rfc-editor.org/rfc/rfc9989#section-4.10), [§4.10.1](https://www.rfc-editor.org/rfc/rfc9989#section-4.10.1), [§9.3](https://www.rfc-editor.org/rfc/rfc9989#section-9.3), [Appendix A.6](https://www.rfc-editor.org/rfc/rfc9989#appendix-A.6).
+- [RFC 7489](https://www.rfc-editor.org/info/rfc7489), DMARC, March 2015, Informational; obsoleted by RFC 9989, RFC 9990 and RFC 9991. Cited only because the BIMI draft still names it.
+- [RFC 5280](https://www.rfc-editor.org/info/rfc5280), X.509 certificate and CRL profile, May 2008, Proposed Standard; updated by RFC 6818, 8398, 8399, 9549, 9598, 9608, 9618, 9925 and 10007. Sections used: [§4.1.2.5](https://www.rfc-editor.org/rfc/rfc5280#section-4.1.2.5), [§4.2.1.6](https://www.rfc-editor.org/rfc/rfc5280#section-4.2.1.6); [§6.1](https://www.rfc-editor.org/rfc/rfc5280#section-6.1) and [§6.3](https://www.rfc-editor.org/rfc/rfc5280#section-6.3) are named as not performed.
+- [RFC 9399](https://www.rfc-editor.org/info/rfc9399), Logotypes in X.509 certificates, May 2023, Proposed Standard; obsoletes RFC 3709 and RFC 6170. Section used: [§4.1](https://www.rfc-editor.org/rfc/rfc9399#section-4.1).
+- [RFC 6376](https://www.rfc-editor.org/info/rfc6376), DKIM signatures, September 2011, Internet Standard; updated by RFC 8301, 8463, 8553 and 8616. Section used: [§3.2](https://www.rfc-editor.org/rfc/rfc6376#section-3.2).
+- [RFC 7208](https://www.rfc-editor.org/info/rfc7208), SPF, April 2014, Proposed Standard; updated by RFC 7372, 8553 and 8616. Section used: [§3.3](https://www.rfc-editor.org/rfc/rfc7208#section-3.3).
+
+### Guidance and related tools
+
+- [BIMI Group implementation guide](https://bimigroup.org/implementation-guide/), for DMARC enforcement and `pct`; guidance, not a standard.
+- [Creating BIMI SVG logo files](https://bimigroup.org/creating-bimi-svg-logo-files/), BIMI Group, for the square aspect ratio.
+- [VMC Guidelines](https://bimigroup.org/resources/VMC_Guidelines_latest.pdf), BIMI Group, which define the mark certificate content the tool does not check.
+- [DMARC Checker & Generator](/tools/dmarc-checker/), for the path to enforcement.

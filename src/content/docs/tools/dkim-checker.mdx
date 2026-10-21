@@ -84,9 +84,11 @@ History logs every Break it and Heal it change with Revert and Reset input. Heal
 
 ## Method
 
+The server only answers DNS questions. Every rule below runs in your browser on the TXT text that comes back, or on the record you pasted, so a looked-up key and a pasted key are judged by the same code.
+
 ### Selector discovery
 
-DNS has no way to list a domain's selectors. The tool probes these 24 names, which cover the common mail services:
+DNS has no way to list a domain's selectors. A key lives at `<selector>._domainkey.<domain>` ([RFC 6376, Section 3.6.2.1](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.2.1)), and selectors are free-form names chosen by the signer ([Section 3.1](https://www.rfc-editor.org/rfc/rfc6376#section-3.1)). The probe list is a Tamperbox choice, not an RFC rule. The tool probes these 24 names, which cover the common mail services:
 
 | Selector | Used by |
 | --- | --- |
@@ -104,41 +106,67 @@ DNS has no way to list a domain's selectors. The tool probes these 24 names, whi
 | `protonmail` | Proton |
 | `everlytickey1` | Everlytic |
 
-Lookups run five at a time. Each selector found gets a row with its key type, length and flags. A selector whose lookup failed (not "no record", but no answer) is counted separately, so a temporary DNS error is never reported as a missing key. When every lookup fails the page reports an error, not a domain without keys.
+### Probe results
 
-The server queries public DNS and follows CNAME aliases, so keys that a mail service hosts on its own zone through a CNAME (Microsoft 365, Amazon SES) are found.
+Lookups run five at a time. Each selector found gets a row with its key type, length and flags. A selector whose lookup failed (not "no record", but no answer) is counted separately, so a temporary DNS error is never reported as a missing key. This follows the split in [RFC 6376, Section 6.1.2](https://www.rfc-editor.org/rfc/rfc6376#section-6.1.2), where a query that "fails to respond" is a TEMPFAIL and a missing record is a PERMFAIL. When every lookup fails the page reports an error, not a domain without keys.
+
+The server queries public DNS and follows CNAME aliases, so keys that a mail service hosts on its own zone through a CNAME (Microsoft 365, Amazon SES) are found. A TXT record split into several quoted strings is joined before it is read, as [Section 3.6.2.2](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.2.2) requires: "Strings in a TXT RR MUST be concatenated together before use with no intervening whitespace."
 
 ### Choosing the key to inspect
 
-With no selector named, the page inspects the best key found: a passing key before a key to check, a non-revoked key before a revoked one, a longer key before a shorter one. With a pasted header or a key by name, it inspects that key. Clicking a row in the list inspects that key instead.
+With no selector named, the page inspects the best key found: a passing key before a key to check, a non-revoked key before a revoked one, a longer key before a shorter one. With a pasted header or a key by name, it inspects that key. Clicking a row in the list inspects that key instead. This ordering is a Tamperbox choice; no RFC ranks keys.
 
 ### Wildcard and multiple records
 
-- A domain whose every selector answers with the same record has a wildcard, `*._domainkey.example.com`. The page reports one key, not 24. A wildcard with an empty `p=` is the standard way to say "this domain signs no mail": a CHECK, with the explanation.
-- A selector with two or more TXT records is FAIL, "Two or more records": receivers cannot pick one. The usual cause is a rotated key added without removing the old one.
+- When five or more selectors answer and every answer is the same text, the page reports a wildcard, `*._domainkey.example.com`, as one key, not 24. A wildcard with an empty `p=` is the usual way to say "this domain signs no mail": a CHECK, with the explanation. The five-answer threshold is a Tamperbox heuristic.
+- A selector with two or more TXT records is FAIL, "Two or more records". [RFC 6376, Section 3.6.2.2](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.2.2): "TXT RRs MUST be unique for a particular selector name; that is, if there are multiple records in an RRset, the results are undefined." The usual cause is a rotated key added without removing the old one. The tool counts every TXT record at the name, DKIM or not.
 
 ### Tag rules
 
-The record is split on semicolons into `name=value` tags. A malformed tag, or a tag that appears twice, is FAIL.
+The record is split on semicolons into `name=value` tags, following the tag-list syntax of [RFC 6376, Section 3.2](https://www.rfc-editor.org/rfc/rfc6376#section-3.2).
 
-- `v`, when present, must be the first tag and exactly `DKIM1`. Any other value is FAIL; Heal it can correct it.
-- `k` must be `rsa` or `ed25519`, in lower case. `k=RSA` is reported as an unsupported key type (FAIL) with a correction hint; no key assessment is made for an unsupported type.
-- `s`, when present, must include `email` or `*`; otherwise FAIL, "Key is not enabled for email".
-- A record without `p` is FAIL: no signature could ever verify.
-- An empty `p=` is CHECK, "Key revoked": the standard way to retire a selector.
-- `t=y` is CHECK, "Testing mode": receivers may treat failures as unsigned mail, so the key protects less than it could. Heal it removes the flag.
-- `t=s` is INFO: the signing identity must exactly match the signing domain. The tool has no message identity to compare, so it reports the flag without verifying it. Whitespace around the colon-separated flags is allowed.
-- An `h=` list naming `sha1` without `sha256` is FAIL, "Only sha1 allowed": receivers reject sha1 signatures. Heal it removes `h=` so the default applies.
+#### Tag syntax
+
+- A part without `name=value` is FAIL, "Malformed tag".
+- A tag that appears twice is FAIL. Section 3.2: "Tags with duplicate names MUST NOT occur within a single tag-list; if a tag name does occur more than once, the entire tag-list is invalid."
+- Unknown tags are listed and marked as ignored. Section 3.2: "Unrecognized tags MUST be ignored."
+
+#### Version, key type and service
+
+- `v`, when present, must be the first tag and exactly `DKIM1`; otherwise FAIL, and Heal it can correct the value. [Section 3.6.1](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.1): "This tag MUST be the first tag in the record. Records beginning with a "v=" tag with any other value MUST be discarded."
+- `k` must be `rsa` or `ed25519`, in lower case. `k=RSA` is reported as an unsupported key type (FAIL) with a correction hint, and no key assessment is made. Section 3.2: "Values MUST be processed as case sensitive unless the specific tag description of semantics specifies case insensitivity." The `ed25519` value comes from [RFC 8463, Section 4.2](https://www.rfc-editor.org/rfc/rfc8463#section-4.2).
+- `s`, when present, must include `email` or `*`; otherwise FAIL, "Key is not enabled for email". Section 3.6.1: "Verifiers for a given service type MUST ignore this record if the appropriate type is not listed."
+
+#### Key presence and flags
+
+- A record without `p` is FAIL: no signature could ever verify. Section 3.6.1 marks `p=` "REQUIRED".
+- An empty `p=` is CHECK, "Key revoked". Section 3.6.1: "An empty value means that this public key has been revoked." It is CHECK, not FAIL, because revoking is a deliberate act.
+- `t=y` is CHECK, "Testing mode". Section 3.6.1: "Verifiers MUST NOT treat messages from Signers in testing mode differently from unsigned email, even should the signature fail to verify." The key protects less than it could. Heal it removes the flag.
+- `t=s` is INFO. Section 3.6.1: the "i=" domain "MUST NOT be a subdomain of "d="". The tool has no message identity to compare, so it reports the flag without verifying it. Whitespace around the colon-separated flags is allowed.
+
+#### Hash algorithms
+
+An `h=` list naming `sha1` without `sha256` is FAIL, "Only sha1 allowed". [RFC 8301, Section 3.1](https://www.rfc-editor.org/rfc/rfc8301#section-3.1): "rsa-sha1 MUST NOT be used for signing or verifying." With sha1 the only hash the key accepts, [RFC 6376, Section 6.1.2](https://www.rfc-editor.org/rfc/rfc6376#section-6.1.2) step 6 makes every rsa-sha256 signature a PERMFAIL. Heal it removes `h=` so the default applies.
 
 ### Decoding the key bytes
 
-Key length is never estimated from the length of the text. The `p` value is base64-decoded after whitespace is removed; characters outside the base64 alphabet, or a length that cannot be valid base64, fail with "The key is not valid base64".
+Key length is never estimated from the length of the text. The `p` value is base64-decoded after whitespace is removed, which [RFC 6376, Section 3.6.1](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.1) allows ("A base64string is permitted to include whitespace"). Characters outside the base64 alphabet, or a length that cannot be valid base64, fail with "The key is not valid base64". [RFC 4648, Section 3.3](https://www.rfc-editor.org/rfc/rfc4648#section-3.3): "Implementations MUST reject the encoded data if it contains characters outside the base alphabet".
 
-For RSA, the bytes are read as DER. Both a SubjectPublicKeyInfo structure (with the rsaEncryption identifier) and a bare PKCS#1 key are accepted. The modulus is measured to the exact bit, leading zero bytes ignored, and the public exponent is shown. Structural errors are reported directly: "The key data is truncated", "Invalid DER length", or "The key is not an RSA key; set k= to its type" when the algorithm identifier is something else. For `k=ed25519` the decoded key must be exactly 32 bytes.
+#### RSA keys
+
+For RSA, the bytes are read as DER. Both a SubjectPublicKeyInfo structure (with the rsaEncryption identifier) and a bare PKCS#1 `RSAPublicKey` ([RFC 8017, Appendix A.1.1](https://www.rfc-editor.org/rfc/rfc8017#appendix-A.1.1)) are accepted. The modulus is measured to the exact bit, leading zero bytes ignored, and the public exponent is shown. Structural errors are reported directly: "The key data is truncated", "Invalid DER length", or "The key is not an RSA key; set k= to its type" when the algorithm identifier is something else. [RFC 6376, Section 6.1.2](https://www.rfc-editor.org/rfc/rfc6376#section-6.1.2) step 5: a record that "does not adhere to the format defined in this specification" MUST be ignored with PERMFAIL.
+
+#### Ed25519 keys
+
+For `k=ed25519` the decoded key must be exactly 32 bytes. [RFC 8463, Section 4.2](https://www.rfc-editor.org/rfc/rfc8463#section-4.2): "The p= value in the key record is the Ed25519 public key encoded in base64."
+
+#### Common causes
 
 Truncated keys are the most common real-world failure. They come from a control panel that cut a long value at 255 characters, or dropped one of the quoted strings a long TXT record is split into. Another frequent cause is `k=ed25519` on a key that is really RSA: when the key text starts with `MI`, the usual opening of DER, Heal it offers `k=rsa`.
 
 ### Key strength
+
+The thresholds come from [RFC 8301, Section 3.2](https://www.rfc-editor.org/rfc/rfc8301#section-3.2): "Signers MUST use RSA keys of at least 1024 bits for all keys. Signers SHOULD use RSA keys of at least 2048 bits." and "Verifiers MUST NOT consider signatures using RSA keys of less than 1024 bits as valid signatures."
 
 | Key | Severity | Title |
 | --- | --- | --- |
@@ -147,35 +175,123 @@ Truncated keys are the most common real-world failure. They come from a control 
 | RSA 2048 bits or more | PASS | N-bit RSA key |
 | Ed25519 | PASS | Ed25519 key, with a note to sign with RSA as well, because not every receiver verifies Ed25519 yet |
 
+The Ed25519 note is a Tamperbox recommendation. [RFC 8463, Section 5](https://www.rfc-editor.org/rfc/rfc8463#section-5) says "verifiers MUST implement the Ed25519-SHA256 algorithm", and [Section 6](https://www.rfc-editor.org/rfc/rfc8463#section-6) describes signing twice, under two selectors, for backward compatibility.
+
 ### Fingerprint
 
-The page computes a SHA-256 digest of the decoded key bytes in the browser and shows it in groups of eight hex characters. Compare it with the fingerprint your mail service shows to confirm that DNS holds the key you expect. It says nothing about whether outgoing mail is signed with it.
+The page computes a SHA-256 digest of the decoded key bytes in the browser and shows it in groups of eight hex characters. Compare it with the fingerprint your mail service shows to confirm that DNS holds the key you expect. It says nothing about whether outgoing mail is signed with it. No RFC defines a DKIM key fingerprint; this is a Tamperbox convenience.
+
+## Standards and conformance
+
+The checker implements the key record half of DKIM: the record a verifier fetches in step 1 of [RFC 6376, Section 6.1.2](https://www.rfc-editor.org/rfc/rfc6376#section-6.1.2) and the checks of steps 3, 5 and 7 on it. It never sees a message body or a signature value, so hash computation ([Section 3.7](https://www.rfc-editor.org/rfc/rfc6376#section-3.7)) and signature verification ([Section 6.1.3](https://www.rfc-editor.org/rfc/rfc6376#section-6.1.3)) are out of scope. Lookups go to our server, which asks public DNS and returns the TXT text; every rule then runs in the browser. A pasted record never leaves the browser.
+
+### RFC 6376: key record syntax
+
+[RFC 6376](https://www.rfc-editor.org/rfc/rfc6376) is an Internet Standard (STD 76), updated by RFC 8301, RFC 8463, RFC 8553 and RFC 8616. RFC 8553 (underscored DNS names) and RFC 8616 (internationalized addresses) do not change the key record, so the tool has nothing to apply from them.
+
+| Section | Requirement | What the tool does |
+| --- | --- | --- |
+| [3.2](https://www.rfc-editor.org/rfc/rfc6376#section-3.2) | Tag-list syntax, no duplicates, unknown tags ignored | Parsed locally; malformed or duplicate tags FAIL, unknown tags listed as ignored |
+| [3.6.1](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.1) `v=` | First tag, exactly `DKIM1` | FAIL when not first or not `DKIM1` |
+| [3.6.1](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.1) `k=` | Default `rsa`; unknown types ignored | Accepts `rsa` and `ed25519` only, case-sensitive; anything else FAIL |
+| [3.6.1](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.1) `h=` | Colon-separated list; default all algorithms | FAIL when `sha1` is listed without `sha256` |
+| [3.6.1](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.1) `p=` | Required; empty means revoked | Missing FAIL; empty CHECK; otherwise decoded and measured |
+| [3.6.1](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.1) `s=` | Must list `email` or `*` for mail | FAIL when neither is listed |
+| [3.6.1](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.1) `t=` | Flags `y` and `s` | `y` CHECK, `s` INFO (not verified) |
+| [3.6.1](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.1) `n=` | Notes for people | Shown, not judged |
+
+### RFC 6376: DNS binding and lookup
+
+| Section | Requirement | What the tool does |
+| --- | --- | --- |
+| [3.6.2.1](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.2.1) | Key at `selector._domainkey.domain` | Looked up on our server for 24 common selectors, plus the one named |
+| [3.6.2.2](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.2.2) | Strings concatenated; one TXT record per selector | Strings joined; two or more records FAIL |
+| [6.1.2](https://www.rfc-editor.org/rfc/rfc6376#section-6.1.2) step 2 | No answer is TEMPFAIL | Counted as "could not be checked", never as a missing key |
+| [6.1.2](https://www.rfc-editor.org/rfc/rfc6376#section-6.1.2) step 3 | No record is PERMFAIL | FAIL "No record at the selector" when a selector was named |
+| [6.1.2](https://www.rfc-editor.org/rfc/rfc6376#section-6.1.2) step 7 | Empty `p=` is PERMFAIL (key revoked) | CHECK, because revoking is deliberate |
+
+From a pasted DKIM-Signature header the tool reads only `d=` and `s=` ([Section 3.5](https://www.rfc-editor.org/rfc/rfc6376#section-3.5)). It does not compare the header's `a=` with the key's `h=` and `k=` (steps 6 and 8), does not read `q=`, and does not check `i=` against `t=s`.
+
+### RFC 8301: algorithms and key sizes
+
+[RFC 8301](https://www.rfc-editor.org/rfc/rfc8301) updates RFC 6376 Sections 3.3 and 3.3.3. The tool applies [Section 3.1](https://www.rfc-editor.org/rfc/rfc8301#section-3.1) through the sha1-only rule and [Section 3.2](https://www.rfc-editor.org/rfc/rfc8301#section-3.2) through the RSA thresholds: under 1024 bits FAIL, 1024 to 2047 CHECK (the SHOULD), 2048 and more PASS. The older floor in [RFC 6376, Section 3.3.3](https://www.rfc-editor.org/rfc/rfc6376#section-3.3.3), where verifiers had to accept 512-bit keys, is not used. RFC 8301 only obliges verifiers to handle keys up to 4096 bits; the tool still reports a longer key as PASS and does not warn that some receivers may refuse it.
+
+### RFC 8463: Ed25519
+
+[RFC 8463](https://www.rfc-editor.org/rfc/rfc8463) adds `k=ed25519` ([Section 4.2](https://www.rfc-editor.org/rfc/rfc8463#section-4.2)). The tool checks that `p=` decodes to 32 bytes, the public key size of [RFC 8032, Section 5.1.5](https://www.rfc-editor.org/rfc/rfc8032#section-5.1.5). It does not decode the bytes as a curve point ([RFC 8032, Section 5.1.3](https://www.rfc-editor.org/rfc/rfc8032#section-5.1.3)), so 32 random bytes pass.
+
+### RFC 8017 and RFC 4648: key encoding
+
+RFC 6376 Section 3.6.1 says the `rsa` type carries an `RSAPublicKey` and cites RFC 3447, which [RFC 8017](https://www.rfc-editor.org/rfc/rfc8017) obsoletes. Its own example in [Appendix C](https://www.rfc-editor.org/rfc/rfc6376#appendix-C) publishes a SubjectPublicKeyInfo, which is what mail services issue. The tool accepts both forms. It reads the modulus and exponent ([RFC 8017, Section 3.1](https://www.rfc-editor.org/rfc/rfc8017#section-3.1)) but does not check that the exponent lies between 3 and n - 1.
+
+Base64 follows [RFC 4648, Section 4](https://www.rfc-editor.org/rfc/rfc4648#section-4). Non-alphabet characters are rejected ([Section 3.3](https://www.rfc-editor.org/rfc/rfc4648#section-3.3)). Missing `=` padding is added before decoding, which is more lenient than [Section 3.2](https://www.rfc-editor.org/rfc/rfc4648#section-3.2) ("Implementations MUST include appropriate pad characters"); a receiver with a strict decoder may refuse such a key.
+
+### Where the tool differs from the RFCs
+
+- **Tag names are case-insensitive in the tool.** `V=DKIM1; P=…` is read as `v` and `p`, while [RFC 6376, Section 3.2](https://www.rfc-editor.org/rfc/rfc6376#section-3.2) says "Tags MUST be interpreted in a case-sensitive manner." A receiver would see no `p=` tag. Values, including `k=`, stay case-sensitive.
+- **Flags are exact colon-separated tokens.** `t=x-y` is ignored, while `t=y` and `t=s:y` activate testing mode under [section 3.6.1](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.1).
+- **Multiple records are FAIL, not "undefined".** Section 3.6.2.2 leaves the result undefined, and Section 6.1.2 step 4 lets a verifier pick one or try each. The tool is stricter, because the outcome then depends on the receiver.
+- **Unknown `k=` is FAIL.** The RFC says unknown key types "MUST be ignored"; for mail, that means no usable key, so FAIL reflects the outcome.
+- **Malformed RSA structures** receive readable key errors, including missing BIT STRING and missing exponent, rather than a JavaScript exception title.
+
+### RFC 9989: DMARC context
+
+DMARC itself is not evaluated. Only the "No key under the common selectors" finding mentions it: without a key, the domain has no DKIM-Authenticated Identifier ([RFC 9989, Section 4.4.1](https://www.rfc-editor.org/rfc/rfc9989#section-4.4.1)), so DMARC can pass only through SPF ([Section 5.3.5](https://www.rfc-editor.org/rfc/rfc9989#section-5.3.5)). [RFC 9989](https://www.rfc-editor.org/rfc/rfc9989) obsoletes RFC 7489. Use the [DMARC checker](/tools/dmarc-checker/) for the policy.
 
 ## Finding reference
 
-| Finding | Severity | What it means for mail delivery | Fix |
-| --- | --- | --- | --- |
-| N-bit RSA key (2048 or more) | PASS | Receivers can verify signatures made with it | |
-| Ed25519 key | PASS | Strong; some receivers cannot verify it yet | Also sign with RSA under a second selector |
-| N-bit RSA key (1024 to 2047) | CHECK | Still accepted; scored down by some receivers | Rotate to a 2048-bit key under a new selector |
-| N-bit RSA key (under 1024) | FAIL | Receivers ignore the key; mail is treated as unsigned | Rotate to a 2048-bit key |
-| Key revoked (empty p=) | CHECK | Signatures with this selector fail on purpose | Fine if retired; republish the key if mail still uses it |
-| Testing mode (t=y) | CHECK | Failures may be treated as unsigned; weaker protection | Remove t=y once signing works |
-| Strict DKIM identity domain (t=s) | INFO | The signing identity must match the signing domain exactly | Nothing, unless subdomains sign with this key |
-| Only sha1 allowed | FAIL | Receivers reject sha1 signatures | Allow sha256, or remove h= |
-| No p= key | FAIL | No signature can verify | Publish the public key |
-| The key is not valid base64 | FAIL | Receivers cannot load the key | Re-copy the record from your mail service |
-| The key data is truncated | FAIL | Receivers cannot load the key | Publish the full value; split it into quoted strings if your DNS panel limits a string to 255 characters |
-| The key is not an RSA key; set k= to its type | FAIL | The k= tag and the bytes disagree | Set k= to the real type |
-| An Ed25519 key is 32 bytes | FAIL | The bytes are not an Ed25519 key | Set k=rsa, or publish the right key |
-| Unsupported key type | FAIL | Case-sensitive: `k=RSA` is not `k=rsa` | Use rsa or ed25519 in lower case |
-| v=DKIM1 must be first | FAIL | Receivers ignore the record | Move v= to the front |
-| v= other than DKIM1 | FAIL | Only DKIM1 is defined | Set v=DKIM1 |
-| Key is not enabled for email | FAIL | s= excludes email | Set s=email, or remove s= |
-| Two or more records at the selector | FAIL | Receivers cannot pick one | Remove the old record |
-| No record at the selector | FAIL | Mail signed with this selector fails at every receiver | Publish the key, or sign with the right selector |
-| No key under the common selectors | FAIL | The domain sends unsigned mail, or signs under its own selector | Paste a message header to check the exact key |
-| selector: key (another key found) | INFO, CHECK or FAIL | Another service signs for the domain with this key | Inspect it; each key needs the same attention |
+Each finding the checker can emit, grouped by what it judges, with what it means for mail signed with the key. "none" in the RFC section column marks a Tamperbox recommendation or method, not an RFC rule.
+
+### Key strength and state
+
+What receivers do with the published key, by its type, size and flags.
+
+| Finding | Severity | RFC section | What it means for mail delivery | Fix |
+| --- | --- | --- | --- | --- |
+| N-bit RSA key (2048 or more) | PASS | [RFC 8301, 3.2](https://www.rfc-editor.org/rfc/rfc8301#section-3.2) | Receivers can verify signatures made with it | |
+| Ed25519 key | PASS | [RFC 8463, 4.2](https://www.rfc-editor.org/rfc/rfc8463#section-4.2); the dual-signing note is none (Tamperbox) | Strong; some receivers cannot verify it yet | Also sign with RSA under a second selector |
+| N-bit RSA key (1024 to 2047) | CHECK | [RFC 8301, 3.2](https://www.rfc-editor.org/rfc/rfc8301#section-3.2) | Still accepted; scored down by some receivers | Rotate to a 2048-bit key under a new selector |
+| N-bit RSA key (under 1024) | FAIL | [RFC 8301, 3.2](https://www.rfc-editor.org/rfc/rfc8301#section-3.2) | Receivers ignore the key; mail is treated as unsigned | Rotate to a 2048-bit key |
+| Key revoked (empty p=) | CHECK | [RFC 6376, 3.6.1](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.1) | Signatures with this selector fail on purpose | Fine if retired; republish the key if mail still uses it |
+| Testing mode (t=y) | CHECK | [RFC 6376, 3.6.1](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.1) | Failures may be treated as unsigned; weaker protection | Remove t=y once signing works |
+| Strict DKIM identity domain (t=s) | INFO | [RFC 6376, 3.6.1](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.1) | The signing identity must match the signing domain exactly | Nothing, unless subdomains sign with this key |
+
+### Key record syntax
+
+Problems that stop a receiver from loading the key at all.
+
+#### Record tags
+
+| Finding | Severity | RFC section | What it means for mail delivery | Fix |
+| --- | --- | --- | --- | --- |
+| Malformed tag | FAIL | [RFC 6376, 3.2](https://www.rfc-editor.org/rfc/rfc6376#section-3.2) | The record is not a valid tag list | Write each part as name=value |
+| Tag appears twice | FAIL | [RFC 6376, 3.2](https://www.rfc-editor.org/rfc/rfc6376#section-3.2) | The whole record is invalid | Keep one copy of the tag |
+| Only sha1 allowed | FAIL | [RFC 8301, 3.1](https://www.rfc-editor.org/rfc/rfc8301#section-3.1) | Receivers reject sha1 signatures | Allow sha256, or remove h= |
+| No p= key | FAIL | [RFC 6376, 3.6.1](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.1) | No signature can verify | Publish the public key |
+| Unsupported key type | FAIL | [RFC 6376, 3.6.1](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.1) | Case-sensitive: `k=RSA` is not `k=rsa` | Use rsa or ed25519 in lower case |
+| v=DKIM1 must be first | FAIL | [RFC 6376, 3.6.1](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.1) | Receivers ignore the record | Move v= to the front |
+| v= other than DKIM1 | FAIL | [RFC 6376, 3.6.1](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.1) | Only DKIM1 is defined | Set v=DKIM1 |
+| Key is not enabled for email | FAIL | [RFC 6376, 3.6.1](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.1) | s= excludes email | Set s=email, or remove s= |
+
+#### Key data
+
+| Finding | Severity | RFC section | What it means for mail delivery | Fix |
+| --- | --- | --- | --- | --- |
+| The key is not valid base64 | FAIL | [RFC 4648, 3.3](https://www.rfc-editor.org/rfc/rfc4648#section-3.3) | Receivers cannot load the key | Re-copy the record from your mail service |
+| The key data is truncated | FAIL | [RFC 8017, A.1.1](https://www.rfc-editor.org/rfc/rfc8017#appendix-A.1.1) | Receivers cannot load the key | Publish the full value; split it into quoted strings if your DNS panel limits a string to 255 characters |
+| The key is not an RSA key; set k= to its type | FAIL | [RFC 6376, 6.1.2](https://www.rfc-editor.org/rfc/rfc6376#section-6.1.2) | The k= tag and the bytes disagree | Set k= to the real type |
+| An Ed25519 key is 32 bytes | FAIL | [RFC 8463, 4.2](https://www.rfc-editor.org/rfc/rfc8463#section-4.2) | The bytes are not an Ed25519 key | Set k=rsa, or publish the right key |
+
+### Selectors and discovery
+
+Findings about where the key lives and which selectors answer.
+
+| Finding | Severity | RFC section | What it means for mail delivery | Fix |
+| --- | --- | --- | --- | --- |
+| Two or more records at the selector | FAIL | [RFC 6376, 3.6.2.2](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.2.2) | Results are undefined; receivers may pick either record | Remove the old record |
+| No record at the selector | FAIL | [RFC 6376, 6.1.2](https://www.rfc-editor.org/rfc/rfc6376#section-6.1.2) | Mail signed with this selector fails at every receiver | Publish the key, or sign with the right selector |
+| No key under the common selectors | FAIL | none (Tamperbox probe list) | The domain sends unsigned mail, or signs under its own selector | Paste a message header to check the exact key |
+| selector: key (another key found) | INFO, CHECK or FAIL | none (Tamperbox) | Another service signs for the domain with this key | Inspect it; each key needs the same attention |
 
 ## Guide
 
@@ -291,10 +407,14 @@ See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for 
 - One DNS answer, from one public resolver, at one moment.
 - Nothing is stored.
 
+
 ## References
 
-- [RFC 6376, DomainKeys Identified Mail signatures](https://www.rfc-editor.org/rfc/rfc6376)
-- [RFC 8301, cryptographic algorithm and key usage update to DKIM](https://www.rfc-editor.org/rfc/rfc8301)
-- [RFC 8463, Ed25519 for DKIM](https://www.rfc-editor.org/rfc/rfc8463)
-- [RFC 7489, DMARC](https://www.rfc-editor.org/rfc/rfc7489)
+- [RFC 6376, DomainKeys Identified Mail (DKIM) Signatures](https://www.rfc-editor.org/rfc/rfc6376). Internet Standard, STD 76; updated by RFC 8301, RFC 8463, RFC 8553 and RFC 8616. Sections used: [3.1](https://www.rfc-editor.org/rfc/rfc6376#section-3.1), [3.2](https://www.rfc-editor.org/rfc/rfc6376#section-3.2), [3.3.3](https://www.rfc-editor.org/rfc/rfc6376#section-3.3.3), [3.5](https://www.rfc-editor.org/rfc/rfc6376#section-3.5), [3.6.1](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.1), [3.6.2.1](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.2.1), [3.6.2.2](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.2.2), [6.1.2](https://www.rfc-editor.org/rfc/rfc6376#section-6.1.2) and [Appendix C](https://www.rfc-editor.org/rfc/rfc6376#appendix-C).
+- [RFC 8301, Cryptographic Algorithm and Key Usage Update to DKIM](https://www.rfc-editor.org/rfc/rfc8301). Standards Track; updates RFC 6376. Sections used: [3.1](https://www.rfc-editor.org/rfc/rfc8301#section-3.1) and [3.2](https://www.rfc-editor.org/rfc/rfc8301#section-3.2).
+- [RFC 8463, A New Cryptographic Signature Method for DKIM](https://www.rfc-editor.org/rfc/rfc8463). Standards Track; updates RFC 6376. Sections used: [4.2](https://www.rfc-editor.org/rfc/rfc8463#section-4.2), [5](https://www.rfc-editor.org/rfc/rfc8463#section-5) and [6](https://www.rfc-editor.org/rfc/rfc8463#section-6).
+- [RFC 8017, PKCS #1: RSA Cryptography Specifications Version 2.2](https://www.rfc-editor.org/rfc/rfc8017). Informational; obsoletes RFC 3447, which RFC 6376 cites. Sections used: [3.1](https://www.rfc-editor.org/rfc/rfc8017#section-3.1) and [Appendix A.1.1](https://www.rfc-editor.org/rfc/rfc8017#appendix-A.1.1).
+- [RFC 8032, Edwards-Curve Digital Signature Algorithm (EdDSA)](https://www.rfc-editor.org/rfc/rfc8032). Informational. Sections used: [5.1.3](https://www.rfc-editor.org/rfc/rfc8032#section-5.1.3) (not applied) and [5.1.5](https://www.rfc-editor.org/rfc/rfc8032#section-5.1.5).
+- [RFC 4648, The Base16, Base32, and Base64 Data Encodings](https://www.rfc-editor.org/rfc/rfc4648). Standards Track. Sections used: [3.2](https://www.rfc-editor.org/rfc/rfc4648#section-3.2), [3.3](https://www.rfc-editor.org/rfc/rfc4648#section-3.3) and [4](https://www.rfc-editor.org/rfc/rfc4648#section-4).
+- [RFC 9989, Domain-based Message Authentication, Reporting, and Conformance (DMARC)](https://www.rfc-editor.org/rfc/rfc9989). Standards Track, May 2026; obsoletes RFC 7489 and RFC 9091. Sections used: [4.4.1](https://www.rfc-editor.org/rfc/rfc9989#section-4.4.1) and [5.3.5](https://www.rfc-editor.org/rfc/rfc9989#section-5.3.5).
 - Tamperbox guides: [Why is my DKIM key failing?](https://tamperbox.dev/guides/fix-dkim-key-failures) and [DMARC rollout: from p=none to reject](https://tamperbox.dev/guides/dmarc-monitoring-to-reject)
