@@ -1,7 +1,7 @@
 ---
 title: BIMI Record Checker
 description: How the checker reads a BIMI record, fetches and inspects the logo and the mark certificate, checks the DMARC policy BIMI depends on, every rule it applies, what each finding means for logo display, and how to fix each one.
-updated: 2026-10-19
+updated: 2026-10-21
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox BIMI Record Checker, which reads the default._bimi and _dmarc records through public DNS, fetches the logo and certificate the record names, checks the SVG as text against the Tiny Portable/Secure profile, reads the certificate's logotype extension, validity and names, and requires DMARC enforcement.
 prerequisites:
@@ -12,7 +12,7 @@ limitations:
   - Full SVG conformance, certificate trust, revocation and logo hash matching are not verified; only the default selector is looked up; each mailbox provider decides whether to show a logo
 ---
 
-The tool page is [tamperbox.dev/bimi-checker](https://tamperbox.dev/bimi-checker). It opens on a working example whose logo and certificate are ready while DMARC is still `p=none`, the most common reason a logo does not appear. This page is the long version: what is fetched and how, every rule applied to the record, the logo, the certificate and the DMARC policy, what each finding means, and how to fix each one.
+The tool page is [tamperbox.dev/bimi-checker](https://tamperbox.dev/bimi-checker). It opens on a live check of `tamperbox.dev`; replace that domain to inspect your own. This page is the long version: what is fetched and how, every rule applied to the record, the logo, the certificate and the DMARC policy, what each finding means, and how to fix each one.
 
 <div class="tb-callout"><strong>Where processing happens:</strong> a domain is sent to the Tamperbox server, which asks public DNS for the <code>default._bimi</code> and <code>_dmarc</code> records and fetches the logo and the certificate the record names. A pasted record, SVG or PEM is read in your browser; the logo is drawn as an image, so nothing in it runs. Nothing is stored.</div>
 
@@ -170,7 +170,9 @@ Each case is built from the logo or record you pasted or the domain publishes.
 
 ## Worked example
 
-The page opens on `harbor-supply.example`, a sample domain on the reserved `.example` zone, answered in the browser so the example costs nothing and never changes. Its record names a square SVG Tiny PS logo and a mark certificate, both of which pass; its DMARC record is `p=none`.
+The page opens on a live check of `tamperbox.dev`. Its published records and findings can change over time.
+
+For the deterministic walkthrough below, enter `harbor-supply.example`. This reserved `.example` domain is answered from synthetic data in your browser; it sends no live lookup. Its record names a square SVG Tiny PS logo and a mark certificate, both of which pass; its DMARC record is `p=none`.
 
 **DMARC p=none blocks the logo: this DMARC policy requirement is not met.** The findings are the DMARC blocker (FAIL, with a button to the DMARC checker) and "Certificate trust not verified" (CHECK). Replace the sample with your own domain and every section, card and link is rewritten for it.
 

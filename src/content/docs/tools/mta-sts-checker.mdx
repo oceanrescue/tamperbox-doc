@@ -1,7 +1,7 @@
 ---
 title: MTA-STS & TLS-RPT Checker
 description: How the checker follows what a sending server does, from the _mta-sts record to the policy file, MX coverage and TLS-RPT, every rule applied along the way, what each finding means for mail in transit, and how to fix and verify each one.
-updated: 2026-10-19
+updated: 2026-10-21
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox MTA-STS & TLS-RPT Checker, which reads the _mta-sts and _smtp._tls records and the MX records through public DNS, fetches the policy file over HTTPS, checks the file's syntax and mode, compares every MX host with the policy's mx lines, and suggests an enforcing policy that covers every server.
 prerequisites:
@@ -12,7 +12,7 @@ limitations:
   - No connection is made to any mail server, so STARTTLS support and MX certificates are not tested; senders cache a policy for max_age seconds, so changes take effect slowly
 ---
 
-The tool page is [tamperbox.dev/mta-sts-checker](https://tamperbox.dev/mta-sts-checker). It opens on a working example whose policy is still in testing mode with one backup MX server missing from it. This page is the long version: what a sending server checks, every rule the tool applies at each step, what each finding means, and how to fix and verify each one.
+The tool page is [tamperbox.dev/mta-sts-checker](https://tamperbox.dev/mta-sts-checker). It opens on a live check of `tamperbox.dev`; replace that domain to inspect your own. This page is the long version: what a sending server checks, every rule the tool applies at each step, what each finding means, and how to fix and verify each one.
 
 <div class="tb-callout"><strong>Where processing happens:</strong> a domain is sent to the Tamperbox server, which asks public DNS for the <code>_mta-sts</code> record, the MX records and the <code>_smtp._tls</code> record, and fetches one URL over HTTPS: <code>https://mta-sts.&lt;domain&gt;/.well-known/mta-sts.txt</code>. A pasted policy file is read line by line in your browser. Nothing is stored.</div>
 
@@ -182,7 +182,9 @@ Each case is built from the policy you pasted or the domain serves.
 
 ## Worked example
 
-The page opens on `harbor-supply.example`, a sample domain on the reserved `.example` zone, answered in the browser so the example costs nothing and never changes. Its record announces a policy (`v=STSv1; id=20261001T0000`), the file is in testing mode with `mx: mx1.inboxcloud.example`, `mx: *.mx.inboxcloud.example` and `max_age: 86400`, the MX records name `mx1.inboxcloud.example`, `alt1.mx.inboxcloud.example` and `backup.harbor-supply.example`, and TLS-RPT reports go to `tls-reports@harbor-supply.example`.
+The page opens on a live check of `tamperbox.dev`. Its published records and findings can change over time.
+
+For the deterministic walkthrough below, enter `harbor-supply.example`. This reserved `.example` domain is answered from synthetic data in your browser; it sends no live lookup. Its record announces a policy (`v=STSv1; id=20261001T0000`), the file is in testing mode with `mx: mx1.inboxcloud.example`, `mx: *.mx.inboxcloud.example` and `max_age: 86400`, the MX records name `mx1.inboxcloud.example`, `alt1.mx.inboxcloud.example` and `backup.harbor-supply.example`, and TLS-RPT reports go to `tls-reports@harbor-supply.example`.
 
 **Testing only: senders report failures but still deliver over plain text.** Two of three MX servers are covered; the backup is not and would be refused once the policy enforces. The suggested policy adds `mx: backup.harbor-supply.example`, switches to enforce and raises `max_age` to a week. Replace the sample with your own domain and every section, card and link is rewritten for it.
 
