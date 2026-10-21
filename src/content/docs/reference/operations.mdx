@@ -17,7 +17,7 @@ Remote artifact operations send inputs to our server, even when they make no net
 
 ## Transforms
 
-`jwt_decode`, `json_format`, `json_to_yaml`, `timestamp_to_iso`, and `api_convert` accept text artifacts plus operation-specific options. Decoding and conversion do not establish trust or lossless equivalence.
+`jwt_decode`, `json_format`, `json_to_yaml`, `timestamp_to_iso`, and `api_convert` accept text artifacts plus operation-specific options. Decoding and conversion do not establish trust or lossless equivalence. The browser tools document the full methods for the [JWT Decoder & Verifier](/tools/jwt/), the [Unix Timestamp Converter](/tools/unix-timestamp/) and the [Postman Collection Converter](/tools/postman-converter/), including every finding and what a decoded or converted artifact does not prove.
 
 `jwt_verify` requires an explicit algorithm and key; signature and claim checks are separate. `jwt_rebuild` supports HMAC re-signing and explicitly unsigned or stale fixtures. `jwt_fixture` can generate a synthetic asymmetric test token without retaining its private key. None establishes application authorization.
 
@@ -31,7 +31,9 @@ The corresponding `*_analyze` operations accept pasted evidence without resolvin
 
 ## Hosting, TLS, and HTTP
 
-Hosting, technology, CDN, certificate, header, redirect, CORS, mixed-content, HTTP/3, and uptime operations observe public endpoints from the service's vantage point. Proxies, regional differences, and unavailable probes can limit conclusions. The certificate operation's findings are explained one by one in the [SSL Certificate Checker](/tools/ssl-checker/) page.
+Hosting, technology, CDN, certificate, header, redirect, CORS, mixed-content, HTTP/3, and uptime operations observe public endpoints from the service's vantage point. Proxies, regional differences, and unavailable probes can limit conclusions. The certificate operation's findings are explained one by one in the [SSL Certificate Checker](/tools/ssl-checker/) page. The redirect, HTTP/3 and CORS operations are documented the same way on the [Redirect Checker](/tools/redirect-checker/), [HTTP/3 & Compression Checker](/tools/http3-checker/) and [CORS Tester](/tools/cors-tester/) pages, including what a probe from the service's vantage point does not establish about a visitor's browser.
+
+For those three pages, the exact live operations are `redirect_checker`, `http3_checker` and `cors_tester`. Each accepts a public URL, rejects private or reserved targets, and returns structured evidence with warnings and provenance. `cors_tester` additionally requires an explicit origin and never sends a mutating request; `http3_checker` separates HTTP/3 advertisement from a successful transport probe.
 
 Artifact counterparts accept supplied headers, HTML, handshake transcripts and certificates. `tls_probe` adds supported mail TLS and STARTTLS ports. Cookie, metadata and post-quantum operations expose analysis and draft repairs or configuration text. Pasted evidence does not independently verify a live server.
 
