@@ -115,7 +115,7 @@ For pasted HTML, "Rewrite n addresses to https://" replaces every flagged addres
 
 ### Mixed Content (W3C)
 
-Implemented: the secure-context precondition and the blockable and upgradeable categories of [Mixed Content](https://www.w3.org/TR/mixed-content/#categories), evaluated statically on the HTML. Where it stops: browsers decide by request destination at fetch time; the tool decides by tag and attribute. It labels `track` and `url()` in a `style` attribute as upgraded, while the specification's upgradeable set is images, audio and video, so a browser may block a `track` or an inline-style font the tool lists as upgraded. Requests made by scripts, workers, `fetch()`, external style sheets and documents inside frames are not seen. The specification has replaced the earlier Level 1 block-optional model; older browsers may block images instead of upgrading them.
+Implemented: the secure-context precondition and the blockable and upgradeable categories of [Mixed Content](https://www.w3.org/TR/mixed-content/#categories), evaluated statically on the HTML. Where it stops: browsers decide by request destination at fetch time; the tool decides by tag and attribute. It labels `track`, `url()` in a `style` attribute and `srcset` candidates (on `img` and on `source` inside `picture`) as upgraded, while the specification's [upgradeable set](https://www.w3.org/TR/mixed-content/#category-upgradeable) is images (excluding `img` with `srcset` and `picture`), audio and video, so a browser may block a `track`, a `srcset` image or an inline-style font the tool lists as upgraded. Requests made by scripts, workers, `fetch()`, external style sheets and documents inside frames are not seen. The specification has replaced the earlier Level 1 optionally-blockable model; older browsers may block images instead of upgrading them.
 
 ### Upgrade Insecure Requests (W3C)
 
@@ -137,7 +137,7 @@ The Partitioned note follows the [CHIPS draft](https://datatracker.ietf.org/doc/
 | --- | --- | --- | --- | --- |
 | The page itself is served over plain HTTP | Fail | [Mixed Content, terms](https://www.w3.org/TR/mixed-content/#terms) | Everything on the page can be read and changed on the network | Serve HTTPS and redirect `http://` to it |
 | n insecure addresses blocked by browsers | Fail | [Mixed Content, categories](https://www.w3.org/TR/mixed-content/#categories) | Scripts, styles, frames, fonts or objects never load | Use `https://` or relative addresses; self-host if the other host has no HTTPS |
-| n forms send in plain text | Check | [Mixed Content](https://www.w3.org/TR/mixed-content/) | Browsers warn; typed data travels unencrypted | Point `action` at HTTPS |
+| n forms send in plain text | Check | [Mixed Content, 7.1](https://www.w3.org/TR/mixed-content/#requirements-forms) | Browsers warn; typed data travels unencrypted | Point `action` at HTTPS |
 | `<base href>` uses http:// | Check | [RFC 3986, 5.1](https://www.rfc-editor.org/rfc/rfc3986#section-5.1) | Every relative address becomes insecure | Use `https://` or remove the tag |
 | n insecure addresses upgraded to https:// | Info | [Mixed Content, categories](https://www.w3.org/TR/mixed-content/#categories) | Loads over HTTPS if the host serves it there | Rewrite to `https://` |
 | upgrade-insecure-requests is set | Pass | [Upgrade Insecure Requests, 4](https://www.w3.org/TR/upgrade-insecure-requests/#delivery) | Browsers try HTTPS first | Keep it as a safety net |
@@ -151,7 +151,7 @@ The Partitioned note follows the [CHIPS draft](https://datatracker.ietf.org/doc/
 | __Host- rules broken | RFC 6265bis, cookie name prefixes | Secure, `Path=/`, no Domain |
 | __Secure- cookie without Secure | RFC 6265bis, cookie name prefixes | Add Secure |
 | Cookie is n bytes | RFC 6265bis, storage limits; [RFC 6265, 6.1](https://www.rfc-editor.org/rfc/rfc6265#section-6.1) | Keep an identifier, store data server-side |
-| Cookie has no name | [RFC 6265, 5.2](https://www.rfc-editor.org/rfc/rfc6265#section-5.2) | Give it a name |
+| Cookie has no name | [RFC 6265, 5.2](https://www.rfc-editor.org/rfc/rfc6265#section-5.2); RFC 6265bis section 5.6 instead accepts a nameless cookie with a value | Give it a name |
 
 ### Cookies to tighten and notes
 
@@ -210,7 +210,7 @@ Each case builds on your own input; with nothing loaded yet, the reserved sample
 
 ## Worked example
 
-The page opens on `tamperbox.dev`, fetched live by our server when the page loads. Read the result top down: the verdict says whether any insecure address was found and how the cookies fare; the chips repeat the counts; the Insecure addresses section confirms that every resource uses `https://` or a relative address; the Cookies section lists each Set-Cookie header the page sends, if any. The exact result is live evidence and changes with the site, so it is not reproduced here.
+The page opens on `wikipedia.org`, fetched live by our server when the page loads. It was chosen because, when the candidates were compared, it redirected its apex to `www.wikipedia.org` and set cookies on both responses, which shows how the tool reads a redirect chain. Read the result top down: the verdict says whether any insecure address was found and how the cookies fare; the chips repeat the counts; the Insecure addresses section confirms that every resource uses `https://` or a relative address; the Cookies section lists each Set-Cookie header, labelled with the redirect hop or the page that set it, with its notes (a missing SameSite read as Lax, SameSite=None marking a third-party cookie, a Domain attribute that widens the cookie to every subdomain). When the fetch was redirected, Take it further carries the final address to the Security Headers Checker and the final host to the SSL Certificate Checker. The cookies, their attributes and the redirect belong to the site and can change at any time, so no values are reproduced here.
 
 To see every group at once, enter the reserved sample `www.harbor-supply.example`, which is answered in your browser: a chat widget script from `widgets.ticketdesk.example` is blocked, a partner badge on `cdn.harbor-supply.example` is upgraded, the newsletter form posts to `newsletter.bulkpost.example` in plain text, one of three cookies is rejected (SameSite=None without Secure) and a session cookie lacks Secure and HttpOnly. The Corrected Set-Cookie lines show both repairs.
 
@@ -235,7 +235,7 @@ See [Connect an MCP client](/mcp/connect/) for the calling pattern.
 
 ## References
 
-- [Mixed Content](https://www.w3.org/TR/mixed-content/), W3C Candidate Recommendation; sections used: [terms](https://www.w3.org/TR/mixed-content/#terms) and [categories](https://www.w3.org/TR/mixed-content/#categories).
+- [Mixed Content](https://www.w3.org/TR/mixed-content/), W3C Candidate Recommendation Draft; sections used: [terms](https://www.w3.org/TR/mixed-content/#terms), [categories](https://www.w3.org/TR/mixed-content/#categories) and [form submission](https://www.w3.org/TR/mixed-content/#requirements-forms).
 - [Upgrade Insecure Requests](https://www.w3.org/TR/upgrade-insecure-requests/), W3C Candidate Recommendation; section used: [4, delivery](https://www.w3.org/TR/upgrade-insecure-requests/#delivery).
 - [RFC 6265, HTTP State Management Mechanism](https://www.rfc-editor.org/rfc/rfc6265), Proposed Standard; to be obsoleted by RFC 6265bis. Sections used: [4.1.2.1](https://www.rfc-editor.org/rfc/rfc6265#section-4.1.2.1), [4.1.2.2](https://www.rfc-editor.org/rfc/rfc6265#section-4.1.2.2), [4.1.2.3](https://www.rfc-editor.org/rfc/rfc6265#section-4.1.2.3), [4.1.2.5](https://www.rfc-editor.org/rfc/rfc6265#section-4.1.2.5), [4.1.2.6](https://www.rfc-editor.org/rfc/rfc6265#section-4.1.2.6), [5.2](https://www.rfc-editor.org/rfc/rfc6265#section-5.2) and [6.1](https://www.rfc-editor.org/rfc/rfc6265#section-6.1).
 - [draft-ietf-httpbis-rfc6265bis](https://datatracker.ietf.org/doc/draft-ietf-httpbis-rfc6265bis/), Internet-Draft; SameSite, cookie name prefixes, size and lifetime limits.
