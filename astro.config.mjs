@@ -52,6 +52,7 @@ export default defineConfig({
           { label: 'CORS Tester', link: '/tools/cors-tester/' },
           { label: 'Security Headers Checker', link: '/tools/security-headers/' },
           { label: 'security.txt Checker', link: '/tools/security-txt-checker/' },
+          { label: 'Mixed Content & Cookie Checker', link: '/tools/mixed-content-checker/' },
         ] },
         { label: 'MCP server', items: [
           { label: 'Overview', link: '/mcp/' },
