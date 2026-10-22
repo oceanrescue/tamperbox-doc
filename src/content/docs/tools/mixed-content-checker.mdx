@@ -95,8 +95,8 @@ The classification follows the two categories in [Mixed Content, section 3](http
 
 | Group | Elements and attributes | Severity |
 | --- | --- | --- |
-| Blocked | `script src`, `iframe src`, `frame src`, `embed src`, `object data`, `link href` with rel `stylesheet`, `preload`, `modulepreload`, `prefetch` or `manifest`, font files (`.woff`, `.woff2`, `.ttf`, `.otf`, `.eot`) in `url()` inside `<style>` | Fail |
-| Upgraded | `img src` and every `srcset` candidate, `source src`/`srcset`, `audio src`, `video src` and `poster`, `track src`, `link` with an `icon` rel, other `url()` in `<style>`, every `url()` in a `style` attribute | Info |
+| Blocked | `script src`, `iframe src`, `frame src`, `embed src`, `object data`, `link href` with rel `stylesheet`, `preload`, `modulepreload`, `prefetch` or `manifest`, font files (`.woff`, `.woff2`, `.ttf`, `.otf`, `.eot`) in `url()` inside `<style>`, image sets: `img` with `srcset` (its `src` and every candidate), and `img` or `source` inside `picture` | Fail |
+| Upgraded | `img src` outside `picture` and without `srcset`, `source` inside `audio` or `video`, `audio src`, `video src` and `poster`, `track src`, `link` with an `icon` rel, other `url()` in `<style>`, every `url()` in a `style` attribute | Info |
 | Form | `form action` resolving to `http://` | Check |
 
 ### Policies that change the reading
@@ -115,7 +115,7 @@ For pasted HTML, "Rewrite n addresses to https://" replaces every flagged addres
 
 ### Mixed Content (W3C)
 
-Implemented: the secure-context precondition and the blockable and upgradeable categories of [Mixed Content](https://www.w3.org/TR/mixed-content/#categories), evaluated statically on the HTML. Where it stops: browsers decide by request destination at fetch time; the tool decides by tag and attribute. It labels `track`, `url()` in a `style` attribute and `srcset` candidates (on `img` and on `source` inside `picture`) as upgraded, while the specification's [upgradeable set](https://www.w3.org/TR/mixed-content/#category-upgradeable) is images (excluding `img` with `srcset` and `picture`), audio and video, so a browser may block a `track`, a `srcset` image or an inline-style font the tool lists as upgraded. Requests made by scripts, workers, `fetch()`, external style sheets and documents inside frames are not seen. The specification has replaced the earlier Level 1 optionally-blockable model; older browsers may block images instead of upgrading them.
+Implemented: the secure-context precondition and the blockable and upgradeable categories of [Mixed Content](https://www.w3.org/TR/mixed-content/#categories), evaluated statically on the HTML. Where it stops: browsers decide by request destination at fetch time; the tool decides by tag and attribute. Image sets follow the specification's [upgradeable set](https://www.w3.org/TR/mixed-content/#category-upgradeable), which excludes requests whose initiator is `imageset`: an `img` with `srcset` and any `img` or `source` inside `picture` are listed as blocked, not upgraded. It still labels `track` and `url()` in a `style` attribute as upgraded, while the upgradeable set is images, audio and video only, so a browser may block a `track` or an inline-style font the tool lists as upgraded. Requests made by scripts, workers, `fetch()`, external style sheets and documents inside frames are not seen. The specification has replaced the earlier Level 1 optionally-blockable model; older browsers may block images instead of upgrading them.
 
 ### Upgrade Insecure Requests (W3C)
 
