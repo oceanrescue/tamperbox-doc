@@ -75,7 +75,7 @@ History logs every Break it and Heal it load with Revert and Reset input. Take i
 
 ### What our server requests
 
-One `GET https://host/.well-known/security.txt`, the location [RFC 9116 section 3](https://www.rfc-editor.org/rfc/rfc9116#section-3) defines: for web-based services the file MUST be placed under the `/.well-known/` path. Redirects are followed up to five hops; each target must be `https://`, a loop stops the check, and a sixth redirect stops it with "Too many security.txt redirects." The body is read up to 64 KiB and decoded as strict UTF-8. The legacy `/security.txt` at the root, which section 3 allows only as a redirect target or for legacy compatibility, is not requested.
+One `GET https://host/.well-known/security.txt`, the location [RFC 9116 section 3](https://www.rfc-editor.org/rfc/rfc9116#section-3) defines: for web-based services the file MUST be placed under the `/.well-known/` path. Redirects are followed up to five hops; each target must be `https://`, a loop stops the check, and a sixth redirect stops it with "Too many security.txt redirects." The body is read up to 64 KiB and decoded as strict UTF-8. The legacy `/security.txt` at the root, which section 3 allows only for legacy compatibility, as a copy or as a redirect to the /.well-known/ file, is not requested.
 
 ### Response rules
 
@@ -83,7 +83,7 @@ One `GET https://host/.well-known/security.txt`, the location [RFC 9116 section 
 | --- | --- | --- | --- |
 | Final status is 200 | Not served | Error | [RFC 9116 section 3](https://www.rfc-editor.org/rfc/rfc9116#section-3) |
 | `Content-Type` is `text/plain`, and a charset, if present, is `utf-8` | Wrong media type | Error | [section 3](https://www.rfc-editor.org/rfc/rfc9116#section-3) |
-| Body is valid UTF-8 | Not UTF-8 | Error | [section 3](https://www.rfc-editor.org/rfc/rfc9116#section-3) |
+| Body is valid UTF-8 | Not UTF-8 | Error | [section 4](https://www.rfc-editor.org/rfc/rfc9116#section-4) |
 | Body fits in 64 KiB | Larger than 64 KiB | Error | Tool limit |
 
 Section 3 states the file "MUST have a Content-Type of 'text/plain' with the default charset parameter set to 'utf-8'". When the status is not 200, or the answer is HTML, the page treats the site as having no file and shows the draft form instead of a field report.
@@ -101,7 +101,7 @@ Blank lines and lines starting with `#` are skipped ([section 2.1](https://www.r
 | Expires is RFC 3339 | Expires is not a date | [section 2.5.5](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.5), [RFC 3339 section 5.6](https://www.rfc-editor.org/rfc/rfc3339#section-5.6) |
 | Expires is in the future | The file has expired (error) | [section 2.5.5](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.5) |
 | Expires at most 366 days ahead | Expires more than a year ahead (warning) | [section 2.5.5](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.5): a value less than a year ahead is RECOMMENDED |
-| URIs are absolute | Not an absolute URI | [section 2.5](https://www.rfc-editor.org/rfc/rfc9116#section-2.5), [RFC 3986 section 4.3](https://www.rfc-editor.org/rfc/rfc3986#section-4.3) |
+| URIs are absolute | Not an absolute URI | [section 2.5.3](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.3), [section 4](https://www.rfc-editor.org/rfc/rfc9116#section-4), [RFC 3986 section 4.3](https://www.rfc-editor.org/rfc/rfc3986#section-4.3) |
 | Web URIs use `https` | A web address uses http:// | [section 2.5.3](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.3) and siblings: "MUST begin with 'https://'" |
 | One Preferred-Languages | Preferred-Languages repeated | [section 2.5.8](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.8) |
 | Valid language tags | Not a language tag | [section 2.5.8](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.8), [RFC 5646](https://www.rfc-editor.org/rfc/rfc5646) |
@@ -127,14 +127,14 @@ Implemented: the location and media type of [section 3](https://www.rfc-editor.o
 
 | Point | RFC text | Tool |
 | --- | --- | --- |
-| Space after the colon | Every example writes `Name: value` | Requires the space and reports `Name:value` as a broken line |
+| Space after the colon | The ABNF of section 4 requires it (`fs SP`) | Requires the space and reports `Name:value` as a broken line |
 | Expires a year ahead | Less than a year is RECOMMENDED | Warning after 366 days, never an error |
 | Signature | Signing is RECOMMENDED | Absence is not a finding; presence is not verified |
 | Canonical | Lists every URI the file is served from | Checked only against the final fetched URL |
 | Legacy location | `/security.txt` may redirect | Not requested |
 | Size | No limit stated | 64 KiB read limit |
 
-The space rule is deliberately strict so that the most common hand-written slip, `Contact:mailto:…`, is caught before a lenient reader guesses.
+The space rule follows the ABNF, so that the most common hand-written slip, `Contact:mailto:…`, is caught before a lenient reader guesses.
 
 ### RFC 3339, RFC 5646 and RFC 3986
 
@@ -148,7 +148,7 @@ Expires follows the `date-time` production of [RFC 3339 section 5.6](https://www
 | --- | --- | --- | --- | --- |
 | Not served | Error | [3](https://www.rfc-editor.org/rfc/rfc9116#section-3) | No file where readers look | Publish one at `/.well-known/security.txt` |
 | Wrong media type | Error | [3](https://www.rfc-editor.org/rfc/rfc9116#section-3) | Strict readers refuse it; HTML means the app answers every path | Serve `text/plain; charset=utf-8` |
-| Not UTF-8 | Error | [3](https://www.rfc-editor.org/rfc/rfc9116#section-3) | Garbled characters | Save as UTF-8 |
+| Not UTF-8 | Error | [4](https://www.rfc-editor.org/rfc/rfc9116#section-4) | Garbled characters | Save as UTF-8 |
 | Larger than 64 KiB | Error | Tool limit | Not a security.txt | Replace what is served |
 
 ### Fields and lines
@@ -160,8 +160,8 @@ Expires follows the `date-time` production of [RFC 3339 section 5.6](https://www
 | Expires is not a date | Error | [2.5.5](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.5) | No expiry can be read | Use RFC 3339 |
 | The file has expired | Error | [2.5.5](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.5) | Contacts treated as stale | Review, re-date |
 | Expires more than a year ahead | Warning | [2.5.5](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.5) | Valid, reviewed too rarely | Date it within a year |
-| A web address uses http:// | Error | [2.5](https://www.rfc-editor.org/rfc/rfc9116#section-2.5) | Can be read or replaced in transit | Use `https://` |
-| Not an absolute URI | Error | [2.5](https://www.rfc-editor.org/rfc/rfc9116#section-2.5) | Readers cannot follow it | Add the scheme |
+| A web address uses http:// | Error | [2.5.3](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.3) | Can be read or replaced in transit | Use `https://` |
+| Not an absolute URI | Error | [4](https://www.rfc-editor.org/rfc/rfc9116#section-4) | Readers cannot follow it | Add the scheme |
 | Not a field line | Error | [4](https://www.rfc-editor.org/rfc/rfc9116#section-4) | Line skipped | `Name: value` or `#` |
 | Preferred-Languages repeated | Error | [2.5.8](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.8) | Readers take one line | One comma list |
 | Not a language tag | Error | [2.5.8](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.8) | Languages unclear | BCP 47 tags |
