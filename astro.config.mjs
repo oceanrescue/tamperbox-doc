@@ -36,6 +36,7 @@ export default defineConfig({
         { label: 'Tools', items: [
           { label: 'Tool pages', link: '/tools/' },
           { label: 'SSL Certificate Checker', link: '/tools/ssl-checker/' },
+          { label: 'DANE & TLSA Checker', link: '/tools/dane-checker/' },
           { label: 'DKIM Record Checker', link: '/tools/dkim-checker/' },
           { label: 'SPF Checker', link: '/tools/spf-checker/' },
           { label: 'DMARC Checker & Generator', link: '/tools/dmarc-checker/' },
