@@ -48,6 +48,13 @@ export default defineConfig({
           { label: 'Redirect Checker', link: '/tools/redirect-checker/' },
           { label: 'HTTP/3 & Compression Checker', link: '/tools/http3-checker/' },
           { label: 'CORS Tester', link: '/tools/cors-tester/' },
+          { label: 'SaaS Stack Detector', link: '/tools/saas-stack/' },
+          { label: 'Website Hosting Checker', link: '/tools/website-hosting/' },
+          { label: 'CDN Detector', link: '/tools/cdn-detector/' },
+          { label: 'DNS Provider Lookup', link: '/tools/dns-provider/' },
+          { label: 'Website Technology Detector', link: '/tools/website-technology/' },
+          { label: 'Subdomain Finder', link: '/tools/subdomain-finder/' },
+          { label: 'Domain Health Check', link: '/tools/domain-health/' },
         ] },
         { label: 'MCP server', items: [
           { label: 'Overview', link: '/mcp/' },

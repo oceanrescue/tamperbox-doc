@@ -1,0 +1,175 @@
+---
+title: DNS Provider Lookup
+description: How Tamperbox groups authoritative nameservers, recognises providers, and flags fragile or mixed delegation.
+updated: 2026-10-22
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and repair guide for the Tamperbox DNS Provider Lookup.
+prerequisites:
+  - a domain name or pasted NS records
+outputs:
+  - provider groups, nameserver evidence, self-hosting clues and delegation findings
+limitations:
+  - Public observations are time-sensitive and do not prove ownership, intent or private configuration
+---
+
+The tool page is [tamperbox.dev/dns-provider](https://tamperbox.dev/dns-provider). It opens with a live lookup of `google.com`; replace it to inspect your own target. This guide documents the actual input path, evidence contract, classifications and independent verification steps.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> input cleanup, pasted-data parsing and report rendering happen in the browser. Live checks send only the validated public target to the Tamperbox server and the public services required for the lookup. The page stores no report; History is local to the current browser session.</div>
+
+## What the tool answers
+
+The checker answers which organisations appear to operate the nameservers published for a zone and whether the set is redundant or mixed. Its conclusion is deliberately narrower than an ownership or security claim. A displayed provider, product, name or passing check means that the listed public evidence matched a documented rule at the observation time.
+
+Every conclusion is paired with evidence. The opening verdict is a summary for orientation, while Findings contains the actionable interpretation and the later result sections retain the underlying records, addresses, fields or names. If a conclusion matters operationally, verify that evidence through an authoritative account or an independent standards-aware client before changing production.
+
+## Inputs
+
+### Accepted source
+
+The primary input is a domain name or pasted NS records. A typed domain is normalised to lower case, a final root dot is removed and common pasted wrappers are cleaned. URLs contribute only their host. Credentials, private-address targets, custom ports, malformed labels and overlong values are rejected before a network request.
+
+Pasted evidence stays in the browser unless the page explicitly labels the run as live. Dropping or opening a small text file reads the text locally and applies the same parser. The input frame reports what was retained, so cleanup never needs to be inferred from a changed result.
+
+### When work runs
+
+A live check runs after typing pauses, on Enter, on blur, after a drop or page-wide paste, and when Refresh lookup is pressed. Each edit aborts the previous request and increments a generation marker. A slower old response therefore cannot replace a newer result, and clearing the source immediately clears copyable output.
+
+The opening example is not privileged. It goes through the same public path as another domain, except for the synthetic Subdomain Finder fixture, which is explicitly labelled local. Refresh repeats the current run instead of restoring the default.
+
+## Reading the result
+
+### Verdict and privacy
+
+The verdict states what the available evidence supports and uses pass, check, fail or informational status consistently. Pass means the bounded rule succeeded. Check means a human should confirm context. Fail means a concrete operational rule was violated. Info describes a limitation, absence or neutral fact and must not be promoted into success or failure by an automated reader.
+
+Two privacy lines distinguish browser-only work from live lookup work. The Checked line names the cleaned input and source mode. Copy result is hidden while work is pending, after an error and when input is empty, preventing a stale report from being exported as current.
+
+### Findings and evidence
+
+Findings are ordered with failures first, then checks, informational notes and passes. Repeated passing details can fold into a disclosure so that exceptions remain visible. Each item states the observation and its consequence; any remediation is scoped to the evidence rather than presented as a universal configuration recipe.
+
+Evidence sections follow Findings and precede History. They are the audit trail for the verdict. A provider label derived from a catalog remains an inference, while a literal record or response field remains an observation. This distinction matters when signatures are incomplete, white-labelled or stale.
+
+### History and handoffs
+
+History records intentional input replacements, including Break it examples and their repairs. Revert walks backward without a new network interpretation; Reset input returns to the value at the beginning of the recorded sequence. History is not monitoring, persistence or an account log.
+
+Check the rest carries the current input to other tools in Domains & hosting. Take it further appears only when the result derives a concrete same-category target that another tool can use. A handoff starts a fresh check and must not be read as evidence that the receiving tool will agree.
+
+## Method
+
+### Validation and collection
+
+Before collection, the same domain validation runs in the browser and on the server boundary. Requests are restricted to supported public DNS names and HTTPS roots, redirects are bounded, response sizes are capped and abort signals are propagated. These limits make the observation reproducible and prevent an entered value from becoming an unrestricted network fetch.
+
+Live DNS uses a public recursive view, so it can reflect cache state. Live HTTPS follows only the permitted redirect scope and records the final URL. Pasted mode avoids those requests and cannot add facts that are missing from the pasted material.
+
+### Classification rules
+
+The tool asks for NS at the entered name, normalises unique hostnames and maps their suffixes against a maintained provider catalog. If no NS exists at that owner it offers the enclosing zone. Self-hosting is inferred when nameserver names sit inside the checked zone. [RFC 1034 section 4.3.2](https://www.rfc-editor.org/rfc/rfc1034#section-4.3.2) defines referrals and authoritative data; the tool reports the observed set but does not perform a full delegation trace.
+
+No confidence percentage is invented. When sources disagree, the disagreement is a finding. When a source is unavailable, the affected conclusion becomes informational or inconclusive rather than silently using a previous result. Catalog matches are exact bounded rules; unknown is a valid outcome.
+
+### Ordering and export
+
+The renderer calculates all findings from the current observation before updating the verdict, chips, evidence and landing cards. Status priority is fail, check, info, pass. Stable secondary ordering keeps repeated runs readable without changing severity.
+
+The Markdown mirror and Copy result output preserve input, summary, findings and important evidence in text form. They do not embed secrets, browser state or the expanded educational cards. Agents should cite the observation time and limitation alongside any exported conclusion.
+
+## Standards and conformance
+
+### Applied specifications
+
+| Source | Rule used | Boundary |
+| --- | --- | --- |
+| [RFC 1034 section 4.2.1](https://www.rfc-editor.org/rfc/rfc1034#section-4.2.1) | Zones are served by authoritative name servers | The page reads NS publication from one resolver |
+| [RFC 1035 section 3.3.11](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.11) | NS identifies an authoritative host | Hostnames are grouped after normalisation |
+| [RFC 1034 section 4.2.2](https://www.rfc-editor.org/rfc/rfc1034#section-4.2.2) | Delegations can require address glue | Self-hosted names trigger a glue reminder, not a glue audit |
+| [RFC 2182 section 5](https://www.rfc-editor.org/rfc/rfc2182#section-5) | Multiple secondary servers improve reliability | A single server is a failure |
+
+These references define the records and message semantics, not the provider catalogs. A catalog is product logic and can lag branding, acquisitions or custom deployments. Where a standard permits several valid configurations, the tool reports the observed form and avoids declaring one commercial pattern universally correct.
+
+### Where conformance stops
+
+The checker is an observer, not an authoritative DNS server, browser, certificate monitor, mail receiver or provider control plane. It does not claim protocol conformance for the target. It applies selected validation and interpretation rules to bounded evidence and exposes the boundary where a fuller protocol operation would begin.
+
+The phrase “public” refers to the server's Internet view. Private split-horizon answers, authenticated dashboards and regional routing can differ. Cached answers can remain until TTL expiry, and HTTP intermediaries can transform what the origin sent.
+
+## Finding reference
+
+### Emitted findings
+
+| Finding | Severity | Meaning | Repair or next check |
+| --- | --- | --- | --- |
+| One nameserver | Fail | One published authority is a single point of failure | Add an independently reachable authoritative server |
+| Multiple providers | Check | Hostnames map to more than one provider | Confirm deliberate secondary DNS or complete migration |
+| Self-hosted DNS | Info | Nameservers are below the zone they serve | Confirm registrar glue and resilient networks |
+| Recognised provider | Pass | All names map to one catalogued operator | Verify the zone exists in that provider account |
+| Provider not in catalog | Info | Ownership cannot be named from suffix rules | Inspect RDAP and provider documentation |
+| No NS records here | Info | The name is probably below a zone apex | Look up the enclosing authoritative zone |
+
+Wording can include the observed name, count, provider or status. Automated consumers should use the supplied status and evidence rather than parsing the English title as a permanent identifier. A missing finding is not evidence that the corresponding external condition is absent when its source could not be collected.
+
+### Status handling
+
+| Status | Consumer action | What not to infer |
+| --- | --- | --- |
+| Pass | Preserve the evidence and continue normal review | Permanent correctness, ownership or availability |
+| Check | Confirm intent and inspect the named evidence | Definite compromise or outage |
+| Fail | Prioritise the concrete broken rule and verify independently | That every user sees the same failure |
+| Info | Carry the limitation or neutral fact with the report | Success merely because no failure was emitted |
+
+## Guide
+
+### Verify independently
+
+Start with an authoritative or widely used command-line client. For DNS, use `dig` with the exact record type and compare every returned owner, target and TTL. Add `+trace` only when delegation matters; a trace and a recursive answer solve different questions. For HTTPS, use `curl -I --location https://host/` and retain each hop and response field. For certificates, use an established TLS client and a CT monitor you trust.
+
+Repeat from another network when geography or split routing could matter. Save the observation time and the original evidence before editing. After a DNS change, wait at least the prior TTL and then query both the intended authorities and independent recursive resolvers.
+
+### Repair safely
+
+Do not delete an unfamiliar record or reroute a public name merely because a catalog labels it. First identify the owning service, deployment repository or provider account. Confirm whether the item is current, a migration remnant, a failover path or a delegated responsibility. Make the smallest reversible change, keep the prior value, and have a rollback trigger.
+
+Re-run this page after propagation, then verify the user-visible service. A clean public lookup cannot prove application health. Conversely, an informational unknown does not require a speculative change.
+
+### Diagnose conflicting evidence
+
+When two signals disagree, ask whether they describe different layers: apex versus www, resolver cache versus authority, CDN edge versus origin, entered host versus redirected host, or certificate history versus current DNS. Compare literal evidence before comparing labels. The disagreement itself often reveals a migration or intermediary.
+
+If a lookup fails, preserve the error and retry once. Repeated timeouts are not equivalent to empty data. Use the specialist tool linked by the finding for deeper parsing rather than converting an inconclusive aggregate result into a failure.
+
+### Break it and heal it
+
+The Break it controls create documented edge cases from the visitor's own input or a reserved fixture. They are teaching states, not scans. Heal it restores a safe derived value when the repair is deterministic. Revert remains available when several changes have been made.
+
+Use these cases to learn how invalid, missing, mixed or stale evidence appears before diagnosing production. The control never edits DNS, hosting, certificates or provider accounts.
+
+## Worked example
+
+The live default is `google.com`. Its in-zone nameserver names make the self-hosted case visible and allow the page to explain glue without pretending that a commercial DNS label is always available.
+
+Read the example from verdict to Findings, then compare the literal evidence. Open one Break it case and use Heal it or Revert. Finally, replace the default with a domain you are authorised to assess. This sequence demonstrates both the successful path and the failure contract without implying that the named public domain endorses the tool.
+
+## For agents
+
+Agents can request the same operation through Tamperbox MCP using the tool id `dns-provider`. Preserve the result's distinction between observed evidence, catalog inference and limitation. State whether the run was live or pasted, include the cleaned target and observation time, and never turn “not found” into “does not exist” unless the method truly establishes that condition.
+
+Choose a specialist operation when the task is narrow. Use this page's report when its combined view or educational findings add value. Do not pass credentials, private hostnames or customer data into a public lookup. If a repair would change production, present the exact evidence, expected effect, propagation window and rollback before acting.
+
+Machine readers should branch on status and structured fields where available, not English punctuation. Treat network and parse errors as inconclusive. Re-run after a meaningful interval rather than repeatedly polling a third-party source.
+
+## Limits
+
+Provider inference follows hostname conventions, which can be white-labelled, resold or deliberately generic. A recursive answer may be cached. The tool does not query the parent registry, compare every authority, test geographic diversity, validate glue, transfer a zone or prove that the provider account is controlled by the domain owner.
+
+All outputs are point-in-time observations. Resolver caching, negative caching, anycast, geo steering, redirects and intermittent upstream failures can change a later run. The service does not retain a monitoring history or notify on change. Local History is an interaction aid, not durable evidence.
+
+No result grants permission to probe a target or modify it. Use authorised accounts and owner-approved procedures for deeper checks. Where business, security or legal decisions depend on attribution, obtain confirmation from the responsible provider or domain operator.
+
+## References
+
+- [RFC 1034](https://www.rfc-editor.org/rfc/rfc1034), Domain Names — Concepts and Facilities, especially [section 4.3.2](https://www.rfc-editor.org/rfc/rfc1034#section-4.3.2) for resolver behavior.
+- [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035), Domain Names — Implementation and Specification, especially [section 3.2.1](https://www.rfc-editor.org/rfc/rfc1035#section-3.2.1) for resource-record types and classes.
+- [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110), HTTP Semantics, especially [section 3.7](https://www.rfc-editor.org/rfc/rfc9110#section-3.7) for intermediaries and [section 15](https://www.rfc-editor.org/rfc/rfc9110#section-15) for status codes when HTTP evidence is collected.
+- [Tamperbox DNS Provider Lookup](https://tamperbox.dev/dns-provider), the interactive tool and current Markdown mirror.
