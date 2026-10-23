@@ -1,0 +1,171 @@
+---
+title: MX Lookup & Email Domain Checker
+description: How Tamperbox validates a mail domain, reads MX and address fallback records, identifies null MX, and explains what public routing evidence proves.
+updated: 2026-10-21
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and repair guide for the Tamperbox MX Lookup and Email Domain Checker, including null MX and address fallback.
+prerequisites:
+  - A domain that might receive email
+outputs:
+  - A routing verdict, findings, public MX or address evidence, provider hint and lookup limitations
+limitations:
+  - Public DNS does not prove SMTP availability, mailbox existence or delivery, and cached or private answers may differ
+---
+
+The tool page is [tamperbox.dev/email-domain](https://tamperbox.dev/email-domain). It opens on a live lookup of `tamperbox.dev`; replace that value to inspect your own domain. This guide documents the input cleanup, resolver path, classifications, evidence contract and independent checks.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> pasted text is cleaned and validated in the browser. A valid domain is sent to the Tamperbox server, which asks a public DNS resolver for MX and, when required, A and AAAA records. Nothing is stored and no SMTP connection is opened.</div>
+
+## What the tool answers
+
+The checker answers whether public DNS advertises a route for mail addressed to a domain. It distinguishes five materially different situations: valid MX records, an explicit null MX refusal, address-record fallback, no route, and an inconclusive lookup or malformed MX set. It also shows the evidence that produced the classification and a provider hint inferred from recognised MX hostnames.
+
+The answer is deliberately narrower than “does this email address work?” An MX record is a routing instruction. The tool never opens a socket to the target, sends a message, performs SMTP recipient validation, reads private DNS or proves that a mailbox exists. A green routing result therefore proves publication, not delivery.
+
+## Inputs
+
+### Domain names
+
+Enter a registrable-looking domain such as `example.com`. Capitals are lowered, one final dot is removed, full-width dot characters are normalised, and international labels are converted by the URL parser to ASCII A-labels. The page accepts at most 1,024 input characters before validation; the resulting domain may be at most 253 characters and each label at most 63.
+
+The parser refuses IP addresses, port numbers, underscores, empty labels, single-label names, all-numeric final labels, labels that start or end with a hyphen, and symbols outside letters, digits and hyphens. Each refusal names the specific problem.
+
+### Pasted addresses and email addresses
+
+Pasting `https://example.com/path`, `person@example.com`, `mailto:person@example.com`, or the same text inside quotes or angle brackets keeps `example.com`. The drop hint names what was kept. Typing is never rewritten while a word is being entered. Text with no usable domain stays unchanged so the validator can explain it.
+
+Pasting anywhere outside another field replaces the source. Dropping or opening a small text file reads it locally, then applies the same cleanup. The file itself is never uploaded.
+
+### When the lookup runs
+
+The live lookup runs after typing pauses for 700 milliseconds, on Enter, on leaving the field, after a file or page-wide paste, and when Refresh lookup is pressed. A newer edit aborts the previous request and increments a generation counter, so a slow older answer cannot repaint a newer or cleared input.
+
+## Reading the result
+
+### Verdict, privacy and findings
+
+The verdict names the routing classification. Its chips summarise the mail-route state and any recognised inbound service. The two privacy items distinguish browser work from the one server lookup. Findings repeat the deciding evidence with its consequence, worst first; multiple passing findings fold into one disclosure.
+
+A failure is not always a broken domain. Null MX and NXDOMAIN are decisive negative results. Resolver failure and malformed MX are inconclusive because the tool cannot establish a trustworthy route.
+
+### Provider hint and DNS evidence
+
+The provider block is supporting evidence, not the routing decision. It compares valid MX names with a bounded signature catalog and can label a mailbox service, gateway, mixed set or unknown route. Gateways can conceal the final mailbox host.
+
+DNS evidence lists MX records by preference then hostname, or A and AAAA records when fallback applies. TTL is shown in seconds. The checked line names the canonical domain, observation time and public-DNS path. History follows all current-result evidence; Take it further follows History.
+
+## Method
+
+### Resolve MX first
+
+The server validates the domain again, then queries the public resolver for MX. [RFC 5321 section 5](https://www.rfc-editor.org/rfc/rfc5321#section-5) says the lookup “first performs a DNS lookup for an MX record.” The tool follows that order: A and AAAA are never requested when usable MX records exist.
+
+The resolver follows only CNAMEs owned by the queried name. It refuses a loop, more than eight alias hops, multiple aliases at one owner, or an alias beside data of the requested type. Responses are limited to 65,536 JSON bytes, must have a supported status, must not be truncated, and must contain well-shaped answers.
+
+### Parse and order MX records
+
+Each record must contain a decimal preference from 0 through 65,535 and one target hostname. The hostname must pass the same domain rules as the source, except that the literal dot is reserved for null MX. One malformed record makes the set inconclusive rather than silently discarding evidence.
+
+Valid records are sorted by ascending preference and then hostname. [RFC 5321 section 5.1](https://www.rfc-editor.org/rfc/rfc5321#section-5.1) requires senders to try the lowest-numbered preference first; equal-preference hosts are alternatives, not a guaranteed sequence.
+
+### Apply null MX
+
+[RFC 7505 section 3](https://www.rfc-editor.org/rfc/rfc7505#section-3) defines a null MX as one record whose preference is zero and whose exchange is the root label. The normative rule says domains that accept no mail “MUST publish a null MX record.” Tamperbox classifies exactly one `0 .` record as explicit refusal.
+
+A root target mixed with ordinary MX records, or published with a nonzero preference, is contradictory and becomes invalid MX. The tool does not reinterpret the other records as a working route.
+
+### Apply address fallback
+
+Only a successful, empty MX answer reaches fallback. A and AAAA are requested in parallel. Any returned address makes the status `implicit_mx`, a possible mail route under RFC 5321. It is weaker than MX because the address may belong only to a website and the tool does not connect to SMTP.
+
+If both address queries answer with no records, the status is `no_mail`. If neither returns an address and either lookup fails, the status is `dns_error`, not no route. NXDOMAIN at the original MX query is separately classified as a nonexistent public domain.
+
+## Standards and conformance
+
+### RFC 5321
+
+| Section | Rule | Implementation boundary |
+| --- | --- | --- |
+| [5](https://www.rfc-editor.org/rfc/rfc5321#section-5) | Resolve mail destinations with MX first and implicit MX only when MX is absent | Implemented with an MX query followed by parallel A and AAAA queries only for an empty answer |
+| [5.1](https://www.rfc-editor.org/rfc/rfc5321#section-5.1) | Prefer lower MX values and treat equal values as alternatives | Records are sorted for display; no delivery attempt is made |
+| [4.5.3.2](https://www.rfc-editor.org/rfc/rfc5321#section-4.5.3.2) | Domain and path size limits apply to SMTP | Not tested; this tool validates DNS names, not SMTP commands |
+
+The implementation stops before address ordering, socket connection, retries, TLS negotiation, SMTP replies and mailbox policy. It is a DNS observation, not an SMTP client.
+
+### RFC 7505
+
+| Section | Rule | Implementation boundary |
+| --- | --- | --- |
+| [3](https://www.rfc-editor.org/rfc/rfc7505#section-3) | Publish exactly `0 .` to state that a domain accepts no mail | Exact single-record form is decisive refusal |
+| [3](https://www.rfc-editor.org/rfc/rfc7505#section-3) | A null MX domain should not run an SMTP listener | Not probed; the tool reports publication only |
+| [4](https://www.rfc-editor.org/rfc/rfc7505#section-4) | Null MX prevents unnecessary delivery attempts | Explained as the operational consequence; no sender behaviour is simulated |
+
+RFC 7505 is current and updates the implicit-MX practice described by SMTP for domains that intentionally receive no mail.
+
+## Finding reference
+
+### Routing findings
+
+| Finding | Severity | Meaning | Fix |
+| --- | --- | --- | --- |
+| Mail routing is configured | Pass | At least one valid ordinary MX record is published | Keep the routes intentional and test delivery separately |
+| Does not accept email | Fail | Exactly one null MX explicitly refuses mail | Remove null MX and publish real MX only if the domain should receive mail |
+| Possible mail route | Check | No MX exists but A or AAAA permits implicit fallback | Publish explicit MX for a deliberate mail service |
+| No mail route | Fail | The domain does not exist, or no MX/A/AAAA route exists | Correct delegation or publish the intended route |
+| Inconclusive | Check | DNS failed, timed out, contradicted itself or contained invalid MX | Correct malformed records or retry after DNS recovers |
+
+### Provider findings
+
+| Finding | Severity | Meaning | Fix |
+| --- | --- | --- | --- |
+| Likely provider | Pass | Every MX maps to one recognised mailbox service | Confirm against the provider configuration |
+| Gateway detected | Check | A recognised filtering or forwarding edge hides the mailbox host | Use trusted Received headers to identify later hops |
+| Mixed routes | Check | More than one service, or recognised and unknown hosts, coexist | Verify migration and backup routes before deleting anything |
+| Provider unknown | Info | Hostnames match no catalog entry | Leave unresolved; unknown is not proof of self-hosting |
+
+## Guide
+
+### Confirm with DNS tools
+
+Run `dig +short MX example.com` or `nslookup -type=mx example.com`. Compare every preference and target with the DNS evidence table. For fallback, confirm the absence of MX before running `dig +short A example.com` and `dig +short AAAA example.com`.
+
+After a DNS edit, wait at least the previous TTL before treating a repeated observation as global. Recursive caches may retain old answers until that value expires.
+
+### Repair common states
+
+| Break it case | What happens | Repair |
+| --- | --- | --- |
+| Email address or URL | Shared cleanup keeps the domain | Use the cleaned value or enter only the domain |
+| Capitals and final dot | Canonical domain is lower-case without the final dot | No DNS edit required |
+| IP address | Refused before any request | Enter the owning domain, not an address |
+| Underscore owner | Refused as a mail domain | Use the domain that receives mail, not a DNS record owner |
+| Single label | Refused without a top-level domain | Enter the complete public name |
+
+History records Break it and Heal it replacements. Revert walks changes backward; Reset input returns to the value that began the history.
+
+### Investigate a false expectation
+
+If DNS shows a route but mail still fails, test the MX target from an authorised mail environment, inspect SMTP replies and check sender authentication. If the domain uses a gateway, trace a delivered message's Received headers to see downstream hops. Do not use recipient verification against third-party servers as a mailbox-existence test; it is unreliable and can be abusive.
+
+## Worked example
+
+The live default is `tamperbox.dev`. In the comparison made on 21 October 2026 it populated three MX rows, identified Cloudflare Email Routing as a gateway and explained that the downstream mailbox host remained unknown. `github.com` and `microsoft.com` each produced one straightforward Microsoft 365 route.
+
+Those values are observations, not durable claims. The page runs the real lookup on each load, so hostnames, priorities, TTLs and provider inference can change. The reason for the default is the richer structure: several priorities plus the important difference between an inbound gateway and a mailbox service.
+
+## For agents
+
+Agents can run the same live check through the Tamperbox MCP operation mapped to `email-domain`, or interpret pasted MX evidence with the bounded analysis operation. Preserve the evidence contract: report publication, observation time and limitations; never convert a routing pass into “mailbox exists” or “delivery works.”
+
+When automating, treat `dns_error` and `invalid_mx` as inconclusive, not negative. Keep `null_mx`, `nxdomain` and `no_mail` distinct. Cite the MX targets and preferences behind a conclusion, and carry provider attribution as a separate inference.
+
+## Limits
+
+The resolver is one public vantage point with cache state at one moment. Split-horizon and private DNS are invisible. DNSSEC validation is not reported. MX targets are not resolved, SMTP is not contacted, TLS is not negotiated, and address fallback does not establish that port 25 is open.
+
+Provider signatures are a maintained catalog rather than an Internet standard. Custom hostnames, resellers, hybrid deployments and gateways can conceal ownership. The tool stores neither input nor report, but the domain is necessarily sent to the server and public resolver to perform a live lookup.
+
+## References
+
+- [RFC 5321](https://www.rfc-editor.org/rfc/rfc5321), Simple Mail Transfer Protocol, especially [section 5](https://www.rfc-editor.org/rfc/rfc5321#section-5) and [section 5.1](https://www.rfc-editor.org/rfc/rfc5321#section-5.1). Current Internet Standard, updated by later SMTP extensions that do not replace these routing rules.
+- [RFC 7505](https://www.rfc-editor.org/rfc/rfc7505), A Null MX Resource Record for Domains That Accept No Mail, especially [section 3](https://www.rfc-editor.org/rfc/rfc7505#section-3). Current Proposed Standard.

@@ -1,0 +1,190 @@
+---
+title: Email Provider Lookup
+description: How Tamperbox attributes public MX hostnames to mailbox services and gateways, handles mixed routes, and preserves uncertainty about the downstream mailbox host.
+updated: 2026-10-21
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, provider-signature reference and investigation guide for the Tamperbox Email Provider Lookup, with explicit gateway and uncertainty boundaries.
+prerequisites:
+  - A domain whose inbound mail route you want to attribute
+outputs:
+  - A provider verdict, route-by-route hostname evidence, public MX records and limitations
+limitations:
+  - Attribution is inferred from published MX hostnames and cannot prove mailbox ownership or reveal a host concealed behind a gateway
+---
+
+The tool page is [tamperbox.dev/email-provider](https://tamperbox.dev/email-provider). It opens on a live lookup of `tamperbox.dev`; replace that domain to investigate another inbound route. This guide documents exactly how the catalog matches hostnames, how routes are grouped and why some answers must remain unknown.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> pasted text is cleaned and validated in the browser. The domain is sent to the Tamperbox server, which asks a public resolver for MX records. Provider grouping runs on the server response. Nothing is stored, no email is sent and no SMTP connection is opened.</div>
+
+## What the tool answers
+
+The lookup answers which recognised service appears first in a domain's public inbound mail route. It distinguishes mailbox services from gateways because those statements have different evidence. A Microsoft 365 hostname can support “likely mailbox service”; a Mimecast hostname supports only “gateway detected, downstream mailbox unknown.”
+
+It also answers whether the route is mixed, partly recognised, entirely unknown, missing, explicitly disabled by null MX or inconclusive because DNS evidence cannot be interpreted. Each provider row names the exact hostname and preference behind the attribution.
+
+The tool does not infer from SPF, website hosting, nameservers, branding or a mail vendor's customer list. Those signals can belong to outgoing mail or unrelated infrastructure and would turn a bounded MX observation into a guess.
+
+## Inputs
+
+### Domain names
+
+Enter a public domain such as `example.com`. Browser validation lowercases capitals, removes one final dot, normalises full-width dots and converts international labels to their ASCII form. The parser refuses IP addresses, ports, paths, underscores, missing top-level domains, empty or oversized labels and labels with invalid hyphen placement.
+
+A maximum of 1,024 source characters is accepted. The canonical DNS name may be at most 253 characters, with labels of 63 characters or fewer. The server repeats the same validation before it makes a request.
+
+### Pasted text and files
+
+Pasting `https://example.com/about`, `person@example.com`, `mailto:person@example.com`, or a quoted variant keeps only `example.com`, and the page announces the transformation. Text that yields no valid domain remains unchanged so the specific parser refusal is visible. Ordinary typing is never silently rewritten.
+
+The drop zone accepts a text file, a page-wide file drop and paste outside another field. File bytes are read in the browser and are not uploaded; only a valid domain derived from the text can be sent for DNS lookup.
+
+### Lookup timing and cancellation
+
+The request runs 700 milliseconds after typing stops, immediately on Enter, on field change, after a shared handoff, or through Refresh lookup. Clearing or editing cancels the active request and invalidates its generation. A late response cannot restore stale routes, cards or Copy result.
+
+## Reading the result
+
+### Verdict and findings
+
+The verdict answers the provider question: likely mailbox service, gateway, mixed route, unknown route, no provider or inconclusive. Chips show mail-routing state and each recognised service. Findings explain the route classification and the provider inference separately, worst first, so valid MX publication cannot hide an uncertain attribution.
+
+The privacy pair states what is local and what leaves the page. Copy result is available only for a completed result. Empty, invalid, loading and failed states hide stale evidence and copying.
+
+### Inbound routes and DNS evidence
+
+Inbound routes are sorted by MX preference and hostname. Each row has provider, role, matched hostname and priority; the lowest preference is marked preferred. An unknown row stays “Not recognized,” not “self-hosted.”
+
+DNS evidence shows the underlying MX set and TTL. It remains the source of truth if a catalog label is questioned. History follows all evidence and supports Revert and Reset input; Take it further follows History and stays hidden because no honest same-category derived-value receiver exists today.
+
+## Method
+
+### Obtain usable MX evidence
+
+The shared routing engine follows [RFC 5321 section 5](https://www.rfc-editor.org/rfc/rfc5321#section-5): MX is queried first, CNAME traversal is bounded to eight hops, and every answer must have a preference from 0 to 65,535 plus a valid target. The normative sequence says a sender “first performs a DNS lookup for an MX record.”
+
+NXDOMAIN, null MX, empty MX with address fallback, no route, resolver failure and invalid MX are classified before provider matching. The provider catalog never overrides routing. A Google-looking hostname in a report whose routing status is not `mx` cannot produce a provider identification.
+
+### Match complete hostnames
+
+Each MX target is lowercased and its final dot removed. Rules are anchored regular expressions for complete names. `route1.mx.cloudflare.net` matches Cloudflare Email Routing; `route1.mx.cloudflare.net.attacker.example` does not. Evidence is deduplicated by hostname and preference.
+
+The current catalog recognises Cloudflare Email Routing, Gmail consumer inbound, Google Workspace, Microsoft 365, Zoho Mail, Proton Mail, Fastmail, Mimecast, Proofpoint and Barracuda. Catalog membership is a Tamperbox inference, not an RFC registry.
+
+### Group services and roles
+
+Matches are grouped by provider id. Every group carries a display name, a role of mailbox or gateway, and its supporting routes. A route at the lowest numeric preference is marked preferred. Several routes for one provider remain one provider group because they are redundant endpoints of the same published service.
+
+Gateway rules take precedence in interpretation, not DNS ordering. A gateway is the public receiving edge; it may filter, reject, archive or forward mail, but the hostname does not reveal where the mailbox is ultimately stored.
+
+### Decide the provider status
+
+Exactly one recognised mailbox provider with no unknown routes is `identified`, and the mailbox host is recorded with confidence `inferred`. Any recognised gateway without another group is `gateway`. More than one provider group, or any recognised group plus unknown MX routes, is `mixed`. No recognised group is `unknown`.
+
+Non-MX routing states map to `no_mx` except resolver failure and invalid MX, which map to `inconclusive`. This preserves the difference between “no provider can exist in this evidence” and “the check could not tell.”
+
+## Standards and conformance
+
+### RFC 5321 routing evidence
+
+| Section | Requirement | How the tool applies it |
+| --- | --- | --- |
+| [5](https://www.rfc-editor.org/rfc/rfc5321#section-5) | Locate SMTP destinations through MX | Reads MX before any provider inference |
+| [5.1](https://www.rfc-editor.org/rfc/rfc5321#section-5.1) | Lower preference values are preferred | Sorts and marks the preferred public routes |
+| [5.1](https://www.rfc-editor.org/rfc/rfc5321#section-5.1) | Equal-preference hosts are alternatives | Keeps every row; does not select one mailbox owner |
+
+RFC 5321 defines routing, not provider identity. The tool conforms to the route ordering but adds a clearly labelled catalog inference. It stops before resolving targets, connecting to SMTP, following delivery through gateways or establishing an account relationship.
+
+### RFC 7505 negative evidence
+
+| Section | Requirement | How the tool applies it |
+| --- | --- | --- |
+| [3](https://www.rfc-editor.org/rfc/rfc7505#section-3) | A domain accepting no mail publishes a single `0 .` MX | Reports no provider because the domain explicitly refuses mail |
+| [3](https://www.rfc-editor.org/rfc/rfc7505#section-3) | Null MX must not be mixed with ordinary routing | Shared routing marks a mixed or nonzero form invalid and provider inference inconclusive |
+
+The provider catalog does not run on a null MX. This prevents the absence of service from being confused with an unknown service.
+
+### Catalog conformance boundary
+
+Provider rules are implementation data maintained with the code and its tests. Anchored patterns prevent substring impersonation; tests cover supported names, deceptive suffixes, mixed routes, duplicates, case and final dots. No vendor document standardises all customer MX patterns, so the catalog describes observed public naming contracts and can lag a provider change.
+
+## Finding reference
+
+### Positive and qualified attribution
+
+| Finding | Severity | Evidence | Meaning |
+| --- | --- | --- | --- |
+| Likely email provider | Pass | One mailbox group, no unknown routes | Published MX consistently points at that service; ownership remains inferred |
+| Gateway detected | Check | One gateway group, no other routes | The named service receives mail first; downstream mailbox stays unknown |
+| Multiple or partly recognized routes | Check | Several groups, or recognised plus unknown | No single mailbox host can be determined |
+| Email provider unknown | Info | No hostname matches | Catalog has no answer; self-hosting is only one possibility |
+
+### Missing and inconclusive attribution
+
+| Finding | Severity | Evidence | Meaning |
+| --- | --- | --- | --- |
+| No email provider: null MX | Fail | Exact `0 .` route | The domain explicitly accepts no mail |
+| No email provider: NXDOMAIN | Fail | Public DNS says the domain does not exist | There is no public inbound route |
+| No MX provider identified | Check | Only address fallback or no route | Address records do not identify a mailbox platform |
+| Provider unknown: lookup failed | Check | Resolver or alias failure | Retry; this is not evidence of absence |
+| Provider unknown: MX uninterpretable | Check | Invalid or contradictory MX | Repair the DNS set before attribution |
+
+### Catalog signatures
+
+| Provider | Role | Accepted hostname shape |
+| --- | --- | --- |
+| Cloudflare Email Routing | Gateway | `route` plus digits under `mx.cloudflare.net` |
+| Google Gmail | Mailbox | Gmail inbound names under `gmail-smtp-in.l.google.com` |
+| Google Workspace | Mailbox | `aspmx` variants, `googlemail.com` variants or `smtp.google.com` |
+| Microsoft 365 | Mailbox | Tenant under `mail.protection.outlook.com` or `mx.microsoft` |
+| Zoho, Proton, Fastmail | Mailbox | Their bounded regional inbound patterns |
+| Mimecast, Proofpoint, Barracuda | Gateway | Anchored gateway-specific suffixes with at least one tenant label |
+
+## Guide
+
+### Reproduce the evidence
+
+Run `dig +short MX example.com` or `nslookup -type=mx example.com`. Compare the exact targets and preferences with the route table. A provider label should be explainable from those hostnames alone. If the commands show different answers, wait for the previous TTL and compare resolvers before editing DNS.
+
+For a suspected deceptive name, compare the complete suffix. `tenant.mail.protection.outlook.com` can match Microsoft 365; `tenant.mail.protection.outlook.com.example.net` cannot.
+
+### Resolve a gateway result
+
+Obtain a message that was legitimately delivered to the domain and inspect its Received chain in the [Email Header Analyzer](https://tamperbox.dev/email-header-analyzer). Start at the trusted receiving side and trace later hops after the named gateway. Do not trust arbitrary forwarded headers or claim the next hostname is the contractual mailbox provider without administrative evidence.
+
+Gateway administration, mail-flow connectors and billing records are stronger evidence than SPF. SPF normally describes outbound senders and does not answer who stores inbound mail.
+
+### Review mixed routes
+
+| Situation | Investigation | Safe action |
+| --- | --- | --- |
+| Old and new mailbox services coexist | Check migration plan, TTL and provider admin panels | Remove the retired set only after delivery is confirmed on the new service |
+| Gateway plus mailbox MX coexist | Confirm whether direct MX is intentional fallback or bypass | Preserve filtering order; avoid exposing a bypass accidentally |
+| Recognised routes plus one unknown backup | Identify the operator and test authorised failover | Leave the provider verdict mixed until the route is understood |
+| Equal-preference providers | Treat them as peers | Do not assume the first displayed name receives all mail |
+
+### Use Break it and Heal it
+
+Pasting an email address or URL demonstrates cleanup; capitals and a final dot demonstrate canonicalisation. IP addresses, underscore owners and single labels demonstrate pre-request refusals. Heal it offers the domain inside a refused email address or URL. History records replacements, Revert walks backward and Reset input restores the value that started the sequence.
+
+## Worked example
+
+The live default is `tamperbox.dev`. On 21 October 2026 its lookup filled three MX rows and matched Cloudflare Email Routing. The correct conclusion was gateway detected with downstream mailbox unknown. In the same comparison, `github.com` and `microsoft.com` each presented one Microsoft 365 route and a simpler likely-provider answer.
+
+The default was selected because it teaches the most important distinction in this tool: an inbound service is not always the mailbox host. The observed records are not frozen into the page. Every load uses the production path, so service names, priorities, TTLs and conclusions can change.
+
+## For agents
+
+Agents can run the live provider operation through Tamperbox MCP or analyse pasted MX records through the bounded capability operation. Always return the exact supporting hostnames, roles and preferences. Say “likely” for mailbox attribution and “gateway” for an edge service; never erase the limitation by shortening either to “uses provider X.”
+
+Treat `mixed`, `unknown` and `inconclusive` as useful outcomes. Do not enrich them with unrelated web hosting, SPF or nameserver guesses unless the user explicitly asks for a broader investigation and the evidence is labelled separately. Never infer that an account exists.
+
+## Limits
+
+The observation comes from one public recursive resolver at one time. Private and split-horizon records are invisible, cached answers can be stale, and DNSSEC validation is outside this page. The tool does not resolve MX targets, trace SMTP, inspect tenant configuration or follow gateway delivery.
+
+The catalog is finite. Custom vanity names, resellers and newly changed provider naming can remain unknown. A matched hostname can still be delegated through a partner or configured incorrectly. Results are not stored, but a live lookup necessarily sends the domain to the Tamperbox server and public resolver.
+
+## References
+
+- [RFC 5321](https://www.rfc-editor.org/rfc/rfc5321), Simple Mail Transfer Protocol, especially [section 5](https://www.rfc-editor.org/rfc/rfc5321#section-5) and [section 5.1](https://www.rfc-editor.org/rfc/rfc5321#section-5.1). Current Internet Standard; it defines routing rather than provider ownership.
+- [RFC 7505](https://www.rfc-editor.org/rfc/rfc7505), A Null MX Resource Record for Domains That Accept No Mail, especially [section 3](https://www.rfc-editor.org/rfc/rfc7505#section-3). Current Proposed Standard.

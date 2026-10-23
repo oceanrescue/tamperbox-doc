@@ -35,6 +35,8 @@ export default defineConfig({
         ] },
         { label: 'Tools', items: [
           { label: 'Tool pages', link: '/tools/' },
+          { label: 'MX Lookup & Email Domain Checker', link: '/tools/email-domain/' },
+          { label: 'Email Provider Lookup', link: '/tools/email-provider/' },
           { label: 'SSL Certificate Checker', link: '/tools/ssl-checker/' },
           { label: 'DKIM Record Checker', link: '/tools/dkim-checker/' },
           { label: 'SPF Checker', link: '/tools/spf-checker/' },
