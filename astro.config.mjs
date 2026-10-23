@@ -36,6 +36,8 @@ export default defineConfig({
         { label: 'Tools', items: [
           { label: 'Tool pages', link: '/tools/' },
           { label: 'SSL Certificate Checker', link: '/tools/ssl-checker/' },
+          { label: 'DANE & TLSA Checker', link: '/tools/dane-checker/' },
+          { label: 'Post-Quantum TLS Checker', link: '/tools/post-quantum-checker/' },
           { label: 'DKIM Record Checker', link: '/tools/dkim-checker/' },
           { label: 'SPF Checker', link: '/tools/spf-checker/' },
           { label: 'DMARC Checker & Generator', link: '/tools/dmarc-checker/' },
@@ -48,6 +50,9 @@ export default defineConfig({
           { label: 'Redirect Checker', link: '/tools/redirect-checker/' },
           { label: 'HTTP/3 & Compression Checker', link: '/tools/http3-checker/' },
           { label: 'CORS Tester', link: '/tools/cors-tester/' },
+          { label: 'Security Headers Checker', link: '/tools/security-headers/' },
+          { label: 'security.txt Checker', link: '/tools/security-txt-checker/' },
+          { label: 'Mixed Content & Cookie Checker', link: '/tools/mixed-content-checker/' },
         ] },
         { label: 'MCP server', items: [
           { label: 'Overview', link: '/mcp/' },
