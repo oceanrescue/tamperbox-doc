@@ -35,6 +35,14 @@ export default defineConfig({
         ] },
         { label: 'Tools', items: [
           { label: 'All tool pages', link: '/tools/' },
+          { label: 'Website checks', collapsed: false, items: [
+          { label: 'Website Down Checker', link: '/tools/website-down-checker/' },
+          { label: 'Broken Link Checker', link: '/tools/broken-link-checker/' },
+          { label: 'Open Graph Preview', link: '/tools/open-graph-preview/' },
+          { label: 'Robots.txt & Sitemap Checker', link: '/tools/robots-txt-checker/' },
+          { label: 'Ads.txt & App-Ads.txt Checker', link: '/tools/ads-txt-checker/' },
+          { label: 'llms.txt Checker & Generator', link: '/tools/llms-txt/' },
+          ] },
           { label: 'Network', collapsed: false, items: [
             { label: 'ASN Lookup', link: '/tools/asn-lookup/' },
             { label: 'BGP Route Lookup', link: '/tools/bgp-lookup/' },

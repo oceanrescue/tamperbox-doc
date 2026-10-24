@@ -1,0 +1,250 @@
+---
+title: Open Graph Preview
+description: How the Open Graph preview reads a page's share tags, the fallback order each platform's card follows, every rule it applies to the image, title, description and X card, and how to fix each finding.
+updated: 2026-10-24
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and repair guide for the Tamperbox Open Graph Preview, which fetches a page and its share image from the Tamperbox server, or reads pasted HTML in the browser, and draws a large card, an X card, a chat unfurl and a search result from its Open Graph, Twitter and HTML tags.
+prerequisites:
+  - A public page address, or the page's HTML to paste
+outputs:
+  - A verdict, findings, four approximate previews, the tags to add and every share-related tag found with the previews that use it
+limitations:
+  - Previews approximate each platform's card; platforms cache cards; tags added by scripts are not seen; live images stop at 5 MiB
+---
+
+The tool page is [tamperbox.dev/open-graph-preview](https://tamperbox.dev/open-graph-preview). It checks `tamperbox.dev` live when opened,  says whether the link is ready to share, and draws the cards platforms make from it. This page is the long version: where each card gets its text and image, every rule, what each finding means, and how to fix it.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> pasted HTML is read in your browser. Its share image is fetched only if you press the button that loads it, and then through the Tamperbox server, so your browser never contacts that site. A page address is fetched by the Tamperbox server, with its share image, when you stop typing. Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history. Sample addresses on the reserved <code>.example</code> zone are answered in the browser from a fixture.</div>
+
+## What the tool answers
+
+1. **Will the shared link have a picture, and a large one?** The image tag, whether the image loads, and its real size decide between a large card, a small thumbnail and no picture.
+2. **What title and text will people see?** Each platform's fallback order picks a title and description; the previews show the result, cut where platforms cut.
+3. **Does X draw it the same way?** `twitter:card` decides X's layout separately.
+4. **What should be added?** The missing tags, written from what the page already says.
+
+## Inputs
+
+### A page address
+
+`example.com/blog/post` or `https://example.com/blog/post`. Without a scheme the address starts at `https://`. The page is fetched when you stop typing (about two thirds of a second), or at once on Enter. The same refusals as every site tool apply: spaces, other schemes, credentials (Heal it removes them), ports other than 80 and 443 (Heal it offers the standard port), IP addresses and single-label names.
+
+### Pasted HTML
+
+Anything that starts with `<` is read as HTML: a whole page or just its `<head>`. It is read in the browser. A share image on a live site is not fetched until you press **Load the image through our server**; a relative image address cannot be resolved because a pasted page has no address. Files up to 2 MiB can be dropped or opened with **Add a file** (`.html`, `.htm`, `.txt`).
+
+A pasted address loses surrounding quotes, angle brackets and trailing punctuation; the whole address is kept, path included, because each page has its own tags. Text that is neither an address nor HTML stays as pasted so the error can explain it.
+
+## Reading the result
+
+### Verdict and chips
+
+One of: "Ready to share.", "Shares with a small image.", "Shares without a picture.", "Fix the image address:" or "Sharing metadata needs fixes:", with what costs the card most. The chips count the problems and scroll to the findings. When only platform limitations remain (X's small square, a cut title), one chip counts them. Two items say where the input went: pasted HTML stays in the browser; a page address means our server fetches the page and its image.
+
+### Findings
+
+Every finding, worst first; passing findings remain visible.
+
+### Related checks and input transfer
+
+Use Check the rest to open another website tool with the current address. Pasted files are not transferred through these links. Transfers temporarily use browser `sessionStorage` with a one-use random token in the URL fragment; the input itself is not in the URL. The destination accepts a transfer for less than one minute and removes the token. Manual checks still wait for their run button or Enter.
+
+To inspect a value from the result, copy that specific address into the relevant tool. A separate check collects new evidence and can return a different result; do not interpret navigation as confirmation of the original verdict.
+
+### Previews
+
+Four approximate cards: a large card (Facebook, LinkedIn), switching to a small link card when the image is under 600 × 315; an X card in the layout `twitter:card` asks for; a chat unfurl (Slack, Discord, Teams); and a search result. Titles and descriptions are clamped or cut where each surface cuts them.
+
+### Tags to add
+
+The missing tags as code to paste inside `<head>`, built only from values the page already has. Copy with the button in the corner.
+
+### Tags found
+
+Every Open Graph, Twitter, description, robots and viewport tag, the canonical and icon links and any JSON-LD types, each with the previews that read it.
+
+## Method
+
+### Reading the tags
+
+The HTML is scanned as served: up to 512 KiB when our server fetches the page (following up to 10 redirects, `TamperboxBot/1.0`, no cookies), or the whole pasted source. Scripts do not run. Each `<meta>` is read by its `property`, `name`, `http-equiv` or `itemprop` key, lowercased, with its `content` ([HTML Standard, the meta element](https://html.spec.whatwg.org/multipage/semantics.html#the-meta-element)). The first `<title>`, the first `<base href>`, every `<link rel>` and every JSON-LD block are kept. For each key the first tag with non-empty content wins, which is how the [Open Graph protocol](https://ogp.me/#array) treats repeated properties ("the first tag (from top to bottom) is given preference").
+
+### The fallback order
+
+| Card | Title | Description | Image | Address |
+| --- | --- | --- | --- | --- |
+| Large card, chat | og:title, twitter:title, `<title>` | og:description, twitter:description, meta description | og:image, og:image:url, og:image:secure_url, twitter:image, twitter:image:src | og:url, canonical link |
+| X | twitter:title, og:title, `<title>` | twitter:description, og:description, meta description | twitter:image, twitter:image:src, og:image | |
+| Search result | `<title>`, og:title | meta description, og:description | | |
+
+Relative addresses are resolved against `<base href>` when present, otherwise against the page address ([RFC 3986, section 5.2](https://www.rfc-editor.org/rfc/rfc3986#section-5.2)).
+
+The [Open Graph protocol, basic metadata](https://ogp.me/#metadata), names four required properties: `og:title`, `og:type`, `og:image` and `og:url`. The tool treats a missing image as a failure (the card loses its picture), a missing title as a warning (platforms fall back), and a missing type or URL as information (platforms default to website and to the shared address).
+
+### Image rules, in order
+
+1. **No og:image** (FAIL): none of the five image keys is present.
+2. **Relative address** (FAIL): the value does not start with a scheme. The protocol defines `og:image` as "An image URL"; platforms fetch it on their own, without the page as a base, so a relative value is not resolved by most. The preview resolves it anyway so you can see the picture; the suggested tags give the absolute address.
+3. **Not a usable web URL** (FAIL): it resolves to something other than http or https.
+4. **http:// on an https:// page** (CHECK).
+5. **Did not load** (FAIL): our server fetches the image, following up to 3 redirects. It must answer with a success status, a content type of `image/png`, `image/jpeg`, `image/gif`, `image/webp` or `image/avif`, and at most 5 MiB. SVG, `application/octet-stream`, hotlink protection and oversize files fail here.
+6. **Size**, decoded in the browser: either side under 200 px FAIL; under 600 × 315 CHECK (Facebook's small thumbnail); under 1200 × 630 INFO (soft on dense screens); otherwise PASS.
+7. **Ratio** more than 0.25 from 1.91:1: INFO, large cards crop the edges.
+
+The size thresholds come from the platforms' own guidance, not from the protocol, which sets no size.
+
+### Text, X and page rules
+
+| Rule | Severity |
+| --- | --- |
+| No og:title, or no og:description (names the fallback used) | CHECK |
+| No og:url, og:type or og:site_name | INFO |
+| og:title, og:description, og:image, og:url or meta description appears more than once | CHECK |
+| No twitter:card | INFO |
+| twitter:card not summary, summary_large_image, app or player | CHECK |
+| twitter:card summary with an image 600 px wide or more: X shows a small square | INFO |
+| No `<title>` | CHECK |
+| `<title>` over 60 characters | INFO |
+| No meta description | INFO |
+| Meta description over 160 characters | INFO |
+| og:url and the canonical link resolve to different addresses | CHECK |
+| meta robots contains noindex | CHECK |
+| No viewport meta tag | INFO |
+| A JSON-LD block that is not valid JSON | CHECK |
+
+The card types come from [X's Cards markup reference](https://developer.x.com/en/docs/x-for-websites/cards/overview/markup). The canonical link is defined by [RFC 6596, section 3](https://www.rfc-editor.org/rfc/rfc6596#section-3) ("the preferred version of a resource"); when og:url names a different address, share counts and search indexing split. A JSON-LD block must be valid JSON to be read at all ([JSON-LD 1.1, section 9](https://www.w3.org/TR/json-ld11/#json-ld-grammar)).
+
+### The verdict
+
+In order: no image; image did not load; relative image; any other FAIL; an image under 600 × 315 (small image); otherwise ready to share, with platform limitations named. A page with a failing finding is never "Ready to share".
+
+### Tags to add
+
+Only from what the page already says: og:title and og:description from the value the fallback order finds; og:url from the canonical link or the page address; og:type set to website; an absolute og:image when the existing one is relative; twitter:card summary_large_image when there is an image. A page with no description gets no og:description line. For pasted HTML, Heal it inserts the lines before `</head>`.
+
+## Standards and conformance
+
+### The Open Graph protocol
+
+Implemented: the four basic properties, the optional `og:description`, `og:site_name` and `og:image:url`, `og:image:secure_url` and `og:image:alt` structured properties, and first-wins for repeated properties. Not checked: `og:locale`, `og:video`, `og:audio`, object types beyond website, and `og:image:width`/`height` against the real image (the real size is measured instead). The protocol is a community specification with no versioned RFC; [ogp.me](https://ogp.me/) is its canonical text.
+
+### X Cards
+
+Implemented: the four card types, the twitter:* keys and their fallback to Open Graph. X's renderer and cache are its own; the preview is an approximation.
+
+### HTML Standard and RFC 6596
+
+`<title>`, `<meta name="description">`, `<meta name="robots">`, `<meta name="viewport">`, `<base href>` and `<link rel="canonical">` are read as the HTML Standard and RFC 6596 define them. The 60 and 160 character lengths are search engines' observed cut-offs, not standards.
+
+### RFC 3986
+
+Relative image and canonical addresses are resolved as URI references against the base.
+
+## Finding reference
+
+### Images
+
+| Finding | Severity | What it means for whoever shares the link | Fix |
+| --- | --- | --- | --- |
+| No og:image | FAIL | No picture, or one the platform picks | Add a 1200 × 630 og:image with a full https:// address |
+| og:image is a relative URL | FAIL | Most platforms show no picture | Write the full address |
+| og:image is not a usable web URL | FAIL | No picture | Use an http or https address |
+| og:image did not load | FAIL | No picture | Fix the path, type or size of the image |
+| Image is n × n (under 200) | FAIL | Platforms drop it | Use 1200 × 630 |
+| Shown as a small thumbnail | CHECK | Small image beside the text | Use 1200 × 630 |
+| og:image uses http:// | CHECK | Some platforms refuse it | Serve it over https |
+| Image is n × n (under 1200 × 630) | INFO | Soft on dense screens | Use 1200 × 630 |
+| Image is n × n | PASS | Sharp on large cards | |
+| Image ratio is n:1 | INFO | Edges cropped | Use 1.91:1 |
+
+### Text and page metadata
+
+| Finding | Severity | What it means for whoever shares the link | Fix |
+| --- | --- | --- | --- |
+| No og:title, No og:description | CHECK | Falls back to search text | Add them (Tags to add) |
+| No og:url, No og:type, No og:site_name | INFO | Platform defaults | Add them if they matter |
+| key appears n times | CHECK | Only the first is read | Remove the duplicate writer |
+| No twitter:card | INFO | X picks the layout | Add summary_large_image |
+| twitter:card "x" is not a card type | CHECK | X falls back | Use summary or summary_large_image |
+| X shows a small square | INFO | Wide image cropped to a square on X | Use summary_large_image |
+| No `<title>` | CHECK | Tabs and results show the address | Add a title |
+| Title is n characters | INFO | Cut in search results | Shorten to about 60 |
+| No meta description | INFO | Search writes a snippet | Add one |
+| Description is n characters | INFO | Cut in search results | Shorten to about 155 |
+| og:url and canonical disagree | CHECK | Shares and indexing split | Make them the same |
+| Page asks not to be indexed | CHECK | Dropped from search | Remove noindex if unintended |
+| No viewport meta tag | INFO | Desktop width on phones | Add one |
+| Structured data is not valid JSON | CHECK | Ignored by search engines | Fix the JSON |
+
+## Guide
+
+### No picture
+
+1. Make a 1200 × 630 PNG or JPEG under 5 MiB, with the important part in the middle.
+2. Add `<meta property="og:image" content="https://www.example.com/share/page.png">` inside `<head>`.
+3. Check the page again: the large card should show it.
+
+Confirm outside Tamperbox: `curl -sI https://www.example.com/share/page.png` should show `200` and an `image/` content type.
+
+### Small or cropped image
+
+Replace a square logo with a 1200 × 630 image. For X, set `twitter:card` to `summary_large_image`.
+
+### Wrong title or description
+
+Add og:title and og:description written for a feed: what the page is, in a line. Use **Tags to add** as the starting point; for pasted HTML, Heal it inserts them.
+
+### Duplicate tags
+
+Two plugins (an SEO plugin and a theme, for example) often both write Open Graph tags. View the source, find each writer, and switch one off.
+
+### The platform still shows the old card
+
+Platforms cache cards. Use each platform's own refresh tool to fetch the link again, or share a new address. This tool shows what the page says now, not what a platform cached.
+
+### Break it cases
+
+| Case | What it loads | What to look at |
+| --- | --- | --- |
+| No og:image | Your page's HTML without any image tag | Shares without a picture |
+| Relative image URL | Your page's HTML with og:image made relative | Fix the image address |
+| Only a `<title>` | Your page's HTML without Open Graph, Twitter and description tags | Missing tags; Heal it adds them |
+| Image too small | A sample page with a small image | Shown as a small thumbnail; the small card layout |
+| Image missing | A sample page whose image answers 404 | og:image did not load |
+
+The first three build on your own input: the HTML you pasted, or the HTML your address returned. Break it replaces the field with an adapted input or a labelled fixture. Keep a copy of your original input if you want to restore it after experimenting.
+
+## Worked example
+
+The page opens with a live fetch of `tamperbox.dev`, followed by its selected preview image when present. The metadata and image can change, so use the displayed evidence rather than expecting a fixed title, size or finding count.
+
+Read the source tag named beside each field. A fallback title can make the preview look complete while the explicit Open Graph tag is missing. Compare the large card, X, chat and search layouts, then read Findings and Tags found. These are approximations made from one fetched HTML response; they do not reproduce a platform's cache or execute the page's scripts.
+
+Use **No picture** or another Break it case to inspect missing metadata, then review the suggested tags. When working with pasted HTML, the repair modifies only the text in the tool. Publish changes through your own site workflow and fetch the page again. If the real platform still shows an old card, use its refresh/debug tool; rerunning Tamperbox does not purge that platform's cache.
+
+## For agents
+
+Use the Tamperbox MCP `search` tool to inspect the schema, then `execute` with `tamperbox.request` to call `POST /v1/tools/open_graph_preview`. Supply the required `url` field as a full public HTTP or HTTPS URL. The operation is named `open_graph_preview`; the browser page’s hyphenated identifier is not the API operation name.
+
+The response contains fetched `evidence`, extracted `meta`, a resolved `card` and `checks`. Unlike the browser preview, the operation does not fetch and decode the image or verify its dimensions, and it never executes page scripts.
+
+Keep the input, observation time, source limitations and inconclusive results with any summary. Browser fixtures are demonstrations, not live MCP targets. Do not turn missing evidence into a passing check or infer that an inaccessible resource has been deleted.
+
+See [Connect an MCP client](/mcp/connect/), [Code mode](/mcp/code-mode/) and [Security and privacy](/reference/security/).
+
+## Limits
+
+- One fetch of the page (512 KiB) and its image (5 MiB, PNG, JPEG, GIF, WebP or AVIF).
+- Scripts do not run; tags a script adds are not seen.
+- Search cuts are by character count, close to but not the same as pixel widths.
+- Platforms cache cards; this tool cannot refresh them.
+- Live fetches are rate limited. Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history.
+
+## References
+
+- [The Open Graph protocol](https://ogp.me/): [basic metadata](https://ogp.me/#metadata), [structured properties](https://ogp.me/#structured), [arrays](https://ogp.me/#array).
+- [X Cards markup reference](https://developer.x.com/en/docs/x-for-websites/cards/overview/markup).
+- [HTML Standard, the meta element](https://html.spec.whatwg.org/multipage/semantics.html#the-meta-element) and [the base element](https://html.spec.whatwg.org/multipage/semantics.html#the-base-element).
+- [RFC 6596, The Canonical Link Relation](https://www.rfc-editor.org/rfc/rfc6596#section-3), section 3.
+- [RFC 3986, URI Generic Syntax](https://www.rfc-editor.org/rfc/rfc3986#section-5.2), section 5.2.
+- [JSON-LD 1.1](https://www.w3.org/TR/json-ld11/#json-ld-grammar), section 9.

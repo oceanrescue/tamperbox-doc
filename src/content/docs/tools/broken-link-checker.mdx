@@ -1,0 +1,215 @@
+---
+title: Broken Link Checker
+description: How the broken link checker collects every link, image and script on one page, requests each from the Tamperbox server, sorts them into broken, unclear, redirected and working, and how to fix each kind.
+updated: 2026-10-24
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and repair guide for the Tamperbox Broken Link Checker, which fetches one page, collects up to 300 unique link, image, script, style sheet, frame and media addresses from its HTML, and requests each from the Tamperbox server with HEAD then GET, 8 seconds per link and 45 seconds in all.
+prerequisites:
+  - The public http or https address of one page that answers with HTML
+outputs:
+  - A verdict with the broken count, a summary bar, every address with its status, place on the page, line and final address, and findings for broken, redirected, unclear and http:// links
+limitations:
+  - One page's initial HTML as a signed-out visitor sees it; 401, 403, 429 and timeouts are reported as unclear, not broken; at most 300 addresses
+---
+
+The tool page is [tamperbox.dev/broken-link-checker](https://tamperbox.dev/broken-link-checker). It loads `tamperbox.dev` and waits for you to run a live check,  says how many links are broken, and lists every address worst first. This page is the long version: what is collected, how each address is requested, how each result is sorted, and how to fix each kind.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> typing an address is read in your browser only. Nothing is sent until you press Check links or Enter. Then the Tamperbox server fetches the page and requests each address on it, without cookies, and returns the completed result. Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history. Sample addresses on the reserved <code>.example</code> zone are answered in the browser from a fixture.</div>
+
+## What the tool answers
+
+1. **Which links on this page are broken?** Separately for links within the site, which you can fix, and links to other sites, which you can only update or remove.
+2. **Which ones only look broken?** Refusals, rate limits and timeouts from sites that block automated requests, which may open fine in a browser.
+3. **Which ones work only after a detour?** Links that redirect, with the address they end at.
+4. **Where is each one?** Its landmark on the page (navigation, header, main content, footer, sidebar), its line in the HTML, what kind of element carries it, and how often it is used.
+
+## Inputs
+
+### A page address
+
+Type `example.com/pricing` or paste `https://example.com/pricing`. Without a scheme the address starts at `https://`. The path and query are kept, because the links of `/pricing` are not those of the home page; a fragment is dropped.
+
+The check is manual and costs real requests to other sites, so typing only says "Ready to check" and that up to 300 addresses take about half a minute. Nothing leaves the browser until you press **Check links** or Enter. A sample address on `.example` is answered at once from the fixture.
+
+Refused before any request: spaces, schemes other than http and https, `mailto:` and similar, user names and passwords (Heal it removes them), ports other than 80 and 443 (Heal it offers the standard port), IP addresses and single-label names. A pasted address loses surrounding quotes, angle brackets and trailing punctuation; text that is not an address stays as pasted so the error can explain it. A dropped `.txt` file is read in the browser.
+
+## Reading the result
+
+### Verdict and chips
+
+"n broken links on host, out of m checked." or "No broken links among m checked on host." The line under it counts what else was found: redirects, links that could not be checked, and links not requested. The chips (broken, redirected, unclear, working) scroll to the link list. Two items say where the input went: typing stays in the browser; Check links means our server fetches the page and its links.
+
+### Findings
+
+Worst first: broken links within the site, broken links to other sites, redirected links, links that could not be checked, addresses still on `http://`. The findings show "Every link works" only when no other finding was produced and at least one address was checked; the tally separately counts working links. Passing findings remain visible.
+
+### Related checks and input transfer
+
+Use Check the rest to open another website tool with the current address. Pasted files are not transferred through these links. Transfers temporarily use browser `sessionStorage` with a one-use random token in the URL fragment; the input itself is not in the URL. The destination accepts a transfer for less than one minute and removes the token. Manual checks still wait for their run button or Enter.
+
+To inspect a value from the result, copy that specific address into the relevant tool. A separate check collects new evidence and can return a different result; do not interpret navigation as confirmation of the original verdict.
+
+### Summary
+
+One bar for the requested addresses, broken first, then unclear, redirected and working, with the counts in the legend. The meta line gives how many were requested and how long it took, and how many were over the limit.
+
+### Links
+
+Every address, worst first, then by line. Filter chips show one kind at a time. Each row has the status (or the stage it stopped at), the link text or the element kind, the address, where it sits, its line, how often it is used, the final address after redirects, and the time. Sixty rows show at first; **Show n more** lists the rest.
+
+## Method
+
+The page calls `/api/web/links`. The current server collects the results and returns one JSON object containing `page`, `links`, `skipped` and `done`. The browser client turns those collections into events for its renderer; this does not mean each destination response is streamed from the server as it finishes.
+
+### Fetching the page
+
+The page is requested with `GET`, `Accept: text/html,application/xhtml+xml;q=0.9,*/*;q=0.8`, the user agent `TamperboxBot/1.0`, no cookies, following up to 10 redirects and reading the first 512 KiB. A response that is not `text/html` or `application/xhtml+xml` has no links to collect. If the page itself answers 400 or above, the check stops with an error naming the status, because an error page's links are not the page's links.
+
+### Collecting addresses
+
+The HTML is parsed with a full HTML parser (parse5, which follows the [HTML Standard's parsing algorithm](https://html.spec.whatwg.org/multipage/parsing.html)), with source positions, so each address keeps its line. Collected:
+
+| Element | Attribute | Specification |
+| --- | --- | --- |
+| `a`, `area` | `href` | [HTML, section 4.6.1](https://html.spec.whatwg.org/multipage/links.html#links-created-by-a-and-area-elements) |
+| `img`, `script`, `iframe`, `source`, `video`, `audio` | `src` | [HTML, embedded content](https://html.spec.whatwg.org/multipage/embedded-content.html) |
+| `img` | first candidate of `srcset` | [HTML, section 4.8.4.2](https://html.spec.whatwg.org/multipage/images.html#srcset-attributes) |
+| `link` with rel `stylesheet`, `icon` or `preload` | `href` | [HTML, section 4.6.6](https://html.spec.whatwg.org/multipage/links.html#linkTypes) |
+
+Each address is resolved against the document's `<base href>` when there is one ([HTML, section 4.2.3](https://html.spec.whatwg.org/multipage/semantics.html#the-base-element)), otherwise against the final page address, as a URL reference ([RFC 3986, section 5.2](https://www.rfc-editor.org/rfc/rfc3986#section-5.2)). The fragment is removed ([RFC 3986, section 3.5](https://www.rfc-editor.org/rfc/rfc3986#section-3.5): it is never sent to a server). Repeated addresses are requested once and shown as "used n times". The first 300 unique addresses are requested; the rest are counted as over the limit.
+
+Listed but not requested: `mailto:`, `tel:`, `sms:`, `javascript:`, `data:` and any other non-HTTP scheme, a fragment that points back into the same page, and values that are not valid URLs. Not collected at all: addresses inside CSS, `form` actions, video posters and canonical links.
+
+A link counts as within the site when its origin (scheme, host and port, [RFC 6454, section 4](https://www.rfc-editor.org/rfc/rfc6454#section-4)) matches the page's. An `http://` link to your own HTTPS site therefore counts as another site.
+
+### Requesting each address
+
+1. **HEAD first.** [RFC 9110, section 9.3.2](https://www.rfc-editor.org/rfc/rfc9110#section-9.3.2): HEAD "is identical to GET except that the server MUST NOT send content in the response". It answers the question without downloading pages and images.
+2. **GET when HEAD is refused.** If HEAD ends at 403, 405 (Method Not Allowed) or 501 (Not Implemented), which servers send when they do not support HEAD, the address is requested again with GET. Bodies are never read.
+3. **Redirects.** Up to 5 per address, each `Location` resolved and checked like the first address ([RFC 9110, section 15.4](https://www.rfc-editor.org/rfc/rfc9110#section-15.4)). A loop, more than 5, a redirect without `Location`, or one to a private address or another port stops that address.
+4. **Public targets only.** Each host is looked up in public DNS first; an address that resolves to a private range, an IP address written in the link, or a port other than 80 and 443 is not requested and is listed as "Not checked".
+5. **Budgets.** 8 seconds per address, redirects included. At most 8 addresses at once and 2 at a time per host, so one site is not flooded. The whole check stops at 45 seconds and 1,000 requests; addresses not reached are marked with the time limit.
+
+### Sorting results
+
+| Rule | Kind | Severity |
+| --- | --- | --- |
+| Final status 400 or above, except 401, 403 and 429 | Broken | FAIL |
+| Host does not resolve, connection refused or failed, redirects loop or exceed 5 | Broken | FAIL |
+| 401, 403 or 429 | Could not check | INFO |
+| Timeout of the address, or the overall time limit | Could not check | INFO |
+| Target not allowed (private address, other port) | Could not check | INFO |
+| Answered below 400 after one or more redirects | Redirected | CHECK |
+| Answered below 400 directly | Working | PASS |
+| Non-HTTP scheme, same-page anchor, invalid URL | Not checked | listed only |
+
+Why 401, 403 and 429 are not broken: [RFC 9110, section 15.5.2](https://www.rfc-editor.org/rfc/rfc9110#section-15.5.2) (401) and [15.5.4](https://www.rfc-editor.org/rfc/rfc9110#section-15.5.4) (403) mean the server understood the request and refused it to this client; [RFC 6585, section 4](https://www.rfc-editor.org/rfc/rfc6585#section-4) (429) means too many requests. A signed-in visitor, or any visitor not behind a bot filter, may get the page. A 404 ([section 15.5.5](https://www.rfc-editor.org/rfc/rfc9110#section-15.5.5)) or 410 ([section 15.5.11](https://www.rfc-editor.org/rfc/rfc9110#section-15.5.11)) reports that this server did not provide the resource to this request; authorization and routing can still affect another client.
+
+A link that redirects and then ends at 404 is broken, not redirected: the final answer decides.
+
+## Standards and conformance
+
+### RFC 9110, HTTP Semantics
+
+Implemented: HEAD as a bodiless GET (section 9.3.2) with GET as the fallback when a server does not implement HEAD; status classes (section 15) for the sorting rules; redirect following with `Location` (sections 10.2.2 and 15.4). Stricter than browsers: 5 redirects per link instead of about 20. More lenient than a strict reading: a 403 is not called broken, because the purpose is to find links that are broken for visitors, not for robots. RFC 9110 obsoletes RFC 7231.
+
+### HTML Standard and RFC 3986, URLs
+
+Implemented: the elements and attributes in the table above, `<base href>`, URL reference resolution and fragment removal. Not implemented: every `srcset` candidate beyond the first, `<picture>` art direction, CSS `url()` references, and any URL a script writes after load, because scripts are not executed.
+
+### RFC 6454, origins
+
+Used only to decide "within the site": same scheme, host and port.
+
+## Finding reference
+
+The labels below organize this guide; the browser emits finding titles and statuses rather than these labels as stable machine identifiers.
+
+| Guide label | Severity | Title | What it means for visitors | Fix |
+| --- | --- | --- | --- | --- |
+| `broken-internal` | FAIL | n broken links within host | Dead ends on your own site; crawlers waste fetches | Correct the link, or redirect the old address |
+| `broken-external` | FAIL | n broken links to other sites | The page looks neglected; visitors leave with nothing | Update to the new address, an archived copy, or remove |
+| `redirects` | CHECK | n links redirect | One extra round trip each | Link to the final address shown |
+| `unclear` | INFO | n links could not be checked | May work in a browser; not proven broken | Open each in a browser |
+| `insecure` | INFO | n addresses use http:// | Links leave HTTPS; images and scripts are mixed content | Use https:// where supported |
+| `working` | PASS | Every link works, or n links work | | |
+| `none` | INFO | No links found | Nothing in the HTML; script-added links are not seen | Send links in the HTML |
+
+The page itself answering 400 or more is not a finding but an error: "Not checked: the page itself answered n, so there were no links to check."
+
+## Guide
+
+### Broken links within your site
+
+1. Filter the list to Broken and read the line number and landmark of each.
+2. A broken link in the navigation or footer is on every page: fix it in the template once.
+3. A page that moved: update the link and add a 301 from the old address, so other sites' links keep working.
+4. A broken script, style sheet or image after a deploy usually means cached HTML still points at old hashed asset names; purge the HTML cache.
+
+Confirm: press Check links again; Broken should be 0. Outside Tamperbox: `curl -sI -L --max-redirs 5 https://example.com/old-page | head -1`.
+
+### Broken links to other sites
+
+1. Search for the page's new address, or find it in an archive.
+2. Update the link, or remove it if the content is gone.
+3. A DNS failure means the other domain lapsed or the link has a typo in the host: `dig +short A other.example`.
+
+### Links that could not be checked
+
+1. Open each one in a browser. If it loads, leave it.
+2. If it fails in the browser too, treat it as broken.
+3. Rate limits (429) can clear with time; check again later.
+
+### Redirected links
+
+Replace each link with the final address shown under it. The common ones are `http://` to `https://`, a missing trailing slash, and a site that moved. Use **Redirect chain of the first redirected link** to see each hop.
+
+### Addresses on http://
+
+Change them to `https://` where the other site supports it. For images and scripts on an HTTPS page, the [mixed content checker](https://tamperbox.dev/mixed-content-checker) shows what browsers block.
+
+### Break it cases
+
+| Case | What it loads | What to look at |
+| --- | --- | --- |
+| Page not found | A sample page that answers 404 | The check stops: the page itself is broken |
+| Page with no links | A sample page with no links | No links found |
+| Page times out | A sample partner page that never answers | The check stops at the page fetch |
+| No such host | `nohost.` plus your own domain | The page's host does not resolve |
+
+Break it replaces the field with an adapted input or a labelled fixture. Keep a copy of your original input if you want to restore it after experimenting.
+
+## Worked example
+
+The page loads `https://tamperbox.dev/` and waits for **Check links**. Running it fetches the current home page and checks the bounded set of addresses extracted from its HTML. Counts and results are live evidence; the guide does not promise a fixed number of working or broken links.
+
+Read the source-page status before interpreting the link totals. Then filter Broken, Could not check and Redirected separately. For a broken internal address, use its source line and context to find the authored reference. For a redirect, inspect the final destination before updating the link. For 403 or 429, verify in a browser instead of assuming that the page was deleted.
+
+Check the omitted count and truncation flag before describing the page as fully checked. A zero-broken result applies only to the collected addresses. It does not verify fragment targets, script-created links or pages reached by following those links. Use a Break it fixture to examine a missing source page or a timeout without deliberately breaking the real site.
+
+## For agents
+
+Use the Tamperbox MCP `search` tool to inspect the schema, then `execute` with `tamperbox.request` to call `POST /v1/tools/broken_link_checker`. Supply the required `url` field as a full public HTTP or HTTPS URL. The operation is named `broken_link_checker`; the browser page’s hyphenated identifier is not the API operation name.
+
+The response contains `page`, `links`, `skipped` and `done`. Preserve source truncation, omitted counts, per-link errors and budget limits. A completed response does not mean every address on the site was checked.
+
+Keep the input, observation time, source limitations and inconclusive results with any summary. Browser fixtures are demonstrations, not live MCP targets. Do not turn missing evidence into a passing check or infer that an inaccessible resource has been deleted.
+
+See [Connect an MCP client](/mcp/connect/), [Code mode](/mcp/code-mode/) and [Security and privacy](/reference/security/).
+
+## Limits
+
+- One page, not a site. Up to 300 unique addresses, 8 seconds each, 45 seconds and 1,000 requests in all.
+- Scripts are not executed, so links added after load are not seen.
+- Only the first `srcset` candidate is checked; CSS references, form actions and posters are not collected.
+- Private addresses, IP addresses and ports other than 80 and 443 are not requested.
+- A site can refuse automated requests while it works for people.
+- Live checks are rate limited. Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history.
+
+## References
+
+- [RFC 9110, HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110): [section 9.3.2](https://www.rfc-editor.org/rfc/rfc9110#section-9.3.2) HEAD, [section 10.2.2](https://www.rfc-editor.org/rfc/rfc9110#section-10.2.2) Location, [section 15.4](https://www.rfc-editor.org/rfc/rfc9110#section-15.4) redirection, [section 15.5](https://www.rfc-editor.org/rfc/rfc9110#section-15.5) client errors. Obsoletes RFC 7231.
+- [RFC 6585, section 4](https://www.rfc-editor.org/rfc/rfc6585#section-4), 429 Too Many Requests.
+- [RFC 3986, URI Generic Syntax](https://www.rfc-editor.org/rfc/rfc3986): [section 3.5](https://www.rfc-editor.org/rfc/rfc3986#section-3.5) fragment, [section 5.2](https://www.rfc-editor.org/rfc/rfc3986#section-5.2) reference resolution.
+- [RFC 6454, The Web Origin Concept](https://www.rfc-editor.org/rfc/rfc6454#section-4), section 4.
+- [HTML Standard](https://html.spec.whatwg.org/multipage/): [links](https://html.spec.whatwg.org/multipage/links.html), [the base element](https://html.spec.whatwg.org/multipage/semantics.html#the-base-element), [srcset](https://html.spec.whatwg.org/multipage/images.html#srcset-attributes), [parsing](https://html.spec.whatwg.org/multipage/parsing.html).

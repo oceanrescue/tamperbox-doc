@@ -73,6 +73,12 @@ Each tool's documentation has the same shape, so a finding on the page always ha
   <a class="tb-doc-card" href="/tools/open-port-checker/"><strong>Open Port Checker</strong><span>A TCP check of the request-source address and port-forward troubleshooting.</span></a>
   <a class="tb-doc-card" href="/tools/what-is-my-ip/"><strong>What Is My IP Address?</strong><span>The observed public address and optional browser IPv4/IPv6 tests.</span></a>
   <a class="tb-doc-card" href="/tools/connection-info/"><strong>My Connection Info</strong><span>TLS, HTTP and round-trip metadata for the connection to the edge.</span></a>
+  <a class="tb-doc-card" href="/tools/website-down-checker/"><strong>Website Down Checker</strong><span>One request from our server: up, slow, erroring or down, and the stage where a request stopped.</span></a>
+  <a class="tb-doc-card" href="/tools/broken-link-checker/"><strong>Broken Link Checker</strong><span>Every link, image and script on one page requested from our server: broken, unclear, redirected or working, with where each one sits.</span></a>
+  <a class="tb-doc-card" href="/tools/open-graph-preview/"><strong>Open Graph Preview</strong><span>The card every platform draws for a link, from its Open Graph, X and HTML tags, with the tags to add.</span></a>
+  <a class="tb-doc-card" href="/tools/robots-txt-checker/"><strong>Robots.txt &amp; Sitemap Checker</strong><span>Which search and AI crawlers the rules let in, the line that decides any URL, and the sitemaps they announce.</span></a>
+  <a class="tb-doc-card" href="/tools/ads-txt-checker/"><strong>Ads.txt &amp; App-Ads.txt Checker</strong><span>Every ads.txt line buyers would skip, and each seller checked against its ad system's sellers.json.</span></a>
+  <a class="tb-doc-card" href="/tools/llms-txt/"><strong>llms.txt Checker &amp; Generator</strong><span>The outline an AI agent reads from a site's llms.txt, every format problem, and a draft made from the site itself.</span></a>
 </div>
 
 ## Where processing happens
@@ -82,11 +88,11 @@ Every tool page says, next to its verdict, where your input goes. The rule is th
 - **Pasted evidence is parsed locally when the tool supports that mode.** A pasted domain still starts a live lookup. Website Hosting Checker also looks up network information for pasted public IP addresses. Read the tool’s processing notice before running it.
 - **A host name or domain means a named server-side check.** The server makes the required connection, DNS queries or published-file fetches, returns what it saw, and keeps nothing. The page names the port and the records or files it checks before it runs them.
 
-Nothing you enter is stored, put in a URL, or shown to advertisers.
+Explicit sibling-tool links temporarily use browser session storage and a random transfer token in the URL fragment. The transferred input itself is not placed in the URL. See each guide for its input handling and network requests.
 
 ## Break it, Heal it, History
 
-Every tool page has three controls that belong together:
+Tool pages offer Break it examples and applicable Heal it repairs. Pages with History also expose Revert and Reset input:
 
 - **Break it** loads a deliberate edge case built from your own input where that is possible, so you see what the finding looks like before it happens to you.
 - **Heal it** offers the repairs the tool found, each saying what it will change. After a break with no repair, it offers to restore the input you had before.
