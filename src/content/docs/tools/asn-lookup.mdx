@@ -14,7 +14,7 @@ limitations:
 
 The tool page is [tamperbox.dev/asn-lookup](https://tamperbox.dev/asn-lookup). It opens on a live lookup of `tamperbox.dev`, answers in one sentence which network announces the address, and shows the evidence under it: the origin networks, the registration of the block and the findings. This page is the long version: what the lookup asks, every rule it applies, what each finding means for someone holding a log line or a firewall rule, and how to confirm the answer without Tamperbox.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> the input is read in your browser first. Private, loopback, link-local, shared (carrier-grade NAT) and unique local addresses are explained there and never sent. The documentation ranges that Break it uses are answered from sample data in the browser. Any other address or AS number is sent to the Tamperbox server, which asks RIPEstat and the address registry and returns the observation. A domain starts A and AAAA queries on the same server first, and the first returned address is selected.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> the input is read in your browser first. Private, loopback, link-local, shared (carrier-grade NAT) and unique local addresses are explained there and never sent. The documentation ranges that Break it uses are answered from sample data in the browser. Any other address or AS number is sent to the Tamperbox server, which asks RIPEstat and the address registry and returns the observation. A domain starts with an A query on the same server and falls back to AAAA only if no A address is returned; the first address in the selected answer is looked up.</div>
 
 ## What the tool answers
 
@@ -78,6 +78,28 @@ One row per origin network: the organisation name, its registry handle, the AS n
 
 The registration of the address block: name, handle, address range, country and up to ten contacts with their roles (registrant, abuse, technical, administrative). The section is hidden for an AS number.
 
+### History
+
+History records input changes made by Break it and Heal it. It appears after the complete result and before Take it further. Revert undoes the newest change; Reset input returns to the input before the first retained change. Restore input before this break is also available in Heal it when there is a change to undo. Restoring does not create another history entry. This history is held in the page and disappears on reload. Restoring valid input runs the lookup again; typing or pasting a different input starts a new history.
+
+### Take it further
+
+These links carry values derived from the current result. A link is absent when its required evidence is missing; the tool does not invent a target.
+
+| Destination | Value and condition |
+| --- | --- |
+| [BGP Route Lookup](/tools/bgp-lookup/) | The routed prefix, when present |
+| [Reverse DNS](/tools/reverse-dns/) | The resolved address, only after a live domain lookup |
+| [TCP Ping](/tools/tcp-ping/) | The live address on port 443, only when an origin was observed |
+
+Reserved sample results offer only the derived links supported by local sample data. A live destination applies its own input rules; measurement tools still wait for an explicit run.
+
+### What this result means
+
+Six cards explain the current findings: Ask your agent, In plain words, What does it mean?, What good looks like, How to fix it, and Tool limitations. Expand a card to read the explanation and its method or guide link. Copying an agent prompt does not run another check. The cards interpret the evidence already shown; they are not an additional measurement or an independent confirmation.
+
+When the input is cleared, a check fails, or no result is available, result-specific cards clear and contextual links disappear. Read the verdict before relying on a card, and distinguish a missing observation from a confirmed negative result.
+
 ## Method
 
 ### 1. Reading the input
@@ -135,14 +157,14 @@ For an AS number the server asks RIPEstat's `as-overview` for the holder and whe
 
 | Finding | Severity | What it means for whoever holds the address | Fix |
 | --- | --- | --- | --- |
-| No origin (verdict) | CHECK | The selected collectors report no covering route; other observations may differ | The holder announces the covering prefix, with a route object and an RPKI ROA |
+| No network announces this address | CHECK | The selected collectors report no covering route; other observations may differ | The holder announces the covering prefix, with a route object and an RPKI ROA |
 | N origin networks for one prefix | CHECK | Several networks originate the prefix: anycast or multi-homing on purpose, or a misconfiguration or hijack | Compare origins in BGP Route Lookup; ask the holder which it authorised |
 | No routes seen from this network | CHECK | The AS is registered but announces nothing collectors see | Its operator checks sessions and exports |
-| No holder and no routes (verdict) | CHECK | No holder or announcement was reported; this does not independently establish allocation status | Check for a typo; investigate where it appeared |
+| No holder and no routes | CHECK | No holder or announcement was reported; this does not independently establish allocation status | Check for a typo; investigate where it appeared |
 | Registered holder and announcing network differ | INFO | Another network routes the block: a provider for a customer, leased space, mitigation | Report abuse to the announcing network first |
 | Names shown for the first eight networks | INFO | More than eight origins; all numbers are listed | Look the remaining numbers up one by one |
-| No registration (registration panel) | INFO | The registry has no record: unallocated or reserved space | |
-| Registry unavailable (registration panel) | INFO | The holder is unknown for now; routing evidence is unaffected | Check again later |
+| No registration record | INFO | The registry has no record: unallocated or reserved space | |
+| The registry did not answer | INFO | The holder is unknown for now; routing evidence is unaffected | Check again later |
 | This names a network, not a person | INFO | Both names are organisations; neither is a customer or a location | |
 | Its prefixes and visibility | INFO | BGP Route Lookup holds the per-prefix evidence for an AS | |
 
@@ -208,7 +230,7 @@ See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for 
 
 ### Transfers to another tool
 
-Explicit sibling-tool controls can carry the current input or observed address to another page. The shared navigation stores that value temporarily in tab-scoped `sessionStorage` and puts a random transfer token in the URL fragment. The receiving page consumes the transfer and applies its own input rules; tools with a manual Run button still require that action for live checks. This is not a saved result, and the destination can send the value to the services it needs. Ordinary edits and lookups do not create a durable report archive.
+Explicit sibling-tool controls can carry the current input or observed address to another page. The shared navigation stores that value temporarily in tab-scoped `sessionStorage`, accepts a transfer for at most one minute, and puts a random transfer token in the URL fragment. The input itself is not placed in the URL. The receiving page consumes the transfer and applies its own input rules; tools with a manual Run button still require that action for live checks. This is not a saved result, and the destination can send the value to the services it needs. Ordinary edits and lookups do not create a durable report archive.
 
 ## Limits
 

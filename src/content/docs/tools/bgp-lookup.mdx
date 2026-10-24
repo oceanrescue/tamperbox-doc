@@ -72,6 +72,28 @@ More specific prefixes also announced, less specific prefixes that cover this on
 
 The live feed from Cloudflare Radar, newest first, 25 to a page and up to 20 pages. Switch between Hijacks and Route leaks and between the last 24 hours, 7 days and 30 days. After an AS lookup or a prefix with exactly one origin, a chip narrows the feed to that network. Hijack rows show the detection time, prefixes, the announcing network, the expected origin and a confidence: High for a provider score of 8 or more, Medium for 5 to 7, Low below. Leak rows show the leaking network, the path segment, the number of prefixes and peers, and whether the leak has ended.
 
+### History
+
+History records input changes made by Break it and Heal it. It appears after the complete result and before Take it further. Revert undoes the newest change; Reset input returns to the input before the first retained change. Restore input before this break is also available in Heal it when there is a change to undo. Restoring does not create another history entry. This history is held in the page and disappears on reload. Restoring valid input runs the lookup again; typing or pasting a different input starts a new history.
+
+### Take it further
+
+These links carry values derived from the current result. A link is absent when its required evidence is missing; the tool does not invent a target.
+
+| Destination | Value and condition |
+| --- | --- |
+| [ASN Lookup](/tools/asn-lookup/) | The first origin AS, when a prefix has an origin |
+| [BGP Route Lookup](/tools/bgp-lookup/) | The first less-specific covering prefix, for live results |
+| [WHOIS/RDAP Lookup](/tools/whois-lookup/) | The network address of the live prefix |
+
+Reserved sample results offer only the derived links supported by local sample data. A live destination applies its own input rules; measurement tools still wait for an explicit run.
+
+### What this result means
+
+Six cards explain the current findings: Ask your agent, In plain words, What does it mean?, What good looks like, How to fix it, and Tool limitations. Expand a card to read the explanation and its method or guide link. Copying an agent prompt does not run another check. The cards interpret the evidence already shown; they are not an additional measurement or an independent confirmation.
+
+When the input is cleared, a check fails, or no result is available, result-specific cards clear and contextual links disappear. Read the verdict before relying on a card, and distinguish a missing observation from a confirmed negative result.
+
 ## Method
 
 ### 1. Reading the input
@@ -133,6 +155,7 @@ The server reads Cloudflare Radar's BGP hijack or route leak events for the chos
 | No routes seen from this network | CHECK | The AS announces nothing collectors see | Its operator checks sessions and exports |
 | … has host bits set | INFO | The typed prefix was read as its network address | Use the network address (Heal it) |
 | N more specific prefixes | INFO | Traffic to those parts follows the more specific route | Make sure each is intended and has its own ROA |
+| Routing status did not answer | INFO | The overview returned, but visibility, first/last seen and route-object details are unavailable | Retry later; do not treat missing details as a negative finding |
 | Collectors are a sample of the internet | INFO | Observations lag and cover only the collectors' peers | |
 | Incidents involving this network | INFO | The feed below can be narrowed to the network | |
 
@@ -190,7 +213,7 @@ See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/), and
 
 ### Transfers to another tool
 
-Explicit sibling-tool controls can carry the current input or observed address to another page. The shared navigation stores that value temporarily in tab-scoped `sessionStorage` and puts a random transfer token in the URL fragment. The receiving page consumes the transfer and applies its own input rules; tools with a manual Run button still require that action for live checks. This is not a saved result, and the destination can send the value to the services it needs. Ordinary edits and lookups do not create a durable report archive.
+Explicit sibling-tool controls can carry the current input or observed address to another page. The shared navigation stores that value temporarily in tab-scoped `sessionStorage`, accepts a transfer for at most one minute, and puts a random transfer token in the URL fragment. The input itself is not placed in the URL. The receiving page consumes the transfer and applies its own input rules; tools with a manual Run button still require that action for live checks. This is not a saved result, and the destination can send the value to the services it needs. Ordinary edits and lookups do not create a durable report archive.
 
 ## Limits
 
