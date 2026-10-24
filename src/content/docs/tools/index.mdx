@@ -24,6 +24,15 @@ Each tool's documentation has the same shape, so a finding on the page always ha
 | For agents | How to run the same check through the MCP server and what the result does not prove | The For agents band on the page |
 
 <div class="tb-doc-grid">
+  <a class="tb-doc-card" href="/tools/dns-lookup/"><strong>DNS Lookup</strong><span>Any record type from a public resolver or the zone itself, with status, flags and the DNSSEC answer bit.</span></a>
+  <a class="tb-doc-card" href="/tools/txt-lookup/"><strong>TXT Record Lookup</strong><span>Every TXT record on a name, named by what it is for, with its strings measured against the 255-character limit.</span></a>
+  <a class="tb-doc-card" href="/tools/cname-lookup/"><strong>CNAME Lookup</strong><span>The alias chain from a name to its address, with dangling targets, apex aliases and loops caught.</span></a>
+  <a class="tb-doc-card" href="/tools/ns-lookup/"><strong>NS Lookup</strong><span>The nameservers a zone delegates to, the provider behind each, and the unfinished migration.</span></a>
+  <a class="tb-doc-card" href="/tools/soa-lookup/"><strong>SOA Lookup</strong><span>A zone’s SOA field by field, the serial read as a date, and the four timers checked.</span></a>
+  <a class="tb-doc-card" href="/tools/aaaa-lookup/"><strong>AAAA Lookup</strong><span>A name’s IPv6 addresses, sorted by kind, with the network behind each and the IPv4 question answered.</span></a>
+  <a class="tb-doc-card" href="/tools/srv-lookup/"><strong>SRV Lookup</strong><span>The servers a service names, in priority order, with each one’s share of connections.</span></a>
+  <a class="tb-doc-card" href="/tools/caa-lookup/"><strong>CAA Lookup</strong><span>Which certificate authorities may issue for a name, inherited from parents, against the certificates already logged.</span></a>
+  <a class="tb-doc-card" href="/tools/dns-propagation/"><strong>DNS Propagation Checker</strong><span>Twelve public resolvers against the zone’s own answer, with the cache time left on every old answer.</span></a>
   <a class="tb-doc-card" href="/tools/json-to-yaml/"><strong>JSON to YAML Converter</strong><span>Convert locally, reject duplicate keys and unsafe integers, and verify the resulting data.</span></a>
   <a class="tb-doc-card" href="/tools/yaml-to-json/"><strong>YAML to JSON Converter</strong><span>Resolve compatible YAML values, inspect presentation loss, and test aliases and numeric limits.</span></a>
   <a class="tb-doc-card" href="/tools/cdn-detector/"><strong>CDN Detector</strong><span>How Tamperbox combines DNS, network and HTTPS response clues to identify a likely content delivery network.</span></a>

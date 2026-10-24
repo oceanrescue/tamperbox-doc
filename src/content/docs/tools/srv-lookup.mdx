@@ -1,0 +1,184 @@
+---
+title: SRV Lookup
+description: How the SRV Lookup reads a service's SRV records, groups targets by priority, shows each target's share of connections from its weight, recognises a service that is deliberately not offered, and how to fix and confirm each case.
+updated: 2026-10-24
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and guide for the Tamperbox SRV Lookup, which asks Cloudflare for the SRV records at a _service._protocol name over DNS over HTTPS (offering common services for a bare domain) or reads pasted SRV records in the browser, groups targets by priority, computes each target's share from the weights inside its priority, recognises the "." target, and reports port 0 and all-zero weights.
+prerequisites:
+  - A service name such as _sip._tcp.example.com, a bare domain to pick a service for, or SRV records to paste
+outputs:
+  - A verdict naming the servers and priority levels, findings, the targets drawn by priority with their shares, and the answer as dig-style text
+limitations:
+  - No target is contacted, so a listed server is not proof the service runs; clients that ignore SRV connect to their own defaults; that targets are not aliases is not checked
+---
+
+The tool page is [tamperbox.dev/srv-lookup](https://tamperbox.dev/srv-lookup). It opens on `_sip._tcp.harbor-supply.example`, a sample calling service on the reserved `.example` zone with two servers sharing the load and one backup. This page is the long version: how SRV records name a service's servers, how clients choose among them, the rules the tool applies, and how to publish a service correctly.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> a service name is sent to the Tamperbox server, which asks Cloudflare for its SRV records over DNS over HTTPS. A bare domain sends nothing until you pick a service. Pasted records are read in your browser and never uploaded. Sample names under <code>.example</code> are answered in the browser. Ordinary lookup results are not persisted by this page. An explicit handoff temporarily stores its value in session storage for one-use transfer.</div>
+
+## What the tool answers
+
+An SRV record tells a client which host and port provide a service for a domain, and in which order to try them ([RFC 2782](https://www.rfc-editor.org/rfc/rfc2782)). Mail clients use them to find IMAP and submission servers, calling apps to find SIP servers, chat servers to find each other, and games to find a server's real port. The tool answers:
+
+1. **Which servers provide this service?** Each target host and port.
+2. **Which one is tried first?** Targets grouped by priority, lowest first.
+3. **How are connections shared?** Each target's share inside its priority, from its weight.
+4. **Is the service deliberately off?** The "." target says so.
+
+It does not connect to the targets or check that they have addresses.
+
+## Inputs
+
+### A service name
+
+SRV records live at names that start with two underscore labels, the service and the protocol: `_sip._tcp.example.com`, `_imaps._tcp.example.com`, `_xmpp-server._tcp.example.com`, `_minecraft._tcp.example.com`. These names come from the IANA service name registry ([RFC 6335](https://www.rfc-editor.org/rfc/rfc6335#section-5)) and the underscored-name registry ([RFC 8552 section 2](https://www.rfc-editor.org/rfc/rfc8552#section-2)). The lookup runs when you stop typing, or on Enter.
+
+### A bare domain
+
+`example.com` has no SRV records of its own. The page says "Pick a service" and shows eight common services in the rail: `_sip._tls`, `_sip._tcp`, `_autodiscover._tcp`, `_submission._tcp`, `_imaps._tcp`, `_caldavs._tcp`, `_xmpp-client._tcp` and `_matrix._tcp`. Clicking one looks up that service under your domain. Nothing is sent before you pick.
+
+### Pasted records
+
+Anything with a space or a quote is read as records, in the browser: dig answers, zone file lines, or bare `priority weight port target` lines. A record that is not four fields of the right kinds is refused: "An SRV record is priority, weight, port and target, such as "10 60 5060 sip1.example.com."" Priority, weight and port must be whole numbers from 0 to 65535.
+
+### Files
+
+Drop a `.txt` file anywhere on the page.
+
+## Reading the result
+
+### Verdict and chips
+
+"3 servers for SIP (calls), 2 priority levels." with the first priority's shares under it, "sip1.example.com gets 60%, sip2.example.com gets 40%." A known service is named in words; an unknown one by its name. "Not offered:" for the "." target, "Pick a service:" for a bare domain.
+
+### Where your input goes
+
+Pasted records stay in the browser; a service name means one SRV query from our server.
+
+### Findings
+
+Checks and notes first, then the pass naming the targets and priority levels.
+
+### SRV records
+
+One block per priority, lowest first: "Priority 10, Tried first", then "Priority 20, Only when every priority 10 target fails". Each target shows `host:port`, a bar for its share, the share as a percentage (or "All" when it is alone in its priority) and its weight.
+
+### DNS response
+
+The answer as dig-style text, with a copy button.
+
+### History and Heal it
+
+History logs every Break it change, and a service picked for a bare domain; Revert and Reset input bring the input back.
+
+### Take it further
+
+The first target and its port to the TCP Ping (connection time), to the Minecraft Server Status for a `_minecraft._tcp` record, and, for a live name, to the Open Port Checker; the first target to the DNS Lookup for its addresses.
+
+## Method
+
+### 1. Reading each record
+
+Each record is split into priority, weight, port and target; a trailing dot on the target is dropped. A known service is named from a catalog of 17 (SIP over TLS, SIP, Teams and Skype federation, mail client setup, mail submission with and without TLS, IMAP with and without TLS, POP3 over TLS, calendars, contacts, XMPP for clients and servers, LDAP, Kerberos, Minecraft and Matrix federation).
+
+### 2. Rule: the "." target
+
+A set that is exactly one record with the target "." means the service is off. [RFC 2782](https://www.rfc-editor.org/rfc/rfc2782), Target field: "A Target of "." means that the service is decidedly not available at this domain." The verdict is "Not offered", with an info finding, "Service deliberately not offered". Clients stop at once instead of trying a default server.
+
+### 3. Priority
+
+Targets are grouped by priority, lowest first. [RFC 2782](https://www.rfc-editor.org/rfc/rfc2782), Priority field: "A client MUST attempt to contact the target host with the lowest-numbered priority it can reach; target hosts with the same priority SHOULD be tried in an order defined by the weight field." A higher priority is used only when every target before it fails.
+
+### 4. Weight and share
+
+Inside one priority, each target's share is its weight divided by the sum of the weights. RFC 2782, Weight field: "Larger weights SHOULD be given a proportionately higher probability of being selected." When every weight in a priority is 0, each target gets an equal share and an info finding says "Weights of 0": clients pick at random. The displayed share is a weight ratio, not a simulation of RFC 2782’s selection algorithm or a measured traffic share. In particular, mixed zero and nonzero weights are simplified; see the conformance boundary below.
+
+### 5. Check: port 0
+
+A real target with port 0: check, "Port 0". The port is the one the service listens on; port 0 has a meaning only beside the "." target.
+
+### 6. Verdict
+
+"N servers for service" with the number of priority levels when there is more than one, as pass, or check when a check applies.
+
+## Standards and conformance
+
+| Specification | Parts used | How the tool applies it | Where it stops |
+| --- | --- | --- | --- |
+| [RFC 2782](https://www.rfc-editor.org/rfc/rfc2782) | The format of the SRV RR: Priority, Weight, Port, Target | Priorities order the tiers; weights give shares; "." means not offered; field ranges 0 to 65535 | The target "MUST NOT be an alias" and must have address records: neither is checked. With mixed weights, a weight-0 target is shown at 0%, where the RFC asks for "a very small chance". Updated by RFC 6335 and [RFC 8553](https://www.rfc-editor.org/rfc/rfc8553) |
+| [RFC 8552](https://www.rfc-editor.org/rfc/rfc8552) | [2](https://www.rfc-editor.org/rfc/rfc8552#section-2) | Underscored service and protocol labels are accepted in names | The registry is not consulted; unknown services are shown by name |
+| [RFC 6335](https://www.rfc-editor.org/rfc/rfc6335) | [5](https://www.rfc-editor.org/rfc/rfc6335#section-5) | The page offers a fixed service-name catalog | |
+
+RFC 2782 has no numbered sections; its rules sit under the field names of "The format of the SRV RR", which is how they are cited here.
+
+## Finding reference
+
+| Finding | Severity | Source | What it means | Fix |
+| --- | --- | --- | --- | --- |
+| N targets in M priority levels | pass | [RFC 2782](https://www.rfc-editor.org/rfc/rfc2782) | Clients know where to connect and in which order | Test each target's port |
+| Service deliberately not offered | info | RFC 2782, Target | Clients stop at once | Replace with a real target if you offer the service |
+| Port 0 | check | RFC 2782, Port | Clients cannot connect to that target | Set the service's port |
+| Weights of 0 | info | RFC 2782, Weight | Clients pick among the targets at random | Set weights if the servers differ in capacity |
+| A bare domain holds no SRV records | info | [RFC 8552 2](https://www.rfc-editor.org/rfc/rfc8552#section-2) | SRV records live under service names | Pick a service, or type the full name |
+| No SRV record at name | info | [RFC 2308 2.2](https://www.rfc-editor.org/rfc/rfc2308#section-2.2) | Clients fall back to their defaults or guess | Publish the record your provider lists |
+| The name does not exist | fail | [RFC 2308 2.1](https://www.rfc-editor.org/rfc/rfc2308#section-2.1) | No service record here | Check the labels |
+| The resolver could not answer | fail | [RFC 1035 4.1.1](https://www.rfc-editor.org/rfc/rfc1035#section-4.1.1) | Validating resolvers return nothing | Check the DNSSEC chain |
+
+## Guide
+
+### Publish a service
+
+1. Find the exact name your software or provider expects, both labels included: `_submission._tcp`, `_imaps._tcp`, `_sip._tls`.
+2. Publish one record per server: `_imaps._tcp.example.com. 3600 IN SRV 0 0 993 imap.example.com.` The target must be a host name with A or AAAA records, not a CNAME.
+3. For failover, give the backup a higher priority number. For load sharing, give servers the same priority and weights in proportion to their capacity.
+4. Look the name up here, then test each target: the TCP Ping link opens the first `host:port`.
+
+Confirm from a terminal: `dig +short SRV _imaps._tcp.example.com` lists `priority weight port target`, and `dig +short A imap.example.com` should return an address, not a CNAME.
+
+### Say a service is not offered
+
+Publish `0 0 0 .` at the service name. Mail clients probing a domain then stop looking for that protocol instead of guessing hosts.
+
+### Mail client setup (autodiscover) goes to the wrong server
+
+`_autodiscover._tcp` points mail clients at the server that hands out their settings. Look it up here; a target left over from a previous mail provider sends every new client to the old one.
+
+### Break it cases
+
+| Case | What it loads | What it shows |
+| --- | --- | --- |
+| Service not offered | a sample service with the "." target | "Not offered" |
+| A bare domain | your domain without the service labels | "Pick a service" and the common services |
+| One server | a sample autodiscover record | "1 server for mail client setup" |
+| Bad fields | your first record with a field missing | The refusal with its reason |
+
+## Worked example
+
+`_sip._tcp.harbor-supply.example` lists three servers. At priority 10, `sip1.harbor-supply.example` has weight 60 and `sip2.harbor-supply.example` weight 40, so the displayed weight ratios are 60% and 40%; at priority 20, `sip-backup.harbor-supply.example` is used only when both of those fail. All three listen on port 5060. The verdict reads "3 servers for SIP (calls), 2 priority levels." and Findings folds one pass, "3 targets in 2 priority levels". Take it further hands `sip1.harbor-supply.example:5060` to the TCP Ping and the host to the DNS Lookup, both of which answer the sample in the browser. Press "Service not offered" for the "." target, and "A bare domain" to see the service picker.
+
+## For agents
+
+The Tamperbox MCP server exposes `srv_lookup` with a complete service `name` such as `_sip._tcp.example.com`; it does not offer services for a bare domain. It returns an `evidence` object containing the question, status, flags, answer and authority, plus `records` for the requested type. Keep these warnings with any conclusion:
+
+- The operation does not connect to the advertised service.
+- Shares follow from the weights inside a priority; clients that ignore SRV connect elsewhere.
+- One answer from one resolver at one moment.
+
+See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/).
+
+The response also contains parsed records and priority `tiers`; these are calculated shares, not a measurement of traffic distribution.
+
+## Limits
+
+- No target is contacted, and the targets' addresses are not looked up.
+- A target that is an alias is not reported, although RFC 2782 forbids it.
+- Pasted records are read as text.
+- One answer from one resolver at one moment.
+- Sample names under `.example` are answered in the browser.
+
+## References
+
+- [RFC 2782](https://www.rfc-editor.org/rfc/rfc2782): a DNS RR for specifying the location of services (DNS SRV). The Priority, Weight, Port and Target fields. Updated by RFC 6335 and [RFC 8553](https://www.rfc-editor.org/rfc/rfc8553).
+- [RFC 8552](https://www.rfc-editor.org/rfc/rfc8552): scoped interpretation of DNS resource records through underscored naming. Section 2.
+- [RFC 6335](https://www.rfc-editor.org/rfc/rfc6335): IANA procedures for the service name and port number registry. Section 5.
+- [RFC 2308](https://www.rfc-editor.org/rfc/rfc2308): sections 2.1 and 2.2.

@@ -35,6 +35,17 @@ export default defineConfig({
         ] },
         { label: 'Tools', items: [
           { label: 'All tool pages', link: '/tools/' },
+          { label: 'DNS records', collapsed: false, items: [
+            { label: 'DNS Lookup', link: '/tools/dns-lookup/' },
+            { label: 'DNS Propagation Checker', link: '/tools/dns-propagation/' },
+            { label: 'TXT Record Lookup', link: '/tools/txt-lookup/' },
+            { label: 'CNAME Lookup', link: '/tools/cname-lookup/' },
+            { label: 'NS Lookup', link: '/tools/ns-lookup/' },
+            { label: 'SOA Lookup', link: '/tools/soa-lookup/' },
+            { label: 'AAAA Lookup', link: '/tools/aaaa-lookup/' },
+            { label: 'SRV Lookup', link: '/tools/srv-lookup/' },
+            { label: 'CAA Lookup', link: '/tools/caa-lookup/' },
+          ] },
           { label: 'Email authentication', collapsed: false, items: [
             { label: 'MX Lookup & Email Domain', link: '/tools/email-domain/' },
             { label: 'Email Provider Lookup', link: '/tools/email-provider/' },

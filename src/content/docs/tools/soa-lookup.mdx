@@ -1,0 +1,190 @@
+---
+title: SOA Lookup
+description: How the SOA Lookup reads a zone's Start of Authority record field by field, decodes a date-shaped serial, checks the refresh, retry, expire and negative-caching timers against common ranges, and how to fix and confirm each one.
+updated: 2026-10-24
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and guide for the Tamperbox SOA Lookup, which asks Cloudflare for a name's SOA record over DNS over HTTPS (using the zone's SOA from the authority section for a name inside a zone) or reads a pasted SOA in the browser, explains its seven fields, reads a YYYYMMDDnn serial as a date, and checks refresh (20 minutes to 1 day), retry (2 minutes to 2 hours, shorter than refresh), expire (1 to 4 weeks) and negative caching (5 minutes to 1 day).
+prerequisites:
+  - A zone or a name inside it, or an SOA record to paste
+outputs:
+  - A verdict naming the zone, its primary and serial, findings for the timers and the serial, the seven fields explained, and the answer as dig-style text
+limitations:
+  - One resolver's answer at one moment, not every nameserver's serial; the timer ranges are common practice, not protocol limits, and many hosted providers do not use refresh, retry or expire
+---
+
+The tool page is [tamperbox.dev/soa-lookup](https://tamperbox.dev/soa-lookup). It opens on `harbor-supply.example`, a sample zone on the reserved `.example` zone with a date-shaped serial and timers in the usual ranges. This page is the long version: what each field of the SOA means, which timers matter to whom, the ranges the tool checks, and how to read a serial.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> a name is sent to the Tamperbox server, which asks Cloudflare for its SOA record over DNS over HTTPS. A pasted SOA is read in your browser and never uploaded. Sample names under <code>.example</code> are answered in the browser. Ordinary lookup results are not persisted by this page. An explicit handoff temporarily stores its value in session storage for one-use transfer.</div>
+
+## What the tool answers
+
+Every zone has exactly one SOA record, at its apex. It names the zone's primary nameserver and contact, carries a version number for the zone's contents, and sets four timers ([RFC 1035 section 3.3.13](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.13)). The tool answers:
+
+1. **Which zone holds this name?** For a name inside a zone, the SOA comes back in the authority section and names the zone.
+2. **Who runs it?** The primary nameserver (MNAME) and the contact mailbox (RNAME).
+3. **When did it last change?** The serial, read as a date when it has the YYYYMMDDnn shape.
+4. **Are the timers sensible?** Refresh, retry and expire, which steer secondary nameservers, and the negative TTL, which reaches every visitor.
+
+It does not ask each nameserver for its serial, so it cannot tell you whether every server has the latest copy; the [DNS Propagation Checker](https://tamperbox.dev/dns-propagation) with type NS, or `dig` against each server, does that.
+
+## Inputs
+
+### A name
+
+`example.com`, or any name inside it. The lookup runs when you stop typing, or on Enter. A pasted address or email address is reduced to its host or domain.
+
+### A pasted SOA
+
+Anything with a space is read as records, in the browser: a dig answer, a zone file line, or the bare seven fields. A record with fewer than seven fields, or a serial or timer that is negative or non-finite, is refused with the reason ("An SOA record has seven fields…", "Serial and timers must be whole numbers of seconds."). Parentheses from multi-line zone file records are ignored. Despite the diagnostic saying “whole numbers,” the current parser accepts non-negative fractional values and does not enforce the unsigned 32-bit range. Treat this as an inspection tool, not a zone-file validator.
+
+### Files
+
+Drop a `.txt` file anywhere on the page.
+
+## Reading the result
+
+### Verdict and chips
+
+"Zone example.com: primary ns1.example.net, serial 2026101301." when the timers pass, or the first timer problem otherwise, for example "Refresh is short: 5 minutes". The line under it says when the zone last changed, or that the serial is a counter, or that the name is inside the zone shown. The chip counts the timer checks that pass.
+
+### Where your input goes
+
+A pasted SOA stays in the browser; a name means one SOA query from our server.
+
+### Findings
+
+The timer and serial findings; passes fold into one line.
+
+### SOA records
+
+The seven fields, each with its value and its meaning in words: primary nameserver, contact (with the first dot read as the @), serial, refresh, retry, expire, negative TTL.
+
+### DNS response
+
+The answer as dig-style text, with a copy button.
+
+### History and Heal it
+
+History logs every Break it and Heal it change. For a pasted SOA with a timer out of range, Heal it rewrites the out-of-range timers to common values (refresh 2 hours, retry 15 minutes, expire 2 weeks, negative TTL 1 hour) and keeps the rest.
+
+### Take it further
+
+The serial's date as a Unix timestamp (a new tab of the timestamp tool), the primary nameserver to the DNS Lookup for its addresses, the contact's domain to the email domain check, and the zone to the DNSSEC Checker.
+
+## Method
+
+### 1. Finding the SOA
+
+The server asks Cloudflare for the SOA at the name. At an apex the answer holds it. For a name inside a zone, the answer is empty and the zone's SOA comes back in the authority section, as [RFC 2308 section 3](https://www.rfc-editor.org/rfc/rfc2308#section-3) requires: "Name servers authoritative for a zone MUST include the SOA record of the zone in the authority section of the response when reporting an NXDOMAIN or indicating that no data of the requested type exists." The page uses that record and says the name is inside its zone.
+
+### 2. The fields
+
+| Field | Meaning ([RFC 1035 section 3.3.13](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.13)) | How the page shows it |
+| --- | --- | --- |
+| MNAME | "the name server that was the original or primary source of data for this zone" | Primary nameserver |
+| RNAME | "the mailbox of the person responsible for this zone" | Contact: the first unescaped dot becomes the @; `\.` stays a dot |
+| SERIAL | "The unsigned 32 bit version number of the original copy of the zone" | The number, and its date when it has the YYYYMMDDnn shape |
+| REFRESH | the interval before secondaries check for a new serial | Seconds, and in words |
+| RETRY | the interval before a failed refresh is retried | Seconds, and in words |
+| EXPIRE | how long secondaries keep answering without reaching the primary | Seconds, and in words |
+| MINIMUM | today, the TTL of negative answers | "Negative TTL", seconds and words |
+
+The MINIMUM field changed meaning. [RFC 2308 section 4](https://www.rfc-editor.org/rfc/rfc2308#section-4) deprecated its original sense and made it the negative-caching TTL; [section 5](https://www.rfc-editor.org/rfc/rfc2308#section-5) sets the lifetime of a cached negative answer to "the minimum of the SOA.MINIMUM field and SOA's TTL".
+
+### 3. The serial
+
+A serial is read as a date only when it has ten digits, YYYYMMDDnn, with a month from 01 to 12 and a day from 01 to 31: "Changed on 2026-10-13, change 1 of that day." That is a convention ([RFC 1912 section 2.2](https://www.rfc-editor.org/rfc/rfc1912#section-2.2) recommends it), not a rule. Any serial that is not date-shaped and below one billion gives an info finding, "Serial is a counter": the number only says the zone changed, not when. Large counters such as Unix-time serials, common at hosted providers, give no finding. Serials are compared by secondaries with sequence-space arithmetic ([RFC 1982](https://www.rfc-editor.org/rfc/rfc1982#section-3)), so ordinary numeric comparison is insufficient around wraparound; this page does not compare two zone versions.
+
+### 4. The timer ranges
+
+Each timer is compared with a range; below it the finding is "Name is short: duration", above it "Name is long: duration", both checks; inside it a pass, "Name: duration".
+
+| Timer | Range checked | Why | Source |
+| --- | --- | --- | --- |
+| Refresh | 20 minutes to 1 day | Shorter adds load for no benefit; longer leaves secondaries stale | [RFC 1912 2.2](https://www.rfc-editor.org/rfc/rfc1912#section-2.2) suggests 20 minutes to 12 hours, longer with NOTIFY |
+| Retry | 2 minutes to 2 hours, and shorter than refresh | A failed refresh should be retried sooner than the next regular check | RFC 1912 2.2: "typically some fraction of the refresh interval" |
+| Expire | 1 to 4 weeks | Longer than a plausible outage, so secondaries do not stop serving | RFC 1912 2.2: "2-4 weeks are suggested values" |
+| Negative TTL | 5 minutes to 1 day | How long a "does not exist" is remembered | [RFC 2308 section 5](https://www.rfc-editor.org/rfc/rfc2308#section-5) |
+
+A retry that is not shorter than refresh adds a separate check, "Retry is not shorter than refresh". The ranges are common practice, not limits in any protocol; the tool accepts one week of expire where RFC 1912 suggests two, because many providers publish one week.
+
+### 5. Verdict
+
+The first timer check names the verdict; otherwise the zone, its primary and its serial, as a pass.
+
+## Standards and conformance
+
+| Specification | Sections used | How the tool applies it | Where it stops |
+| --- | --- | --- | --- |
+| [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035) | [3.3.13](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.13) | All seven fields are parsed and explained | Values are not checked against the zone's own NS set |
+| [RFC 2308](https://www.rfc-editor.org/rfc/rfc2308) | [3](https://www.rfc-editor.org/rfc/rfc2308#section-3), [4](https://www.rfc-editor.org/rfc/rfc2308#section-4), [5](https://www.rfc-editor.org/rfc/rfc2308#section-5) | MINIMUM is shown as the negative TTL; the authority SOA is used below the apex | The lower of MINIMUM and the record's TTL is explained, not computed |
+| [RFC 1912](https://www.rfc-editor.org/rfc/rfc1912) | [2.2](https://www.rfc-editor.org/rfc/rfc1912#section-2.2) | Basis for the timer ranges and the date-shaped serial | Informational; the tool's ranges are slightly wider |
+| [RFC 1982](https://www.rfc-editor.org/rfc/rfc1982) | [3](https://www.rfc-editor.org/rfc/rfc1982#section-3) | Explains why a serial must only grow | Serials are not compared across servers |
+
+## Finding reference
+
+| Finding | Severity | Source | What it means | Fix |
+| --- | --- | --- | --- | --- |
+| Refresh / Retry / Expire / Negative caching: duration | pass | [RFC 1912 2.2](https://www.rfc-editor.org/rfc/rfc1912#section-2.2) | The timer is in the usual range | None |
+| Refresh is short / long | check | RFC 1912 2.2 | Secondaries check too often, or fall behind | Set 20 minutes to 1 day |
+| Retry is short / long | check | RFC 1912 2.2 | Failed refreshes are retried too often, or too late | Set 2 minutes to 2 hours |
+| Retry is not shorter than refresh | check | RFC 1912 2.2 | A failing secondary waits as long as a healthy one | Set retry to a fraction of refresh |
+| Expire is short / long | check | RFC 1912 2.2 | Secondaries stop serving during an outage, or serve stale data for months | Set 1 to 4 weeks |
+| Negative caching is short / long | check | [RFC 2308 5](https://www.rfc-editor.org/rfc/rfc2308#section-5) | Resolvers re-ask for missing names constantly, or new names stay invisible for a day or more | Set 5 minutes to 1 hour |
+| Serial is a counter | info | [RFC 1912 2.2](https://www.rfc-editor.org/rfc/rfc1912#section-2.2) | The serial does not say when the zone changed | None, or use YYYYMMDDnn |
+| No SOA record at name | info | [RFC 2308 3](https://www.rfc-editor.org/rfc/rfc2308#section-3) | No SOA came back, even in the authority section | Look up the zone apex |
+| The name does not exist | fail | [RFC 2308 2.1](https://www.rfc-editor.org/rfc/rfc2308#section-2.1) | No zone or name here | Check the name |
+| The resolver could not answer | fail | [RFC 1035 4.1.1](https://www.rfc-editor.org/rfc/rfc1035#section-4.1.1) | Validating resolvers return nothing | Check the DNSSEC chain |
+
+## Guide
+
+### A new name takes hours to appear
+
+Someone (often a monitoring check or the person creating the record) asked for the name before it existed, and resolvers cached the "does not exist" for the negative TTL. Lower the negative TTL to five minutes to an hour if your provider lets you, then create names before anyone asks for them. `dig example.com SOA` shows the last field.
+
+### Secondaries serve old data
+
+Raise the serial with every change if you edit the zone by hand; secondaries copy the zone only when the serial grows. Then compare each server: `dig +short @ns1.example.net example.com SOA` and the same against every other nameserver should show the same serial. A server stuck on an old serial for longer than the refresh interval is not receiving NOTIFY or cannot transfer the zone.
+
+### Your provider will not let you change the timers
+
+Many hosted providers manage the SOA themselves and replicate without zone transfers, so refresh, retry and expire have no effect. Then the timers are the provider's setting and nothing needs to change; the negative TTL still matters to visitors.
+
+### Break it cases
+
+| Case | What it loads | What it shows |
+| --- | --- | --- |
+| A subdomain | `mail.harbor-supply.example` | The zone's SOA, from the authority section |
+| Timers out of range | your SOA with refresh 5 minutes, retry 10 minutes, expire 1 day, negative TTL 1 week | Every timer check, and Heal it rewriting them |
+| Not an SOA | your SOA cut to three fields | The refusal with its reason |
+| Name does not exist | `nohost.` in front of your name | NXDOMAIN |
+
+## Worked example
+
+`harbor-supply.example` names `ivy.ns.cloudflare.com` as its primary and `hostmaster@harbor-supply.example` as its contact; the serial `2026101301` reads as "Changed on 2026-10-13, change 1 of that day". Refresh is 10000 seconds (2 hours 46 minutes), retry 2400 seconds (40 minutes), expire 604800 seconds (7 days) and the negative TTL 1800 seconds (30 minutes): all four inside their ranges, folded into one passing line. The verdict reads "Zone harbor-supply.example: primary ivy.ns.cloudflare.com, serial 2026101301." These are the values Cloudflare publishes for its zones, used here on a reserved sample name. Take it further turns the serial's date into a Unix timestamp, hands `harbor-supply.example` (the contact's domain) to the email domain check, and the zone to the DNSSEC Checker.
+
+## For agents
+
+The Tamperbox MCP server exposes `soa_lookup` with a `name`, returning an `evidence` object with the question, status, flags, answer and authority, plus `records` for the requested type. Keep these warnings with any conclusion:
+
+- Timer assessments are operational guidance, not proof of zone correctness.
+- One resolver's answer; individual nameservers can hold different serials while a change spreads.
+- A date-shaped serial is a convention, not a guarantee of the change date.
+
+See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/).
+
+The operation adds parsed SOA fields and timer checks for records in the answer. Unlike the page, it does not substitute an authority-section SOA when the answer has none.
+
+## Limits
+
+- One answer from one resolver at one moment; nameservers are not compared.
+- The ranges are common practice; hosted providers may ignore refresh, retry and expire.
+- A pasted SOA is read as text.
+- Sample names under `.example` are answered in the browser.
+
+## References
+
+- [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035): section 3.3.13, SOA RDATA; section 4.1.1, response codes.
+- [RFC 1912](https://www.rfc-editor.org/rfc/rfc1912): common DNS operational and configuration errors. Section 2.2, SOA records. Informational.
+- [RFC 1982](https://www.rfc-editor.org/rfc/rfc1982): serial number arithmetic. Section 3. Updates [RFC 1034](https://www.rfc-editor.org/rfc/rfc1034) and RFC 1035.
+- [RFC 2308](https://www.rfc-editor.org/rfc/rfc2308): negative caching. Sections 2.1, 3, 4 and 5. Updates [RFC 1034](https://www.rfc-editor.org/rfc/rfc1034) and RFC 1035.
