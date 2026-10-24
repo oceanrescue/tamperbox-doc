@@ -1,0 +1,208 @@
+---
+title: Reverse DNS Lookup
+description: How the Reverse DNS Lookup finds the PTR name of each address, checks that the name resolves back to the same address the way mail receivers do, and what each finding means for a server that sends mail.
+updated: 2026-10-24
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and repair guide for the Tamperbox Reverse DNS Lookup, which looks up the PTR record of up to 20 IP addresses (or a domain's own A and AAAA addresses), checks forward confirmation (the iprev test of RFC 8601), flags generic provider names and explains private addresses without a lookup.
+prerequisites:
+  - Up to 20 IPv4 or IPv6 addresses, or a domain
+outputs:
+  - A verdict across the addresses, one row per address with its reverse name, whether it points back and the network that holds it, findings worst first, and the underlying PTR and forward-lookup evidence
+limitations:
+  - One public resolver at one moment; at most 20 addresses; the generic-name test is a heuristic, and the name a server announces in its SMTP greeting is not seen
+---
+
+The tool page is [tamperbox.dev/reverse-dns](https://tamperbox.dev/reverse-dns). It opens with a live lookup of `tamperbox.dev` and takes a list of addresses or a domain. This page is the long version: how a reverse name is found, what "points back" means and why mail receivers care, every finding, and how to fix each one with whoever holds the address.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> each public address is sent to the Tamperbox server, which asks public DNS for its PTR record and for the addresses of each name returned, and looks up the network that holds it. Private, loopback, link-local and documentation addresses are explained in your browser and never looked up. The page does not persist the input or report.</div>
+
+## What the tool answers
+
+A PTR record maps an address back to a name. Mail receivers use it to ask a connecting server "who are you?", and then check that the name it gives leads back to the same address. The tool answers, for each address:
+
+1. **Does it have a reverse name?** The PTR record at its reverse name under `in-addr.arpa` or `ip6.arpa`.
+2. **Does the name point back?** Whether the name's A or AAAA records include the address: forward-confirmed reverse DNS.
+3. **Does the name look like a provider's default?** A heuristic for names built from the address.
+4. **Who holds the address?** The network associated with it. That label is a starting point for finding the provider, not proof of who controls the reverse zone.
+
+It does not check the name a server announces in its SMTP greeting (HELO or EHLO), does not test whether the address is on a blocklist, and does not send mail.
+
+## Inputs
+
+### IP addresses
+
+One or more addresses separated by spaces, commas or new lines; duplicates are dropped and the first 20 are checked (with more, the verdict says "The first 20 of N are shown"). A list made only of addresses is checked as soon as it is complete, without waiting for typing to pause. Each IPv4 part must be a number from 0 to 255 written without leading zeros; otherwise the check stops with "203.0.113.256 is not an IPv4 address: each part must be 0 to 255." Use ordinary compressed or expanded hexadecimal IPv6. The browser uses a permissive colon-and-hex detector, not a complete IPv6 parser; dotted IPv4 suffixes and scope identifiers are not accepted by that detector.
+
+### A domain
+
+`example.com`. When you stop typing (or on Enter), the domain's A and AAAA records are looked up and each address is checked. A domain with neither stops with "example.com has no address to look up."
+
+Before a domain is checked, pasted text is reduced to what the tool takes: `https://www.example.com/contact` becomes `www.example.com`, an email address becomes its domain, quotes and brackets are dropped. Text that contains nothing usable stays as pasted and the page explains why. Typing is never rewritten mid-word, and Break it loads are never cleaned.
+
+### Files
+
+Drop a text file on the page, or open one with Add a file: it is read in the browser, up to 256 KiB, and never uploaded. A list of addresses exported from a log works.
+
+## Reading the result
+
+### Verdict and chips
+
+For one address the verdict is its outcome: the name and "points back to this address", "does not point back", "No PTR record", or "Private address". For several it counts them: "3 of 3 addresses have a name; 2 point back." The chips count confirmed names, names not confirmed, and addresses without a PTR; each scrolls to the table.
+
+### Findings
+
+Findings report addresses without PTR and names not forward-confirmed (CHECK), plus generic names (INFO). Successful forward confirmation and special-address explanations appear in the result rows rather than separate PASS or INFO findings. The [finding reference](#finding-reference) lists every finding.
+
+### Reverse names
+
+One row per address: the address with the reverse name it was looked up at, the PTR name or names (or "No PTR record", or why a private address has none), whether each name points back, and the network that holds the address with its AS number. On phones each row becomes a card.
+
+## Method
+
+### 1. Reading the input
+
+A text in which every word is an IP address is a list; anything else is read as a domain. For a domain the A and AAAA records are fetched and their addresses become the list. Duplicates are dropped, IPv4 parts are validated, and the first 20 are kept.
+
+### 2. Addresses with no public reverse name
+
+These are recognised before any query and explained without a lookup: 10.0.0.0/8, 172.16.0.0/12 and 192.168.0.0/16 ([RFC 1918](https://www.rfc-editor.org/rfc/rfc1918#section-3)); 127.0.0.0/8 and `::1` (loopback); 169.254.0.0/16 and addresses starting `fe80:` (link-local); 100.64.0.0/10 (shared address space, [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598#section-7)); `fc00::/7` (unique local IPv6); and the unspecified addresses. Their result rows explain why the address is not queried. Documentation addresses (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24 and `2001:db8::/32`) are answered from the sample zone in the browser.
+
+### 3. The reverse name and its PTR
+
+Each address is turned into the name its PTR record lives at. IPv4 octets are reversed under `in-addr.arpa` ([RFC 1035, section 3.5](https://www.rfc-editor.org/rfc/rfc1035#section-3.5)), so 203.0.113.80 becomes `80.113.0.203.in-addr.arpa`. IPv6 is expanded to 32 hex digits, reversed one digit at a time and placed under `ip6.arpa` ([RFC 3596, section 2.5](https://www.rfc-editor.org/rfc/rfc3596#section-2.5)). A PTR query is made at that name; every PTR answer is a name.
+
+An address with no PTR answer gives "N addresses without a PTR record" (CHECK). [RFC 1912, section 2.1](https://www.rfc-editor.org/rfc/rfc1912#section-2.1): "Every Internet-reachable host should have a name", and "For every IP address, there should be a matching PTR record in the in-addr.arpa domain."
+
+### 4. Forward confirmation
+
+For every name returned, the A records (for an IPv4 address) or AAAA records (for IPv6) of that name are fetched, and the original address is looked for among them; IPv6 addresses are compared in normalized form, so compressed and expanded spellings match. This is the "iprev" test of [RFC 8601, section 3](https://www.rfc-editor.org/rfc/rfc8601#section-3): "If the client peer's IP address is I, the list of names to which I maps (after a "PTR" query) is the set N, and the union of IP addresses to which each member of N maps … is L, then this test is successful if I is an element of L."
+
+A row passes ("Points back") when any of its names resolves to the address. Otherwise it shows "Points elsewhere" and counts toward "N names not forward-confirmed" (CHECK), with each name and the address it does not resolve to. A forward lookup that fails also counts as not confirmed.
+
+### 5. Generic names
+
+A name is called generic when it contains both of the last two parts of the address (for 203.0.113.80, both `113` and `80`), or contains one of the words dyn, dynamic, pool, dsl, cable, dhcp, static, ip, host, cust, client, ec2 or compute at the start or after a dot or hyphen. It gives "N generic names" (INFO): fine for a web server, weaker for a mail server. Short octets make the number test loose; treat it as a prompt to look, not a verdict.
+
+### 6. The network
+
+Each public address is also looked up for the network that announces it; the row shows the network's name and AS number. A failure here leaves the cell empty and does not affect the result.
+
+### 7. The verdict
+
+| Situation | Verdict | Level |
+| --- | --- | --- |
+| One private or special address | "Private address: … has no public reverse name." | INFO |
+| One address, no PTR | "No PTR record for …" | CHECK |
+| One address, name points back | "name points back to this address." | PASS |
+| One address, name does not point back | "name does not point back to …" | CHECK |
+| Several addresses | "N of M addresses have a name; K point back." | CHECK if any lacks a PTR or is not confirmed, else PASS |
+
+## Standards and conformance
+
+| Specification | Sections used | How the tool applies them | Where it stops |
+| --- | --- | --- | --- |
+| [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035) | [3.5](https://www.rfc-editor.org/rfc/rfc1035#section-3.5), IN-ADDR.ARPA | IPv4 reverse names | |
+| [RFC 3596](https://www.rfc-editor.org/rfc/rfc3596) | [2.5](https://www.rfc-editor.org/rfc/rfc3596#section-2.5), IP6.ARPA | IPv6 reverse names, nibble by nibble | |
+| [RFC 8601](https://www.rfc-editor.org/rfc/rfc8601) (obsoletes RFC 7601) | [3](https://www.rfc-editor.org/rfc/rfc8601#section-3), the iprev method | Forward confirmation exactly as the algorithm states | RFC 8601 asks verifiers to limit the names evaluated; the tool evaluates every name a PTR returns, without an explicit per-address PTR-name cap in the browser; the MCP operation caps it at 20 |
+| [RFC 1912](https://www.rfc-editor.org/rfc/rfc1912) (informational) | [2.1](https://www.rfc-editor.org/rfc/rfc1912#section-2.1) | The basis of the missing-PTR and mismatch findings | Its rule that a PTR must not point at a CNAME is not checked separately |
+| [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918), [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598), [RFC 4291](https://www.rfc-editor.org/rfc/rfc4291#section-2.5.6), [RFC 4193](https://www.rfc-editor.org/rfc/rfc4193#section-3.1) | Private, shared, link-local and unique local ranges | Recognised in the browser without a lookup | |
+| [RFC 5737](https://www.rfc-editor.org/rfc/rfc5737), [RFC 3849](https://www.rfc-editor.org/rfc/rfc3849) | Documentation ranges | Answered from the sample zone | |
+
+RFC 8601 itself notes that "there is some contention regarding the wisdom and reliability of this test", and leaves the details to each verifier. Receivers do apply it: Gmail's [email sender guidelines](https://support.google.com/a/answer/81126) tell senders to ensure that sending IPs have valid forward and reverse DNS records. The tool reports the test as RFC 8601 states it; what a given receiver does with a failure is its own policy.
+
+## Finding reference
+
+| Finding | Severity | Source | What it means for a sending server | Fix |
+| --- | --- | --- | --- | --- |
+| Name points back (row/verdict) | PASS | [RFC 8601 3](https://www.rfc-editor.org/rfc/rfc8601#section-3) | Passes iprev | Keep PTR and A in step on moves |
+| N addresses without a PTR record | CHECK | [RFC 1912 2.1](https://www.rfc-editor.org/rfc/rfc1912#section-2.1) | Many receivers refuse or score down the mail | [Set a PTR](#setting-a-ptr-record) at whoever holds the address |
+| N names not forward-confirmed | CHECK | [RFC 8601 3](https://www.rfc-editor.org/rfc/rfc8601#section-3) | Fails iprev: the name is treated as unverified | [Fix the A record or the PTR](#a-name-that-points-elsewhere) |
+| N generic names | INFO | | Valid, but trusted less for mail | Use a name under your own domain |
+| Private or special address (row/verdict) | INFO | [RFC 1918 3](https://www.rfc-editor.org/rfc/rfc1918#section-3) | Not on the internet; no public name | Check the public address instead |
+| Not an IPv4 address (stops the check) | | | | Correct the address |
+| No address to look up (stops the check) | | | The domain has no A or AAAA | Check the domain or enter addresses |
+
+## Guide
+
+### Setting a PTR record
+
+1. Find who holds the address: the network column, or [WHOIS on the address](https://tamperbox.dev/whois-lookup). For a server at a hosting or cloud provider, it is the provider.
+2. In the provider's panel, find the reverse DNS (rDNS, PTR) setting for the address; some providers set it only through a support request. If you hold the block yourself, ask your upstream to delegate the reverse zone to your nameservers.
+3. Set the PTR to a name under your own domain, such as `mail.example.com`.
+4. Make sure that name has an A record (or AAAA for IPv6) with exactly this address.
+5. Check here: the row should read "Points back".
+
+### A name that points elsewhere
+
+Decide which side is wrong. If the PTR name is meant for this server, add or correct its A or AAAA record. If the PTR names something else (the bare domain, which points at the web host, is the commonest case), change the PTR to a name that already resolves here. After a migration, both the PTR of the new address and the A record of the old name usually need updating.
+
+### IPv6 sending
+
+If the server sends over IPv6, its IPv6 address needs a PTR too, and the name needs an AAAA record. Some providers set reverse DNS only for IPv4 by default.
+
+### Independent check
+
+```sh
+# The PTR name of an address
+dig +short -x 198.51.100.24
+# The addresses of that name: the original address must be among them
+dig +short A out.example.com
+dig +short AAAA out.example.com
+```
+
+### Break it cases
+
+Each case replaces the input with a fixture. Several addresses loads a mixed list; the individual cases load one address or a sample domain.
+
+| Case | What it loads | What it shows |
+| --- | --- | --- |
+| Address without PTR | `192.0.2.150`, a documentation address with no PTR | "1 address without a PTR record" |
+| Name points elsewhere | `198.51.100.81`, whose name resolves to another address | "1 name not forward-confirmed" |
+| Private address | `10.20.4.17` | The private range, explained without a lookup |
+| A domain | `harbor-supply.example` | Domain mode: the domain's own addresses |
+
+## Worked example
+
+The page opens by resolving `tamperbox.dev` live, then looking up the PTR and forward records for its returned addresses. The set of addresses and their reverse names can change. Read the number of named addresses and the number that point back separately: a PTR alone does not establish forward confirmation.
+
+For each row, compare the original address with the addresses returned for its PTR name. A missing PTR on a web-hosting address is not proof that the website is broken. The same observation on an actual outgoing mail address is relevant to receiver policy, but the tool does not establish whether this address sends mail.
+
+For a repeatable offline contrast, choose Several addresses in Break it. Its documentation addresses include a confirmed name, a generic cloud-style name, a name pointing elsewhere and an address without a PTR. Treat those names and network labels as sample data. Heal it restores the previous input; restoring the live domain starts new queries and can produce different results.
+
+## For agents
+
+Search the Tamperbox MCP catalog for `reverse_dns` and inspect its schema. It accepts one public `ip`, not the browser's domain or address list. Resolve a domain separately if needed. The result includes PTR evidence, names and forward-confirmation evidence for at most 20 distinct PTR names, with `totalNames` and `truncated`. An unavailable forward lookup has `forwardConfirmed: null`, rather than false. It does not return the browser's generic-name or network-provider assessment. Keep these warnings with any conclusion:
+
+- One public resolver at one moment; caches elsewhere may differ, especially right after a PTR change.
+- Forward confirmation is the RFC 8601 iprev test; what a receiver does with a failure is its own policy.
+- The generic-name finding is a heuristic.
+
+See [Connect an MCP client](/mcp/connect/) for the calling pattern and [Security and privacy](/reference/security/) for where the addresses travel.
+
+### Keeping an observation reproducible
+
+Record the target, the time of the lookup, the relevant raw records and the resolver or registry that supplied them. Repeat a live lookup after a configuration change instead of assuming a restored input restores an old response. A saved RDAP object or pasted DNSSEC record set is a snapshot: its dates are assessed against the current clock, but its contents are not refreshed.
+
+Separate absence from failure. A successful response with no applicable record, a rejected input, a timeout and an upstream error support different conclusions. Preserve an error when a query could not complete; do not replace it with a claim that the record does not exist. When sharing findings, include the narrow observation and the relevant limitation rather than only the verdict label.
+
+## Limits
+
+- One public resolver, from one place, at one moment.
+- At most 20 addresses per check.
+- The name in a server's SMTP greeting, blocklists and delivery itself are not checked.
+- "Generic name" is a heuristic.
+- Break it fixtures use documentation addresses answered in the browser.
+- The page does not persist the input or report.
+
+## References
+
+- [RFC 1035, Domain Names: Implementation and Specification](https://www.rfc-editor.org/rfc/rfc1035), section 3.5
+- [RFC 1912, Common DNS Operational and Configuration Errors](https://www.rfc-editor.org/rfc/rfc1912) (informational), section 2.1
+- [RFC 1918, Address Allocation for Private Internets](https://www.rfc-editor.org/rfc/rfc1918), section 3
+- [RFC 3596, DNS Extensions to Support IP Version 6](https://www.rfc-editor.org/rfc/rfc3596), section 2.5
+- [RFC 3849](https://www.rfc-editor.org/rfc/rfc3849) and [RFC 5737](https://www.rfc-editor.org/rfc/rfc5737), documentation address ranges
+- [RFC 4193, Unique Local IPv6 Unicast Addresses](https://www.rfc-editor.org/rfc/rfc4193), section 3.1
+- [RFC 4291, IP Version 6 Addressing Architecture](https://www.rfc-editor.org/rfc/rfc4291), section 2.5.6
+- [RFC 6598, IANA-Reserved IPv4 Prefix for Shared Address Space](https://www.rfc-editor.org/rfc/rfc6598), section 7
+- [RFC 8601, Message Header Field for Indicating Message Authentication Status](https://www.rfc-editor.org/rfc/rfc8601), section 3 (obsoletes RFC 7601)
+- [Gmail email sender guidelines](https://support.google.com/a/answer/81126)

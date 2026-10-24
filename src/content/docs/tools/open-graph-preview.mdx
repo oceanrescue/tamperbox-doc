@@ -1,7 +1,7 @@
 ---
 title: Open Graph Preview
 description: How the Open Graph preview reads a page's share tags, the fallback order each platform's card follows, every rule it applies to the image, title, description and X card, and how to fix each finding.
-updated: 2026-10-20
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox Open Graph Preview, which fetches a page and its share image from the Tamperbox server, or reads pasted HTML in the browser, and draws a large card, an X card, a chat unfurl and a search result from its Open Graph, Twitter and HTML tags.
 prerequisites:
@@ -12,9 +12,9 @@ limitations:
   - Previews approximate each platform's card; platforms cache cards; tags added by scripts are not seen; live images stop at 5 MiB
 ---
 
-The tool page is [tamperbox.dev/open-graph-preview](https://tamperbox.dev/open-graph-preview). It opens on a sample shop page answered by a fixture, says whether the link is ready to share, and draws the cards platforms make from it. This page is the long version: where each card gets its text and image, every rule, what each finding means, and how to fix it.
+The tool page is [tamperbox.dev/open-graph-preview](https://tamperbox.dev/open-graph-preview). It checks `tamperbox.dev` live when opened,  says whether the link is ready to share, and draws the cards platforms make from it. This page is the long version: where each card gets its text and image, every rule, what each finding means, and how to fix it.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> pasted HTML is read in your browser. Its share image is fetched only if you press the button that loads it, and then through the Tamperbox server, so your browser never contacts that site. A page address is fetched by the Tamperbox server, with its share image, when you stop typing. Nothing is stored. Sample addresses on the reserved <code>.example</code> zone are answered in the browser from a fixture.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> pasted HTML is read in your browser. Its share image is fetched only if you press the button that loads it, and then through the Tamperbox server, so your browser never contacts that site. A page address is fetched by the Tamperbox server, with its share image, when you stop typing. Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history. Sample addresses on the reserved <code>.example</code> zone are answered in the browser from a fixture.</div>
 
 ## What the tool answers
 
@@ -43,21 +43,13 @@ One of: "Ready to share.", "Shares with a small image.", "Shares without a pictu
 
 ### Findings
 
-Every finding, worst first; two or more passes fold into one line.
+Every finding, worst first; passing findings remain visible.
 
-### History
+### Related checks and input transfer
 
-Every Break it and Heal it change, newest first. **Revert** undoes the newest; **Reset input** returns to what you entered. After a break, Heal it offers "Restore input before this break", or the missing tags for pasted HTML.
+Use Check the rest to open another website tool with the current address. Pasted files are not transferred through these links. Transfers temporarily use browser `sessionStorage` with a one-use random token in the URL fragment; the input itself is not in the URL. The destination accepts a transfer for less than one minute and removes the token. Manual checks still wait for their run button or Enter.
 
-### Take it further
-
-Addresses the tags name, handed to another tool:
-
-- **Redirect chain of og:url** opens the [redirect checker](https://tamperbox.dev/redirect-checker) on the address the tags call canonical (`og:url`, or the canonical link), to confirm it answers without a detour.
-- **Does the share image answer?** opens the [website down checker](/tools/website-down-checker/) on the image address, which shows its status and time.
-- **Certificate of the image host** opens the [SSL certificate checker](/tools/ssl-checker/) on the image's host, shown when the image is on another host or failed to load.
-
-Not shown for pasted HTML, which has no address to carry. Nothing is put in a URL.
+To inspect a value from the result, copy that specific address into the relevant tool. A separate check collects new evidence and can return a different result; do not interpret navigation as confirmation of the original verdict.
 
 ### Previews
 
@@ -150,6 +142,8 @@ Relative image and canonical addresses are resolved as URI references against th
 
 ## Finding reference
 
+### Images
+
 | Finding | Severity | What it means for whoever shares the link | Fix |
 | --- | --- | --- | --- |
 | No og:image | FAIL | No picture, or one the platform picks | Add a 1200 × 630 og:image with a full https:// address |
@@ -162,6 +156,11 @@ Relative image and canonical addresses are resolved as URI references against th
 | Image is n × n (under 1200 × 630) | INFO | Soft on dense screens | Use 1200 × 630 |
 | Image is n × n | PASS | Sharp on large cards | |
 | Image ratio is n:1 | INFO | Edges cropped | Use 1.91:1 |
+
+### Text and page metadata
+
+| Finding | Severity | What it means for whoever shares the link | Fix |
+| --- | --- | --- | --- |
 | No og:title, No og:description | CHECK | Falls back to search text | Add them (Tags to add) |
 | No og:url, No og:type, No og:site_name | INFO | Platform defaults | Add them if they matter |
 | key appears n times | CHECK | Only the first is read | Remove the duplicate writer |
@@ -213,28 +212,25 @@ Platforms cache cards. Use each platform's own refresh tool to fetch the link ag
 | Image too small | A sample page with a small image | Shown as a small thumbnail; the small card layout |
 | Image missing | A sample page whose image answers 404 | og:image did not load |
 
-The first three build on your own input: the HTML you pasted, or the HTML your address returned. Heal it after a break offers the missing tags or "Restore input before this break".
+The first three build on your own input: the HTML you pasted, or the HTML your address returned. Break it replaces the field with an adapted input or a labelled fixture. Keep a copy of your original input if you want to restore it after experimenting.
 
 ## Worked example
 
-The page opens on `www.harbor-supply.example`, a sample shop on the reserved `.example` zone. It is an Example: the page and its image come from a fixture in the browser.
+The page opens with a live fetch of `tamperbox.dev`, followed by its selected preview image when present. The metadata and image can change, so use the displayed evidence rather than expecting a fixed title, size or finding count.
 
-- The verdict reads "Ready to share." with a large 1200 × 630 image, and names two limitations: X crops the image to a small square, and search results cut the title and description.
-- Findings: "X shows a small square" because `twitter:card` is `summary`; "Title is 76 characters"; "Description is 169 characters"; and the image size as a pass.
-- The previews show the large card, the X summary card with its square crop, the chat unfurl and a search result with both texts cut.
-- Take it further offers the redirect chain of the page's og:url and the status of its share image, both answered by the destinations' own fixtures.
+Read the source tag named beside each field. A fallback title can make the preview look complete while the explicit Open Graph tag is missing. Compare the large card, X, chat and search layouts, then read Findings and Tags found. These are approximations made from one fetched HTML response; they do not reproduce a platform's cache or execute the page's scripts.
 
-Replace it with your own page in the box on the left.
+Use **No picture** or another Break it case to inspect missing metadata, then review the suggested tags. When working with pasted HTML, the repair modifies only the text in the tool. Publish changes through your own site workflow and fetch the page again. If the real platform still shows an old card, use its refresh/debug tool; rerunning Tamperbox does not purge that platform's cache.
 
 ## For agents
 
-The Tamperbox MCP server can fetch a page the same way; search its catalog for the page or Open Graph operation and call it with the full URL. Keep these warnings with any conclusion:
+Use the Tamperbox MCP `search` tool to inspect the schema, then `execute` with `tamperbox.request` to call `POST /v1/tools/open_graph_preview`. Supply the required `url` field as a full public HTTP or HTTPS URL. The operation is named `open_graph_preview`; the browser page’s hyphenated identifier is not the API operation name.
 
-- The previews approximate each platform; platforms change layouts and cache cards.
-- Tags added by scripts are not seen.
-- Image size thresholds come from platform guidance, not a standard.
+The response contains fetched `evidence`, extracted `meta`, a resolved `card` and `checks`. Unlike the browser preview, the operation does not fetch and decode the image or verify its dimensions, and it never executes page scripts.
 
-See [Connect an MCP client](/mcp/connect/) and [Security and privacy](/reference/security/).
+Keep the input, observation time, source limitations and inconclusive results with any summary. Browser fixtures are demonstrations, not live MCP targets. Do not turn missing evidence into a passing check or infer that an inaccessible resource has been deleted.
+
+See [Connect an MCP client](/mcp/connect/), [Code mode](/mcp/code-mode/) and [Security and privacy](/reference/security/).
 
 ## Limits
 
@@ -242,7 +238,7 @@ See [Connect an MCP client](/mcp/connect/) and [Security and privacy](/reference
 - Scripts do not run; tags a script adds are not seen.
 - Search cuts are by character count, close to but not the same as pixel widths.
 - Platforms cache cards; this tool cannot refresh them.
-- Live fetches are rate limited. Nothing is stored.
+- Live fetches are rate limited. Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history.
 
 ## References
 

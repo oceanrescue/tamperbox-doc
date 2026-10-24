@@ -1,0 +1,275 @@
+---
+title: security.txt Checker
+description: How the security.txt checker fetches /.well-known/security.txt or reads a pasted file, every RFC 9116 rule it applies, what each finding means for a researcher, and how to fix and verify it.
+updated: 2026-10-24
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and repair guide for the Tamperbox security.txt Checker, which fetches https://host/.well-known/security.txt from the Tamperbox server (up to five HTTPS redirects, 64 KiB) or reads a pasted file in the browser, and checks it against RFC 9116.
+prerequisites:
+  - A public host name, or the text of a security.txt file to paste
+outputs:
+  - A verdict, findings worst first, the file read as a researcher reads it, the Expires date on a time axis, the file listing with problem lines marked, and a corrected file or a draft form
+limitations:
+  - Only /.well-known/security.txt is requested; OpenPGP signatures are separated but not verified; validity is syntax and rules, not proof that anyone reads the Contact
+---
+
+The tool page is [tamperbox.dev/security-txt-checker](https://tamperbox.dev/security-txt-checker). It opens by checking `google.com` live, answers in one sentence, and shows the file the way a security researcher reads it. This page is the long version: what our server requests, every rule the page applies with the section of [RFC 9116](https://www.rfc-editor.org/rfc/rfc9116) behind it, what each finding means, and how to fix and confirm it.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> a host name is sent to the Tamperbox server, which requests https://host/.well-known/security.txt once, follows up to five HTTPS redirects, reads at most 64 KiB and returns the file with its status and media type. A pasted or dropped file is read in your browser and never uploaded. The same parser judges both. History and tool-to-tool transfers remain in the browser; see Browser transfers below.</div>
+
+## What the tool answers
+
+The questions come in the order a researcher who just found a vulnerability would ask them:
+
+1. **Is there a file where the standard says to look?** The address, the HTTP status, the media type, and whether the answer is a text file or the site's web page.
+2. **Is it valid under RFC 9116?** A Contact, exactly one Expires, well-formed lines and absolute URIs.
+3. **Where do I send the report, and how?** The contacts in order of preference, the key to encrypt with, the policy to read first, and the languages accepted.
+4. **Is it still current?** The Expires date against the moment of the check and the one-year recommendation.
+5. **Is this the official copy?** Whether a Canonical line names the address the file was actually served from.
+6. **What should the file say instead?** A corrected file, or, when there is no file, a short form that writes one.
+
+## Inputs
+
+### A host name
+
+`example.com` or `www.example.com`. The check runs when you stop typing, or on Enter. The page refuses, with a message under the field, a value with spaces, a scheme other than `http` or `https`, an IP address, a host without a top-level domain, a port other than 80 or 443 and credentials in an address; the last two offer a repair. Our server refuses private hosts and addresses with "Use a public domain name, not a private host or IP address."
+
+### A pasted or dropped file
+
+Text is read as a file when it has a line break, or when its first line looks like a field (`Contact: …`), a comment (`#`) or a PGP header, and does not start with `http://` or `https://`. A dropped file is read the same way, up to 64 KiB. A missing final line break is added before checking, because clipboards usually drop it.
+
+### What the page does to pasted text
+
+| You paste | The field keeps | Why |
+| --- | --- | --- |
+| `https://github.com/oceanrescue/` | `github.com` | A full address is reduced to its host by the shared paste cleanup |
+| `security@example.com` or `mailto:` | `example.com` | The domain of an email address |
+| `"example.com"` or `<example.com>` | `example.com` | Quotes, brackets and trailing punctuation dropped |
+| A security.txt file | The file, unchanged | It is read locally |
+| Text that fits nothing | The text as pasted | The parser's own error explains it |
+
+Cleaning runs on paste, drop, handoff, Enter and leaving the field; it never rewrites what you type, and never touches Break it or Heal it loads.
+
+## Reading the result
+
+### Verdict and chips
+
+The verdict names the outcome first: "Valid security.txt.", "Not valid:" followed by the worst problem, or "No security.txt." when the address did not return a text file. The detail line says where the file came from, including the number of redirects. Chips count problems and things to check, the contacts, and the days to expiry; each scrolls to its evidence. Two privacy items say where this input went.
+
+### Findings
+
+Directly under the verdict, worst first. Errors make the file invalid; warnings do not. A finding tied to a line has a Show line button that highlights it in the file listing.
+
+### What a researcher sees
+
+The fields in the order a researcher uses them: Report to, Encrypt with, Read first, Thanks, Languages (with names), Canonical, Hiring, Advisories and Other fields. A missing field says what its absence means. Every value has a Copy button; a value on an error line carries a Problem badge.
+
+### Expiry, the file and the corrected file
+
+The Expires date on a time axis with the moment of the check and the one-year mark. The file as served, numbered, with problem lines marked. Under it, the corrected file to copy or download, or the draft form when there was no file.
+
+### History and Take it further
+
+History logs every Break it and Heal it load with Revert and Reset input. Take it further carries values from the file into other security tools: the host serving the Encryption key to the certificate checker, the first `https` Contact to the security headers checker, the first `https` Policy to the mixed content checker, and, after a redirect, the host that served the file to the certificate checker. Reserved example names are never offered.
+
+### Browser transfers
+
+Explicit tool links temporarily place the transferred input in browser `sessionStorage`. The URL fragment carries a random token, not the input. The receiving page accepts that token once, for its destination path and for less than one minute, then removes it from the address. A same-origin browser channel can complete a transfer into another tab. Ordinary documentation links do not transfer input. When browser storage is unavailable, navigation still works but the input may need to be pasted again.
+
+## Method
+
+### What our server requests
+
+One `GET https://host/.well-known/security.txt`, the location [RFC 9116 section 3](https://www.rfc-editor.org/rfc/rfc9116#section-3) defines: for web-based services the file MUST be placed under the `/.well-known/` path. Redirects are followed up to five hops; each target must be `https://`, a loop stops the check, and a sixth redirect stops it with "Too many security.txt redirects." The body is read up to 64 KiB and decoded as strict UTF-8. The legacy `/security.txt` at the root, which section 3 allows only for legacy compatibility, as a copy or as a redirect to the /.well-known/ file, is not requested.
+
+### Response rules
+
+| Rule | Finding | Severity | Source |
+| --- | --- | --- | --- |
+| Final status is 200 | Not served | Error | [RFC 9116 section 3](https://www.rfc-editor.org/rfc/rfc9116#section-3) |
+| `Content-Type` is `text/plain`, and a charset, if present, is `utf-8` | Wrong media type | Error | [section 3](https://www.rfc-editor.org/rfc/rfc9116#section-3) |
+| Body is valid UTF-8 | Not UTF-8 | Error | [section 4](https://www.rfc-editor.org/rfc/rfc9116#section-4) |
+| Body fits in 64 KiB | Larger than 64 KiB | Error | Tool limit |
+
+Section 3 states the file "MUST have a Content-Type of 'text/plain' with the default charset parameter set to 'utf-8'". When the status is not 200, or the answer is HTML, the page treats the site as having no file and shows the draft form instead of a field report.
+
+### Line syntax
+
+Blank lines and lines starting with `#` are skipped ([section 2.1](https://www.rfc-editor.org/rfc/rfc9116#section-2.1)). Every other line must be a field name, a colon, a space and a non-empty value without control characters, as in the ABNF of [section 4](https://www.rfc-editor.org/rfc/rfc9116#section-4); otherwise it is "Not a field line". Field names are case-insensitive ([section 2](https://www.rfc-editor.org/rfc/rfc9116#section-2)). A fetched file must end with a line break, CRLF or LF ([section 2.2](https://www.rfc-editor.org/rfc/rfc9116#section-2.2); "Last line has no line break"). Unknown fields are listed without an error, as [section 2.4](https://www.rfc-editor.org/rfc/rfc9116#section-2.4) allows extensions.
+
+### Field rules
+
+| Rule | Finding | Source |
+| --- | --- | --- |
+| At least one Contact | No way to report | [section 2.5.3](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.3): "This field MUST always be present" |
+| Exactly one Expires | No Expires date / Expires appears more than once | [section 2.5.5](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.5): "MUST always be present and MUST NOT appear more than once" |
+| Expires is RFC 3339 | Expires is not a date | [section 2.5.5](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.5), [RFC 3339 section 5.6](https://www.rfc-editor.org/rfc/rfc3339#section-5.6) |
+| Expires is in the future | The file has expired (error) | [section 2.5.5](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.5) |
+| Expires at most 366 days ahead | Expires more than a year ahead (warning) | [section 2.5.5](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.5): a value less than a year ahead is RECOMMENDED |
+| URIs are absolute | Not an absolute URI | [section 2.5.3](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.3), [section 4](https://www.rfc-editor.org/rfc/rfc9116#section-4), [RFC 3986 section 4.3](https://www.rfc-editor.org/rfc/rfc3986#section-4.3) |
+| Web URIs use `https` | A web address uses http:// | [section 2.5.3](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.3) and siblings: "MUST begin with 'https://'" |
+| One Preferred-Languages | Preferred-Languages repeated | [section 2.5.8](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.8) |
+| Valid language tags | Not a language tag | [section 2.5.8](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.8), [RFC 5646](https://www.rfc-editor.org/rfc/rfc5646) |
+| A Canonical matches the fetched URL | Canonical points elsewhere | [section 2.5.2](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.2) |
+
+The URI rule applies to Contact, Canonical, Encryption, Policy, Hiring and Acknowledgments. Dates are checked against the calendar, so `2027-02-30T00:00:00Z` and a bare `2027-03-01` both fail. Canonical is only compared for a fetched file.
+
+### Signed files
+
+A file starting with `-----BEGIN PGP SIGNED MESSAGE-----` is split from its signature and dash-escaping is removed, as [RFC 9580 section 7](https://www.rfc-editor.org/rfc/rfc9580#section-7) describes the cleartext framework. A malformed envelope is "Broken signature block" (error). A well-formed one is "Signed, not verified here" (warning): [RFC 9116 section 2.3](https://www.rfc-editor.org/rfc/rfc9116#section-2.3) RECOMMENDS a digital signature, and verifying the signature is the reader's job.
+
+### Heal it
+
+Each repair rewrites the file and checks it again: set Expires to 364 days after the check at midnight UTC; switch `http://` to `https://` in web fields; turn broken lines into comments; keep the first Preferred-Languages; point Canonical at the fetched URL; end the last line. A missing Contact is never invented. For a fetched file, a repair loads a corrected copy here; nothing changes on the site.
+
+## Standards and conformance
+
+### RFC 9116: A File Format to Aid in Security Vulnerability Disclosure
+
+Implemented: the location and media type of [section 3](https://www.rfc-editor.org/rfc/rfc9116#section-3); comments, line separators and the field rules of [sections 2.1 to 2.5](https://www.rfc-editor.org/rfc/rfc9116#section-2.5) for Contact, Expires, Encryption, Policy, Acknowledgments, Preferred-Languages, Canonical and Hiring; the ABNF of [section 4](https://www.rfc-editor.org/rfc/rfc9116#section-4) as one regular expression. All rules run in `public/lib/security-txt.js`, shared by the browser and the server, so a pasted file and a fetched one get the same report; the response rules run on the server only. CSAF lines (registered later in the IANA registry) are listed but not validated.
+
+### Where the tool is stricter or more lenient
+
+| Point | RFC text | Tool |
+| --- | --- | --- |
+| Space after the colon | The ABNF of section 4 requires it (`fs SP`) | Requires the space and reports `Name:value` as a broken line |
+| Expires a year ahead | Less than a year is RECOMMENDED | Warning after 366 days, never an error |
+| Signature | Signing is RECOMMENDED | Absence is not a finding; presence is not verified |
+| Canonical | Lists every URI the file is served from | Checked only against the final fetched URL |
+| Legacy location | `/security.txt` may redirect | Not requested |
+| Size | No limit stated | 64 KiB read limit |
+
+The space rule follows the ABNF, so that the most common hand-written slip, `Contact:mailto:…`, is caught before a lenient reader guesses.
+
+### RFC 3339, RFC 5646 and RFC 3986
+
+Expires follows the `date-time` production of [RFC 3339 section 5.6](https://www.rfc-editor.org/rfc/rfc3339#section-5.6), including fractional seconds and offsets. Language tags are checked with the browser's `Intl.getCanonicalLocales`, which implements [RFC 5646](https://www.rfc-editor.org/rfc/rfc5646) (BCP 47). URIs must be absolute in the sense of [RFC 3986 section 4.3](https://www.rfc-editor.org/rfc/rfc3986#section-4.3) and parse with the WHATWG URL parser.
+
+## Finding reference
+
+### The response
+
+| Finding | Severity | Section | What it means | Fix |
+| --- | --- | --- | --- | --- |
+| Not served | Error | [3](https://www.rfc-editor.org/rfc/rfc9116#section-3) | No file where readers look | Publish one at `/.well-known/security.txt` |
+| Wrong media type | Error | [3](https://www.rfc-editor.org/rfc/rfc9116#section-3) | Strict readers refuse it; HTML means the app answers every path | Serve `text/plain; charset=utf-8` |
+| Not UTF-8 | Error | [4](https://www.rfc-editor.org/rfc/rfc9116#section-4) | Garbled characters | Save as UTF-8 |
+| Larger than 64 KiB | Error | Tool limit | Not a security.txt | Replace what is served |
+
+### Fields and lines
+
+| Finding | Severity | Section | What it means | Fix |
+| --- | --- | --- | --- | --- |
+| No way to report | Error | [2.5.3](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.3) | Nowhere to send a report | Add a Contact |
+| No Expires date / appears more than once | Error | [2.5.5](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.5) | Readers may ignore the file | Keep one Expires |
+| Expires is not a date | Error | [2.5.5](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.5) | No expiry can be read | Use RFC 3339 |
+| The file has expired | Error | [2.5.5](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.5) | Contacts treated as stale | Review, re-date |
+| Expires more than a year ahead | Warning | [2.5.5](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.5) | Valid, reviewed too rarely | Date it within a year |
+| A web address uses http:// | Error | [2.5.3](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.3) | Can be read or replaced in transit | Use `https://` |
+| Not an absolute URI | Error | [4](https://www.rfc-editor.org/rfc/rfc9116#section-4) | Readers cannot follow it | Add the scheme |
+| Not a field line | Error | [4](https://www.rfc-editor.org/rfc/rfc9116#section-4) | Line skipped | `Name: value` or `#` |
+| Preferred-Languages repeated | Error | [2.5.8](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.8) | Readers take one line | One comma list |
+| Not a language tag | Error | [2.5.8](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.8) | Languages unclear | BCP 47 tags |
+| Canonical points elsewhere | Error | [2.5.2](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.2) | Copy cannot be told current | Name the served URL |
+| Last line has no line break | Error | [2.2](https://www.rfc-editor.org/rfc/rfc9116#section-2.2) | Last field may be dropped | End with a newline |
+
+### Signatures
+
+| Finding | Severity | Section | What it means | Fix |
+| --- | --- | --- | --- | --- |
+| Broken signature block | Error | [RFC 9580 section 7](https://www.rfc-editor.org/rfc/rfc9580#section-7) | Fields unreliable | Re-sign or publish unsigned |
+| Signed, not verified here | Warning | [2.3](https://www.rfc-editor.org/rfc/rfc9116#section-2.3) | Signature not checked | Verify with `gpg --verify` |
+
+## Guide
+
+### No file, or a web page instead of a file
+
+1. Fill in the draft form: Contact is required, Expires is filled with a date 364 days ahead, Canonical is set to the requested address.
+2. Download the file and publish it at `/.well-known/security.txt`.
+3. On a single-page app, add a static route for that path before the catch-all, and map it to `text/plain; charset=utf-8`.
+
+Confirm outside Tamperbox:
+
+```sh
+curl -sSI https://example.com/.well-known/security.txt
+curl -sS https://example.com/.well-known/security.txt
+```
+
+The first must show `HTTP/2 200` (or `HTTP/1.1 200`) and `content-type: text/plain; charset=utf-8`.
+
+### Expired, missing or distant Expires
+
+Review every Contact and Policy first, then set one Expires less than a year ahead, for example with `date -u -d '+364 days' +%Y-%m-%dT00:00:00Z` on GNU systems. Put the next review in the same calendar as certificate and domain renewals.
+
+### Canonical mismatch
+
+Usually `www` against the bare domain, or a file copied from another site. List every address the file is served at, one Canonical each, or point the only Canonical at the address the redirects end on. Heal it writes the fetched URL.
+
+### Signed files
+
+Edit the plain text, then sign it again with `gpg --clearsign security.txt` and publish the `.asc` output as `security.txt`. Every repair here removes the signature, because the signed text changes.
+
+### Break it cases
+
+| Case | What it loads | Finding |
+| --- | --- | --- |
+| Expired yesterday | Your file with Expires set to yesterday | The file has expired |
+| No Contact | Your file without Contact lines | No way to report |
+| Expires twice | A second Expires line | Expires appears more than once |
+| Contact over http | A web field switched to `http://` | A web address uses http:// |
+| No space after a colon | `Name:value` on one line | Not a field line |
+| Served as a web page | A sample host answering with HTML | No security.txt |
+| No security.txt | A sample host answering 404 | Not served |
+
+The first five build on your own file when you checked one; the last two use reserved `harbor-supply.example` hosts answered locally.
+
+## Worked example
+
+The page opens on `google.com`, checked live, because among the candidates compared it shows the most of the tool: a redirect, several fields and one instructive warning. The file belongs to Google and can change at any time, so read the result on the page rather than the details here, which describe the file as it was when this page was written.
+
+### What the opening check shows
+
+The request to `https://google.com/.well-known/security.txt` is redirected once to the `www` host, and the file found there is read field by field:
+
+| Part | What the page shows | Finding |
+| --- | --- | --- |
+| Redirect | "after 1 redirect" in the verdict's detail line | None: the redirect stays on `https://` |
+| Contact | A web form first, then a `mailto:` address, in order of preference | None |
+| Encryption, Policy, Acknowledgments, Hiring | Listed under Encrypt with, Read first, Thanks and Hiring | None |
+| Canonical | "Not set" | None: Canonical is optional |
+| Expires | A date several years ahead on the time axis, past the one-year mark | Expires more than a year ahead (warning) |
+
+### Reading it
+
+The verdict is "Valid security.txt." with a warning chip, because the only finding is a recommendation, not an error. Heal it offers "Set Expires to" a date 364 days after the check, and the corrected file appears under the listing. Take it further offers the certificate of the host serving the key, the security headers of the report page, mixed content on the policy page and the certificate of the host the redirect ended on.
+
+### Other states
+
+`tamperbox.dev` and `gmail.com` publish no file; checking either shows "No security.txt." and the draft form, with Expires and Canonical filled in. The Break it cases show every error on a copy of the file you checked.
+
+## For agents
+
+The Tamperbox MCP server exposes `search` and `execute`. Call `POST /v1/tools/security_txt_checker` with `{ "domain": "example.com" }` through `tamperbox.request` to fetch and check a live file; the result carries `status`, `report` (`fields`, `contacts`, `expires`, `signature`, `findings`, `valid`), `redirects` and `truncated`. For a file you already have, `POST /v1/tools/security_txt_analyze` parses it without any network request and can apply named repairs. Apply [Method](#method) to read the findings, and keep these warnings with any conclusion:
+
+- `valid: true` is syntax and rules, not evidence that the Contact is monitored.
+- `signature: "unverified"` means a signature was found, not that it is genuine.
+- A Contact URL is never fetched; the check does not test any vulnerability.
+
+See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for the calling pattern.
+
+## Limits
+
+- One request from one server location at one moment, to `/.well-known/security.txt` only; the legacy `/security.txt` is not requested.
+- OpenPGP signatures are separated but not verified.
+- A valid file does not show who controls the contacts, that anyone reads them, or that testing is permitted; read the Policy.
+- A pasted file has no status, media type, redirects or fetch URL, so those rules and the Canonical comparison need a live check.
+- CSAF and other extension fields are listed but not validated.
+- History is a browser interaction record, not server monitoring. Explicit tool links use temporary browser storage as described in [Browser transfers](#browser-transfers).
+
+## References
+
+- [RFC 9116, A File Format to Aid in Security Vulnerability Disclosure](https://www.rfc-editor.org/rfc/rfc9116). Informational, April 2022, with no updating RFC. Its [errata](https://www.rfc-editor.org/errata/rfc9116), checked 22 October 2026: one verified editorial erratum (6946) corrects a cross-reference in the section 4 ABNF comment from section 3.5.3 to 2.5.3, and changes no rule; two reported, unverified technical errata propose that the section 2.5.5 example use an upper-case `Z` (7264) and that the ABNF `CRLF` allow a bare LF to match section 2.2 (7743). The tool already reads a lower-case `z` as valid, as RFC 3339 permits, and accepts LF or CRLF line endings, so neither proposal changes a result. Sections used: [2](https://www.rfc-editor.org/rfc/rfc9116#section-2), [2.1](https://www.rfc-editor.org/rfc/rfc9116#section-2.1), [2.2](https://www.rfc-editor.org/rfc/rfc9116#section-2.2), [2.3](https://www.rfc-editor.org/rfc/rfc9116#section-2.3), [2.4](https://www.rfc-editor.org/rfc/rfc9116#section-2.4), [2.5](https://www.rfc-editor.org/rfc/rfc9116#section-2.5), [2.5.2](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.2), [2.5.3](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.3), [2.5.5](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.5), [2.5.8](https://www.rfc-editor.org/rfc/rfc9116#section-2.5.8), [3](https://www.rfc-editor.org/rfc/rfc9116#section-3) and [4](https://www.rfc-editor.org/rfc/rfc9116#section-4).
+- [RFC 3339, Date and Time on the Internet: Timestamps](https://www.rfc-editor.org/rfc/rfc3339). Proposed Standard, July 2002; updated by [RFC 9557](https://www.rfc-editor.org/rfc/rfc9557). Section used: [5.6](https://www.rfc-editor.org/rfc/rfc3339#section-5.6).
+- [RFC 5646, Tags for Identifying Languages](https://www.rfc-editor.org/rfc/rfc5646). Best Current Practice, BCP 47, September 2009.
+- [RFC 3986, Uniform Resource Identifier: Generic Syntax](https://www.rfc-editor.org/rfc/rfc3986). Internet Standard, STD 66, January 2005. Section used: [4.3](https://www.rfc-editor.org/rfc/rfc3986#section-4.3).
+- [RFC 9580, OpenPGP](https://www.rfc-editor.org/rfc/rfc9580). Proposed Standard, July 2024; obsoletes [RFC 4880](https://www.rfc-editor.org/rfc/rfc4880). Section used: [7](https://www.rfc-editor.org/rfc/rfc9580#section-7), the cleartext signature framework.
+- [IANA security.txt Fields registry](https://www.iana.org/assignments/security-txt-fields). The registered field names, including CSAF.

@@ -1,7 +1,7 @@
 ---
 title: Broken Link Checker
 description: How the broken link checker collects every link, image and script on one page, requests each from the Tamperbox server, sorts them into broken, unclear, redirected and working, and how to fix each kind.
-updated: 2026-10-20
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox Broken Link Checker, which fetches one page, collects up to 300 unique link, image, script, style sheet, frame and media addresses from its HTML, and requests each from the Tamperbox server with HEAD then GET, 8 seconds per link and 45 seconds in all.
 prerequisites:
@@ -12,9 +12,9 @@ limitations:
   - One page's initial HTML as a signed-out visitor sees it; 401, 403, 429 and timeouts are reported as unclear, not broken; at most 300 addresses
 ---
 
-The tool page is [tamperbox.dev/broken-link-checker](https://tamperbox.dev/broken-link-checker). It opens on a sample shop page answered by a fixture, says how many links are broken, and lists every address worst first. This page is the long version: what is collected, how each address is requested, how each result is sorted, and how to fix each kind.
+The tool page is [tamperbox.dev/broken-link-checker](https://tamperbox.dev/broken-link-checker). It loads `tamperbox.dev` and waits for you to run a live check,  says how many links are broken, and lists every address worst first. This page is the long version: what is collected, how each address is requested, how each result is sorted, and how to fix each kind.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> typing an address is read in your browser only. Nothing is sent until you press Check links or Enter. Then the Tamperbox server fetches the page and requests each address on it, without cookies, and streams the results back. Nothing is stored. Sample addresses on the reserved <code>.example</code> zone are answered in the browser from a fixture.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> typing an address is read in your browser only. Nothing is sent until you press Check links or Enter. Then the Tamperbox server fetches the page and requests each address on it, without cookies, and returns the completed result. Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history. Sample addresses on the reserved <code>.example</code> zone are answered in the browser from a fixture.</div>
 
 ## What the tool answers
 
@@ -41,21 +41,13 @@ Refused before any request: spaces, schemes other than http and https, `mailto:`
 
 ### Findings
 
-Worst first: broken links within the site, broken links to other sites, redirected links, links that could not be checked, addresses still on `http://`. When some links work alongside problems, "n links work" is listed as a pass. Two or more passes fold into one line.
+Worst first: broken links within the site, broken links to other sites, redirected links, links that could not be checked, addresses still on `http://`. The findings show "Every link works" only when no other finding was produced and at least one address was checked; the tally separately counts working links. Passing findings remain visible.
 
-### History
+### Related checks and input transfer
 
-Every Break it change, newest first, with what it replaced. **Revert** undoes the newest; **Reset input** returns to what you entered. After a break, Heal it offers "Restore input before this break".
+Use Check the rest to open another website tool with the current address. Pasted files are not transferred through these links. Transfers temporarily use browser `sessionStorage` with a one-use random token in the URL fragment; the input itself is not in the URL. The destination accepts a transfer for less than one minute and removes the token. Manual checks still wait for their run button or Enter.
 
-### Take it further
-
-Values taken out of the link list:
-
-- **Redirect chain of the first redirected link** opens the [redirect checker](https://tamperbox.dev/redirect-checker) on that link, not on the page, so you see each hop it takes.
-- **Is the first broken link's site down?** opens the [website down checker](/tools/website-down-checker/) on the broken address, which tells a dead page from a dead site.
-- **Certificate of a link that failed to connect** opens the [SSL certificate checker](/tools/ssl-checker/) on that link's host, shown only when a link failed at the connection stage.
-
-Each opens the other tool with the value already in its box, through a one-use handoff; nothing is put in a URL.
+To inspect a value from the result, copy that specific address into the relevant tool. A separate check collects new evidence and can return a different result; do not interpret navigation as confirmation of the original verdict.
 
 ### Summary
 
@@ -67,7 +59,7 @@ Every address, worst first, then by line. Filter chips show one kind at a time. 
 
 ## Method
 
-The page calls `/api/web/links`. The server answers with newline-delimited JSON, one event per line (the page, then each skipped and checked address, then a done line), so the list fills as results arrive. Cards and Take it further wait for the done line.
+The page calls `/api/web/links`. The current server collects the results and returns one JSON object containing `page`, `links`, `skipped` and `done`. The browser client turns those collections into events for its renderer; this does not mean each destination response is streamed from the server as it finishes.
 
 ### Fetching the page
 
@@ -111,7 +103,7 @@ A link counts as within the site when its origin (scheme, host and port, [RFC 64
 | Answered below 400 directly | Working | PASS |
 | Non-HTTP scheme, same-page anchor, invalid URL | Not checked | listed only |
 
-Why 401, 403 and 429 are not broken: [RFC 9110, section 15.5.2](https://www.rfc-editor.org/rfc/rfc9110#section-15.5.2) (401) and [15.5.4](https://www.rfc-editor.org/rfc/rfc9110#section-15.5.4) (403) mean the server understood the request and refused it to this client; [RFC 6585, section 4](https://www.rfc-editor.org/rfc/rfc6585#section-4) (429) means too many requests. A signed-in visitor, or any visitor not behind a bot filter, may get the page. A 404 ([section 15.5.5](https://www.rfc-editor.org/rfc/rfc9110#section-15.5.5)) or 410 ([section 15.5.11](https://www.rfc-editor.org/rfc/rfc9110#section-15.5.11)) says the resource is not there for anyone.
+Why 401, 403 and 429 are not broken: [RFC 9110, section 15.5.2](https://www.rfc-editor.org/rfc/rfc9110#section-15.5.2) (401) and [15.5.4](https://www.rfc-editor.org/rfc/rfc9110#section-15.5.4) (403) mean the server understood the request and refused it to this client; [RFC 6585, section 4](https://www.rfc-editor.org/rfc/rfc6585#section-4) (429) means too many requests. A signed-in visitor, or any visitor not behind a bot filter, may get the page. A 404 ([section 15.5.5](https://www.rfc-editor.org/rfc/rfc9110#section-15.5.5)) or 410 ([section 15.5.11](https://www.rfc-editor.org/rfc/rfc9110#section-15.5.11)) reports that this server did not provide the resource to this request; authorization and routing can still affect another client.
 
 A link that redirects and then ends at 404 is broken, not redirected: the final answer decides.
 
@@ -131,7 +123,9 @@ Used only to decide "within the site": same scheme, host and port.
 
 ## Finding reference
 
-| Id | Severity | Title | What it means for visitors | Fix |
+The labels below organize this guide; the browser emits finding titles and statuses rather than these labels as stable machine identifiers.
+
+| Guide label | Severity | Title | What it means for visitors | Fix |
 | --- | --- | --- | --- | --- |
 | `broken-internal` | FAIL | n broken links within host | Dead ends on your own site; crawlers waste fetches | Correct the link, or redirect the old address |
 | `broken-external` | FAIL | n broken links to other sites | The page looks neglected; visitors leave with nothing | Update to the new address, an archived copy, or remove |
@@ -183,28 +177,25 @@ Change them to `https://` where the other site supports it. For images and scrip
 | Page times out | A sample partner page that never answers | The check stops at the page fetch |
 | No such host | `nohost.` plus your own domain | The page's host does not resolve |
 
-Heal it after a break offers "Restore input before this break"; History records each step with Revert.
+Break it replaces the field with an adapted input or a labelled fixture. Keep a copy of your original input if you want to restore it after experimenting.
 
 ## Worked example
 
-The page opens on `https://www.harbor-supply.example/`, a sample shop on the reserved `.example` zone. It is an Example: the page and every answer come from a fixture in the browser, and no request is made.
+The page loads `https://tamperbox.dev/` and waits for **Check links**. Running it fetches the current home page and checks the bounded set of addresses extracted from its HTML. Counts and results are live evidence; the guide does not promise a fixed number of working or broken links.
 
-- The verdict reports 4 broken links out of 27 checked. Two are within the site: dead product and collection pages that answer 404. Two count as other sites: a help centre on `ticketdesk.example` that answers 404, and `maps.harbor-supply.example`, which does not resolve. The maps link shares the shop's domain but not its origin, so it is listed with the other sites.
-- Three links redirect, a partner site times out after 8 seconds and is reported as unclear, three addresses still use `http://`, and email, phone and anchor links are listed as not requested.
-- The findings list the broken links within the site first, then those to other sites, the redirects, the unclear link and the `http://` addresses, with the 19 working links as one pass.
-- Take it further offers the redirect chain of the first redirected link and a down check of the first broken link; both destinations answer the sample from their own fixtures.
+Read the source-page status before interpreting the link totals. Then filter Broken, Could not check and Redirected separately. For a broken internal address, use its source line and context to find the authored reference. For a redirect, inspect the final destination before updating the link. For 403 or 429, verify in a browser instead of assuming that the page was deleted.
 
-Replace it with your own page in the box on the left and press Check links.
+Check the omitted count and truncation flag before describing the page as fully checked. A zero-broken result applies only to the collected addresses. It does not verify fragment targets, script-created links or pages reached by following those links. Use a Break it fixture to examine a missing source page or a timeout without deliberately breaking the real site.
 
 ## For agents
 
-The Tamperbox MCP server exposes the same link check. Search its catalog for the broken link operation, inspect the input schema, and call it with the full page URL. Results carry each address's status or error stage and the counts above. Keep these warnings with any conclusion:
+Use the Tamperbox MCP `search` tool to inspect the schema, then `execute` with `tamperbox.request` to call `POST /v1/tools/broken_link_checker`. Supply the required `url` field as a full public HTTP or HTTPS URL. The operation is named `broken_link_checker`; the browser page’s hyphenated identifier is not the API operation name.
 
-- One page's initial HTML as a signed-out visitor sees it.
-- 401, 403, 429 and timeouts are unclear, not broken.
-- At most 300 addresses and 45 seconds.
+The response contains `page`, `links`, `skipped` and `done`. Preserve source truncation, omitted counts, per-link errors and budget limits. A completed response does not mean every address on the site was checked.
 
-See [Connect an MCP client](/mcp/connect/) and [Security and privacy](/reference/security/).
+Keep the input, observation time, source limitations and inconclusive results with any summary. Browser fixtures are demonstrations, not live MCP targets. Do not turn missing evidence into a passing check or infer that an inaccessible resource has been deleted.
+
+See [Connect an MCP client](/mcp/connect/), [Code mode](/mcp/code-mode/) and [Security and privacy](/reference/security/).
 
 ## Limits
 
@@ -213,7 +204,7 @@ See [Connect an MCP client](/mcp/connect/) and [Security and privacy](/reference
 - Only the first `srcset` candidate is checked; CSS references, form actions and posters are not collected.
 - Private addresses, IP addresses and ports other than 80 and 443 are not requested.
 - A site can refuse automated requests while it works for people.
-- Live checks are rate limited. Nothing is stored.
+- Live checks are rate limited. Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history.
 
 ## References
 

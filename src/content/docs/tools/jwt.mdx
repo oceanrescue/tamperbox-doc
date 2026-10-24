@@ -1,0 +1,314 @@
+---
+title: JWT Decoder & Verifier
+description: What the JWT decoder reads from a token, every rule it applies to the header, the signature and the claims, what each finding means for the application that receives the token, and how to fix and verify each one.
+updated: 2026-10-21
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and repair guide for the Tamperbox JWT Decoder & Verifier, which decodes a three-part JWS in the browser, verifies HMAC, RSA, RSA-PSS, ECDSA and Ed25519 signatures with a supplied key through Web Crypto, checks exp, nbf, iat, iss and aud, and rebuilds edited test tokens without sending anything.
+prerequisites:
+  - A three-part signed JWT (a Bearer prefix is removed), and, for signature verification, the HMAC secret or the public JWK or SPKI PEM that matches the token's algorithm
+outputs:
+  - A verdict with PASS, CHECK and FAIL chips for the signature and each registered claim, the header and payload as editable tables or JSON, the rebuilt token with its signature state, History and Take it further links for the time claims
+limitations:
+  - Decoding proves readability, not trust; a signature match proves only that this key verifies these bytes; JWE, crit headers and unencoded payloads are not verified; no key is ever fetched from a token
+---
+
+The tool page is [tamperbox.dev/jwt](https://tamperbox.dev/jwt). It opens on a synthetic token signed in your tab, answers in one sentence whether that token would be rejected and why, and shows the header, the claims and the rebuilt token under it. This page is the long version: what the page reads, every rule it applies, what each finding means for the application that receives the token, and how to fix and verify each one.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> everything runs in your browser. The token, the key and the expected values are read locally; signatures are checked with the browser's Web Crypto implementation; the `jku` and `x5u` addresses in a header are never fetched and an embedded `jwk` is never used. Nothing is uploaded and nothing is stored.</div>
+
+## What the tool answers
+
+Four questions, in the order a resource server asks them:
+
+1. **Is this a well-formed JWS?** Three unpadded Base64URL segments, a UTF-8 JSON header and payload, no duplicate keys, no number too large to show exactly.
+2. **Does the signature verify with your key?** Only once you supply a key, only for the algorithm you expect, and never for `alg: none`.
+3. **Is it current?** `exp` not passed, `nbf` reached, `iat` not in the future, each within the clock tolerance you allow.
+4. **Is it meant for you?** `iss` equal to the issuer you expect and `aud` containing the audience you expect, when you enter them.
+
+The verdict joins every failure into one "Rejected:" sentence. Otherwise it states how long the token stays current and whether the signature matched. The chips repeat each check in the order above.
+
+## Inputs
+
+### The token
+
+The page takes a token typed, pasted anywhere on the page, dropped as a file or brought from the Unix Timestamp Converter. Before anything is read:
+
+| Step | What happens |
+| --- | --- |
+| Trim | Surrounding whitespace is removed, then a leading `Bearer ` (any case) |
+| Size | More than 100,000 characters is refused: "This token is too large" |
+| Shape | Five dot-separated parts is declined as an encrypted JWE; any count other than three gets "A JWT needs three parts: header.payload.signature" |
+| Paste cleanup | A pasted `Authorization: Bearer` line or a quoted token is reduced to the token, and the hint says "Token kept from what you pasted". Text that is not a token stays in the field with the decode error under it; Heal it offers a fix when it is almost a token (Remove Base64 padding, Convert to Base64URL, Remove line breaks and spaces, Keep the token only). The key is pasted into its own field |
+
+A segment must contain only letters, digits, `-` and `_`, as [RFC 4648 section 5](https://www.rfc-editor.org/rfc/rfc4648#section-5) defines the URL-safe alphabet, with no `=` padding, as [RFC 7515 section 2](https://www.rfc-editor.org/rfc/rfc7515#section-2) requires for JWS. A segment whose final character carries non-zero unused bits is refused as "noncanonical Base64URL padding bits"; it usually means a hand-edited or truncated token.
+
+### The key or secret
+
+The key field is read only when it holds text, and only after the token decoded. What it accepts depends on the algorithm:
+
+| Algorithm family | Accepted | Refused with |
+| --- | --- | --- |
+| HS256, HS384, HS512 | The shared secret as UTF-8 text, whitespace included; with "Secret is Base64URL-encoded" ticked, unpadded Base64URL or padded standard Base64 | "The secret is not valid Base64URL" when `+` or `/` is mixed with `-` or `_`, "invalid Base64 padding" |
+| RS, PS, ES, Ed25519 (and `EdDSA`) | A public JWK object, or a PEM block beginning `-----BEGIN PUBLIC KEY-----` (SPKI) | "Use a public key, not a private key" for a JWK with `d`; a JWK whose `alg` differs from the selection or whose `use` is not `sig`; an Ed25519 JWK without `kty: OKP` and `crv: Ed25519`; a PKCS#1 `BEGIN RSA PUBLIC KEY` block or a certificate |
+
+A key over 100,000 characters is refused. Verification needs a secure context (HTTPS or localhost) because Web Crypto is unavailable elsewhere; the page says so instead of guessing.
+
+### Expected algorithm, issuer, audience and tolerance
+
+"Expected algorithm" defaults to the token's own `alg`. Choosing a different one stops verification with "The token algorithm does not match the algorithm you selected" rather than trying the key anyway. The expected issuer and audience are compared exactly, character for character. Clock tolerance takes 0 to 300 seconds and applies to `exp`, `nbf` and `iat`; outside that range the field is marked invalid, the claims are evaluated with zero tolerance, and the verdict adds "clock tolerance is invalid".
+
+## Reading the result
+
+### Verdict and chips
+
+The verdict sentence names the outcome: "Rejected: expired 2 hours ago, signature does not match." or "Current for 59 minutes. Signature matches your key." or, with no key, "Current for 59 minutes. Signature unchecked." Each chip is one check: `exp`, `nbf`, `iat`, `iss`, `aud`, the signature and, when needed, the clock tolerance. A chip for a check you can act on is a button that focuses the field in question: the key for an unchecked or failed signature, the expected values for issuer and audience, the tolerance field when it is invalid.
+
+### Findings
+
+Under the verdict, every check is listed worst first with its detail: the UTC time of a time claim and its relative age, "Matches your expected value", "Not checked. Enter the value your application expects." Passes fold into one line once there are two or more.
+
+### Header and Payload
+
+The two segments are shown as tables (Enter applies an edit, Escape restores it) or as JSON you can edit freely. A time claim's value is followed by its UTC date. An edit that would change a claim's JSON type is refused ("exp must be a number of seconds since 1970"), as is a number that cannot be kept exactly.
+
+### Token
+
+The rebuilt token is shown with its state: unchanged, re-signed, unsigned, or "signature broken". An HMAC token is re-signed with the secret in the key field; the synthetic asymmetric examples are re-signed with the private key generated in this tab; a pasted RS, PS, ES or Ed25519 token keeps its old signature, which no longer matches the edited bytes, because the page never accepts a private key.
+
+### History
+
+Every Break it preset, every claim edit and every revert is logged with what it replaced. Revert undoes the newest change; Reset input restores the token you entered, which is also what happens when your edits bring every claim back to its original value.
+
+### Take it further
+
+Each time claim the token carries, `exp`, `nbf` and `iat`, is offered as a link into the [Unix Timestamp Converter](https://tamperbox.dev/unix-timestamp). The value travels through same-site tab memory to a new tab; the token and the key stay on this page and nothing is put in a URL.
+
+## Method
+
+The checks run in this order; a structural failure stops decoding, and the signature and claim checks then run independently of each other.
+
+### Structure and encoding
+
+| Rule | Finding wording | Source |
+| --- | --- | --- |
+| Each segment is unpadded Base64URL | "Header is not valid unpadded Base64URL." | [RFC 7515 section 2](https://www.rfc-editor.org/rfc/rfc7515#section-2), [RFC 4648 section 5](https://www.rfc-editor.org/rfc/rfc4648#section-5) |
+| Unused bits in the last character are zero | "Header has noncanonical Base64URL padding bits." | [RFC 4648 section 3.5](https://www.rfc-editor.org/rfc/rfc4648#section-3.5) |
+| Header and payload are UTF-8 | "Payload contains invalid UTF-8." | [RFC 7515 section 7.1](https://www.rfc-editor.org/rfc/rfc7515#section-7.1) |
+| Both are JSON objects | "Payload must be a JSON object." | [RFC 7519 section 3](https://www.rfc-editor.org/rfc/rfc7519#section-3) |
+| No duplicate member names, at any depth | "Payload has a duplicate key: sub." | [RFC 7519 section 4](https://www.rfc-editor.org/rfc/rfc7519#section-4) |
+| Integers within 2^53 - 1 | "Payload has a number too large to display without losing precision." | tool rule |
+
+RFC 7519 section 4 says "The Claim Names within a JWT Claims Set MUST be unique; JWT parsers MUST either reject JWTs with duplicate Claim Names or use a JSON parser that returns only the lexically last duplicate member name". The tool rejects, because implementations that keep the first and those that keep the last disagree about what the token says, and the duplicate check sees escaped spellings of the same name. The safe-integer rule is the tool's own: JavaScript cannot show a larger integer exactly, so the page refuses rather than display a rounded claim.
+
+### Header and algorithm
+
+| Rule | Finding wording | Source |
+| --- | --- | --- |
+| `alg` is a non-empty string | "The header must name a signing algorithm in alg." | [RFC 7515 section 4.1.1](https://www.rfc-editor.org/rfc/rfc7515#section-4.1.1) |
+| `alg: none` has an empty signature | "Unsigned tokens (alg: none) must have an empty signature." | [RFC 7518 section 3.6](https://www.rfc-editor.org/rfc/rfc7518#section-3.6) |
+| Any other algorithm has a signature | "The signature is missing." | [RFC 7515 section 5.2](https://www.rfc-editor.org/rfc/rfc7515#section-5.2) |
+| `crit` or `b64: false` present | verification stops: "Critical header extensions and unencoded payloads are not supported for verification." | [RFC 7515 section 4.1.11](https://www.rfc-editor.org/rfc/rfc7515#section-4.1.11), [RFC 7797](https://www.rfc-editor.org/rfc/rfc7797) |
+
+An `alg: none` token still decodes, so you can read it, but the verdict always lists "unsigned (alg: none)" among the rejection reasons and the chip reads "alg: none · unsigned". [RFC 8725 section 2.1](https://www.rfc-editor.org/rfc/rfc8725#section-2.1) describes why: a verifier that accepts `none` because the token asked for it has no verifier at all. `jku`, `x5u` and `jwk` are shown as plain header members and never acted on, so a token cannot choose its own key, the attack that [RFC 8725 section 2.1](https://www.rfc-editor.org/rfc/rfc8725#section-2.1) and [section 3.10](https://www.rfc-editor.org/rfc/rfc8725#section-3.10) warn about.
+
+### Signature verification
+
+Verification runs only with a key in the field and only for the expected algorithm, which must equal the token's `alg`. [RFC 8725 section 3.1](https://www.rfc-editor.org/rfc/rfc8725#section-3.1) is the rule: "Libraries MUST enable the caller to specify a supported set of algorithms and MUST NOT use any other algorithms when performing cryptographic operations". The algorithm also decides which key shapes are accepted, which is the key-algorithm binding of [RFC 8725 section 3.2](https://www.rfc-editor.org/rfc/rfc8725#section-3.2): an HMAC secret is never tried against an RSA token and a public key is never used as an HMAC secret.
+
+| Identifier | Web Crypto operation | Notes |
+| --- | --- | --- |
+| HS256, HS384, HS512 | HMAC with SHA-256, SHA-384, SHA-512 | [RFC 7518 section 3.2](https://www.rfc-editor.org/rfc/rfc7518#section-3.2); a secret shorter than the hash output verifies but is flagged |
+| RS256, RS384, RS512 | RSASSA-PKCS1-v1_5 | [RFC 7518 section 3.3](https://www.rfc-editor.org/rfc/rfc7518#section-3.3) |
+| PS256, PS384, PS512 | RSA-PSS with salt lengths 32, 48 and 64 bytes | [RFC 7518 section 3.5](https://www.rfc-editor.org/rfc/rfc7518#section-3.5): the salt length equals the hash output |
+| ES256, ES384, ES512 | ECDSA on P-256, P-384, P-521 | [RFC 7518 section 3.4](https://www.rfc-editor.org/rfc/rfc7518#section-3.4) |
+| Ed25519, `EdDSA` | Ed25519 | [RFC 8037 section 3.1](https://www.rfc-editor.org/rfc/rfc8037#section-3.1); `EdDSA` accepted for the Ed25519 curve only |
+
+The signed input is the ASCII of the first two segments joined by a dot, as [RFC 7515 section 5.2](https://www.rfc-editor.org/rfc/rfc7515#section-5.2) step 8 requires. The result is "Signature matches this key" or "Signature does not match this key". A mismatch means the wrong key, a key rotated out of the issuer's set (compare `kid`), the wrong secret encoding, or a token changed after signing. A match proves only that this key verifies these bytes; it says nothing about whether this key should be trusted.
+
+### Time claims
+
+`exp`, `nbf` and `iat` must be NumericDates, "a JSON numeric value representing the number of seconds from 1970-01-01T00:00:00Z UTC until the specified UTC date/time" ([RFC 7519 section 2](https://www.rfc-editor.org/rfc/rfc7519#section-2)). A quoted value, or a number a JavaScript date cannot hold, fails with "Expected a NumericDate". With tolerance `t` seconds and the device clock `now`:
+
+| Claim | Fails when | Chip |
+| --- | --- | --- |
+| `exp` | `now` is at or past `exp + t` | "exp · expired 2 hours ago"; inside the tolerance: "exp · within tolerance" |
+| `nbf` | `nbf` is later than `now + t` | "nbf · starts in 59 minutes" |
+| `iat` | later than `now + t`, as a notice only | "iat · in the future" |
+| `exp` absent | never; a notice | "exp · never expires" |
+
+RFC 7519 [section 4.1.4](https://www.rfc-editor.org/rfc/rfc7519#section-4.1.4): "the current date/time MUST be before the expiration date/time listed in the exp claim"; [section 4.1.5](https://www.rfc-editor.org/rfc/rfc7519#section-4.1.5): "the current date/time MUST be after or equal to the not-before date/time". Both allow "some small leeway, usually no more than a few minutes, to account for clock skew", which is the 300-second ceiling. Whether `exp` is required is the application's decision, so its absence is a notice. Times come from your device clock and the verdict re-evaluates every ten seconds while the tab is visible. `auth_time` is shown as a date but not checked.
+
+### Issuer and audience
+
+`iss` must be a string; `aud` a string or an array of strings ([RFC 7519 section 4.1.1](https://www.rfc-editor.org/rfc/rfc7519#section-4.1.1) and [section 4.1.3](https://www.rfc-editor.org/rfc/rfc7519#section-4.1.3)). Another type fails as "wrong type". With an expected value entered, `iss` must equal it and the expected audience must equal `aud` or be one of its members: "If the principal processing the claim does not identify itself with a value in the aud claim when this claim is present, then the JWT MUST be rejected." The comparison is exact, so a trailing slash or a different case is a mismatch, which is what [RFC 7519 section 2](https://www.rfc-editor.org/rfc/rfc7519#section-2) prescribes for StringOrURI values. An empty expectation reports "not checked", never a pass; [RFC 8725 section 3.8](https://www.rfc-editor.org/rfc/rfc8725#section-3.8) is why the audience check matters: a token for one service replayed against another passes every other check.
+
+### Rebuilding edited tokens
+
+An edited header or payload is re-encoded and the token rebuilt. With a usable signing key the state is "signed"; otherwise the old signature is kept and the state is "stale", because the bytes it covered have changed. Break signature replaces the first character of the signature with `A` (or `B` when it already is `A`), which keeps the segment canonical and guarantees a mismatch. A rebuilt `alg: none` token has an empty signature.
+
+## Standards and conformance
+
+### RFC 7519: JSON Web Token
+
+Implemented: section 2 (NumericDate, exact StringOrURI comparison), section 3 (the Claims Set is a JSON object), section 4 (unique claim names), sections 4.1.1 to 4.1.6 (`iss`, `sub` shown only, `aud`, `exp`, `nbf`, `iat`), section 7.2 steps 1 to 10 for a JWS. Not implemented: step 7 for nested JWTs (`cty: JWT` is shown, not unwrapped), section 5.3 replicating claims as header parameters, and any JWE path. Stricter than the text: duplicates are rejected, not resolved. The tool does not apply [RFC 7519 section 4.1.7](https://www.rfc-editor.org/rfc/rfc7519#section-4.1.7) `jti` replay detection; it has no store to check against.
+
+### RFC 7515 and RFC 7518: JWS and JWA
+
+Implemented: compact serialisation (section 3.1 of RFC 7515), Base64URL without padding (section 2), the signing input of section 5.2, the `alg` parameter (section 4.1.1), refusal of `crit` (section 4.1.11) and of `b64: false` from [RFC 7797 section 3](https://www.rfc-editor.org/rfc/rfc7797#section-3). From RFC 7518 the algorithms in the table above and `none` (section 3.6). Not implemented: `jku`, `x5u`, `x5c` and `x5t` resolution (section 4.1.2 to 4.1.8), JSON serialisation, RS and PS keys supplied as PKCS#1, and ECDSA curves beyond the three named. Where it differs: [RFC 7518 section 3.2](https://www.rfc-editor.org/rfc/rfc7518#section-3.2) says an HMAC key "MUST be" at least the hash size; the tool verifies a shorter secret and flags it, so a test token still reads while the weakness is named.
+
+### RFC 7517 and RFC 8037: keys
+
+A JWK is accepted when it is a public key ([RFC 7517 section 4](https://www.rfc-editor.org/rfc/rfc7517#section-4) members; a private `d` from [RFC 7518 section 6](https://www.rfc-editor.org/rfc/rfc7518#section-6) is refused), its `use` is absent or `sig` ([section 4.2](https://www.rfc-editor.org/rfc/rfc7517#section-4.2)) and its `alg` is absent or equal to the selection ([section 4.4](https://www.rfc-editor.org/rfc/rfc7517#section-4.4)). Ed25519 keys follow [RFC 8037 section 2](https://www.rfc-editor.org/rfc/rfc8037#section-2) (`kty: OKP`, `crv: Ed25519`); the JOSE identifier `EdDSA` from [section 3.1](https://www.rfc-editor.org/rfc/rfc8037#section-3.1) is accepted and mapped to the browser's Ed25519 operation. Ed448 is not supported. JWK Sets (`keys` arrays) are not read; paste the one key, chosen by `kid`.
+
+### RFC 8725: best current practices
+
+Followed: 2.1 and 3.1 (no `none` verification, caller-chosen algorithms), 3.2 (key and algorithm bound), 3.8 (audience checked when supplied), 3.10 (no key fetched from the token). Partly followed: 3.9 (the typ header is shown, not enforced) and 3.11 (exact issuer match when supplied). Not applicable: 3.5 to 3.7 (key management in the application).
+
+### What the tool does not check
+
+Revocation, replay (`jti`), nested tokens, encryption ([RFC 7516](https://www.rfc-editor.org/rfc/rfc7516) tokens are declined on sight), certificate chains behind `x5c`, and the application's own rules about scopes, subjects and roles.
+
+## Finding reference
+
+### Structure
+
+| Finding | Severity | Section | Meaning for the receiver | Fix |
+| --- | --- | --- | --- | --- |
+| A JWT needs three parts | fail | RFC 7515 §3.1 | Not a JWS; nothing can be read | Copy the whole token; check for a cut at a line break |
+| Encrypted token (JWE) | fail | RFC 7516 | Claims are encrypted; this tool cannot read them | Decrypt with the recipient's key elsewhere |
+| Not valid unpadded Base64URL | fail | RFC 7515 §2 | Standard Base64 or padding was used | Re-encode with the URL-safe alphabet, no `=` |
+| Noncanonical padding bits | fail | RFC 4648 §3.5 | The segment was edited or truncated by hand | Regenerate the token |
+| Invalid UTF-8, not valid JSON, must be a JSON object | fail | RFC 7519 §3 | The segment does not hold a claims object | Fix the producer's serialisation |
+| Duplicate key | fail | RFC 7519 §4 | Libraries disagree about which value wins | Emit each claim once |
+| Number too large | fail | tool rule | The value cannot be shown exactly | Carry large identifiers as strings |
+
+### Header, algorithm and signature
+
+| Finding | Severity | Section | Meaning for the receiver | Fix |
+| --- | --- | --- | --- | --- |
+| alg: none · unsigned | fail | RFC 8725 §2.1 | Anyone can change the claims; the token proves nothing | Sign with a real algorithm; reject `none` at the verifier |
+| The signature is missing | fail | RFC 7515 §5.2 | A signed algorithm with nothing to verify | Regenerate the token |
+| signature · add a key | notice | RFC 7515 §5.2 | Nothing verified yet | Enter the secret or public key |
+| signature · does not match | fail | RFC 7515 §5.2 | Wrong key, wrong encoding or altered token | Compare `kid` with the issuer's current keys; check the secret's encoding |
+| signature · broken by your edits | fail | RFC 7515 §5.2 | The old signature no longer covers the bytes | Re-sign with the secret, or use as a negative test |
+| signature · broken on purpose | fail | RFC 7515 §5.2 | A deliberate bad-signature fixture | None; every server should reject it |
+| signature · could not check | fail | RFC 7518 §3 | Algorithm mismatch, key refused, `crit`, `b64: false` or no secure context | Read the detail: it names the cause |
+| Weak HMAC secret | notice | RFC 7518 §3.2 | Fine for tests, not for production | Use a secret at least as long as the hash output |
+
+### Time, issuer and audience
+
+| Finding | Severity | Section | Meaning for the receiver | Fix |
+| --- | --- | --- | --- | --- |
+| exp · expired | fail | RFC 7519 §4.1.4 | A conforming server rejects it | Issue a new token; check the issuer's clock and lifetime |
+| exp · within tolerance | pass | RFC 7519 §4.1.4 | Accepted only thanks to your leeway | Treat as expiring; renew |
+| exp · never expires | notice | RFC 7519 §4.1.4 | Valid until the key is rotated | Add `exp` unless the application forbids it |
+| nbf · starts in | fail | RFC 7519 §4.1.5 | Not yet usable | Wait, or fix the issuer's clock |
+| iat · in the future | notice | RFC 7519 §4.1.6 | The issuer's clock is ahead | Synchronise clocks |
+| not a valid time | fail | RFC 7519 §2 | A string or out-of-range number where seconds were expected | Emit a JSON number of seconds |
+| iss or aud · does not match | fail | RFC 7519 §4.1.1, §4.1.3 | Issued by, or for, someone else | Check the expected value for trailing slashes and case; reject the token otherwise |
+| iss or aud · wrong type | fail | RFC 7519 §4.1.1, §4.1.3 | The claim is not a string (or array of strings) | Fix the issuer |
+| iss or aud · not checked | notice | RFC 8725 §3.8 | You have not said who you are | Enter the expected value |
+| clock tolerance · invalid | fail | RFC 7519 §4.1.4 | Settings error; claims judged with zero tolerance | Enter 0 to 300 |
+
+## Guide
+
+### The token is expired, or not valid yet
+
+1. Read the `exp` or `nbf` chip: it names the UTC time and the distance from now.
+2. Compare with the issuer's clock. A few seconds off is clock skew; set a tolerance of up to 300 seconds and see whether the chip turns to "within tolerance". More than that is a lifetime or a clock problem at the issuer.
+3. Obtain a fresh token and paste it. The verdict should read "Current for" the remaining lifetime.
+
+### exp decodes to a year far in the future
+
+The claim was written in milliseconds. The table shows the date tens of thousands of years ahead and the chip says the token never meaningfully expires. Divide by 1000 at the issuer, or send the value to the Unix Timestamp Converter from Take it further and read it as milliseconds to confirm.
+
+### Wrong audience or issuer
+
+Enter the exact values your application compares against. A mismatch chip opens the expected-values panel and focuses the field. If the token's `aud` is an array, your value must be one of its members; a trailing slash on either side is a mismatch, not a near miss.
+
+### alg: none
+
+The token decodes, the chip reads "alg: none · unsigned", and the verdict rejects it. No key makes it pass. If a token from a real issuer arrives this way, the issuer is misconfigured; if your server accepted it, the verifier must be configured with an explicit algorithm allow-list.
+
+### The signature does not match
+
+| Check | How |
+| --- | --- |
+| Algorithm | Expected algorithm equals the header's `alg`; a different selection stops with a mismatch message |
+| Key | `kid` in the header against the issuer's current key set; a rotated key is the usual cause |
+| Secret encoding | A Base64-exported secret needs "Secret is Base64URL-encoded"; a text secret must keep its exact whitespace |
+| Token integrity | Any edit after signing changes the bytes; Reset input and verify the original |
+
+### A key is refused
+
+The detail names the cause: a private JWK (`d` present), a JWK with `use` other than `sig` or a conflicting `alg`, a PKCS#1 block instead of SPKI, a certificate, or no secure context. Export the public key as SPKI (`openssl pkey -in private.pem -pubout`) or as a public JWK.
+
+### Break it cases
+
+| Button | What it loads | What it shows |
+| --- | --- | --- |
+| Expire it | `exp` one hour ago | "Rejected: expired 1 hour ago" |
+| Not yet valid | `nbf` one hour ahead, `exp` moved to two hours ahead if it was sooner | "not valid for another 1 hour" |
+| Wrong audience | `aud` set to `someone-else` | "audience does not match" once an expected audience is entered |
+| alg: none | header `alg` set to `none` | "unsigned (alg: none)" |
+| Break signature | the first signature character swapped | "signature altered" |
+
+Every preset rebuilds the token: the HMAC example is re-signed with its secret, so the only failing check is the one the preset introduced. Revert in History undoes one preset; Reset input undoes them all.
+
+### An independent check
+
+Verify an HS256 token outside Tamperbox with OpenSSL. With the token in `$T` and the secret in `$S`:
+
+```sh
+data=$(printf %s "$T" | cut -d. -f1-2)
+printf %s "$data" | openssl dgst -sha256 -hmac "$S" -binary | openssl base64 -A | tr '+/' '-_' | tr -d '='
+printf %s "$T" | cut -d. -f3
+```
+
+The two printed lines are equal when the signature verifies. For an RS256 token, decode the signature segment to a file and run `openssl dgst -sha256 -verify public.pem -signature sig.bin` over the same first two segments.
+
+## Worked example
+
+The page opens on a synthetic HS256 token created in your tab when the page loads: header `alg: HS256`, `typ: JWT`; payload `sub: qa-example`, `name: Demo user`, `iss: https://issuer.example`, `aud: tamperbox-demo`, `role: tester`, `iat` now and `exp` one hour ahead. It is signed with a demo secret the page shows you, and the secret is already in the key field, so the opening verdict reads "Current for 59 minutes. Signature matches your key." with every chip green except `iss` and `aud`, which read "not checked" until you enter `https://issuer.example` and `tamperbox-demo`. The token is reserved sample data with a reserved issuer name; it is not a credential for anything and a new one is signed on every load, so its exact bytes are never the same twice. Choosing an asymmetric example generates a key pair in the tab, shows the public key as PEM, and keeps the private key non-extractable, which is why those examples can be re-signed while a pasted RS256 token cannot.
+
+## For agents
+
+The Tamperbox MCP server exposes two MCP tools: use `search` to inspect the catalog and schema, then use `execute` to call the selected operation through `tamperbox.request`. The JWT page maps to four `POST /v1/tools/...` operations:
+
+| Operation | Required input | Result |
+| --- | --- | --- |
+| `jwt_decode` | An `application/jwt` text artifact | A JSON artifact containing the decoded header and payload; no verification |
+| `jwt_verify` | `token`, `key` and an explicit `algorithm` | Separate signature evidence, claim checks, header and payload |
+| `jwt_rebuild` | JSON `header` and `payload`; optionally an HMAC secret or old signature | A token whose state is `unsigned`, `signed`, `stale` or `broken` |
+| `jwt_fixture` | Optional `algorithm`, `header` and `payload` | A synthetic token, selected algorithm and verification key; private keys are not retained |
+
+All responses also carry warnings and provenance. Keep these with any conclusion:
+
+- A decoded token is readable, not trusted; a verified signature proves only that the supplied key verifies those bytes.
+- Fixtures are not application credentials, and a rebuilt token passes for anyone who trusts the same key.
+- None of the operations establishes application authorisation: scopes, roles and `jti` replay are the application's rules.
+
+See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for the calling pattern, and [Security and privacy](/reference/security/) for where a token travels when an agent, rather than the browser page, decodes it.
+
+## Limits
+
+- Decoding proves readability, not origin; verification proves that one key verifies these bytes, not that the key is the right one to trust.
+- No key is fetched from `jku`, `x5u` or an embedded `jwk`, and no key set is read; choose the key by `kid` yourself.
+- JWE, nested JWTs, `crit` extensions and `b64: false` payloads are declined or left unverified.
+- Private asymmetric keys are never accepted, so only HMAC tokens and the tab's own examples can be re-signed.
+- Times come from your device clock; a wrong local clock produces wrong expiry findings.
+- Exact string comparison for issuer and audience; no normalisation of case or trailing slashes.
+- Input is limited to 100,000 characters for the token and the key.
+- Nothing is stored, and the token is not put in a URL; the Take it further link carries only the selected claim value.
+
+## References
+
+- [RFC 7519, JSON Web Token (JWT)](https://www.rfc-editor.org/rfc/rfc7519). Proposed Standard, May 2015; updated by RFC 7797 and RFC 8725. Sections used: [2](https://www.rfc-editor.org/rfc/rfc7519#section-2), [3](https://www.rfc-editor.org/rfc/rfc7519#section-3), [4](https://www.rfc-editor.org/rfc/rfc7519#section-4), [4.1.1](https://www.rfc-editor.org/rfc/rfc7519#section-4.1.1), [4.1.3](https://www.rfc-editor.org/rfc/rfc7519#section-4.1.3), [4.1.4](https://www.rfc-editor.org/rfc/rfc7519#section-4.1.4), [4.1.5](https://www.rfc-editor.org/rfc/rfc7519#section-4.1.5), [4.1.6](https://www.rfc-editor.org/rfc/rfc7519#section-4.1.6), [4.1.7](https://www.rfc-editor.org/rfc/rfc7519#section-4.1.7) (not applied) and [7.2](https://www.rfc-editor.org/rfc/rfc7519#section-7.2).
+- [RFC 7515, JSON Web Signature (JWS)](https://www.rfc-editor.org/rfc/rfc7515). Proposed Standard, May 2015. Sections used: [2](https://www.rfc-editor.org/rfc/rfc7515#section-2), [3.1](https://www.rfc-editor.org/rfc/rfc7515#section-3.1), [4.1.1](https://www.rfc-editor.org/rfc/rfc7515#section-4.1.1), [4.1.11](https://www.rfc-editor.org/rfc/rfc7515#section-4.1.11), [5.2](https://www.rfc-editor.org/rfc/rfc7515#section-5.2) and [7.1](https://www.rfc-editor.org/rfc/rfc7515#section-7.1).
+- [RFC 7518, JSON Web Algorithms (JWA)](https://www.rfc-editor.org/rfc/rfc7518). Proposed Standard, May 2015; updated by [RFC 9864](https://www.rfc-editor.org/rfc/rfc9864). Sections used: [3.2](https://www.rfc-editor.org/rfc/rfc7518#section-3.2), [3.3](https://www.rfc-editor.org/rfc/rfc7518#section-3.3), [3.4](https://www.rfc-editor.org/rfc/rfc7518#section-3.4), [3.5](https://www.rfc-editor.org/rfc/rfc7518#section-3.5), [3.6](https://www.rfc-editor.org/rfc/rfc7518#section-3.6) and [6](https://www.rfc-editor.org/rfc/rfc7518#section-6).
+- [RFC 7517, JSON Web Key (JWK)](https://www.rfc-editor.org/rfc/rfc7517). Proposed Standard. Sections used: [4](https://www.rfc-editor.org/rfc/rfc7517#section-4), [4.2](https://www.rfc-editor.org/rfc/rfc7517#section-4.2) and [4.4](https://www.rfc-editor.org/rfc/rfc7517#section-4.4).
+- [RFC 8037, CFRG Elliptic Curve Diffie-Hellman (ECDH) and Signatures in JOSE](https://www.rfc-editor.org/rfc/rfc8037). Proposed Standard, January 2017. Sections used: [2](https://www.rfc-editor.org/rfc/rfc8037#section-2) and [3.1](https://www.rfc-editor.org/rfc/rfc8037#section-3.1).
+- [RFC 8725, JSON Web Token Best Current Practices](https://www.rfc-editor.org/rfc/rfc8725). Best Current Practice, February 2020; updates RFC 7519. Sections used: [2.1](https://www.rfc-editor.org/rfc/rfc8725#section-2.1), [3.1](https://www.rfc-editor.org/rfc/rfc8725#section-3.1), [3.2](https://www.rfc-editor.org/rfc/rfc8725#section-3.2), [3.8](https://www.rfc-editor.org/rfc/rfc8725#section-3.8) and [3.10](https://www.rfc-editor.org/rfc/rfc8725#section-3.10).
+- [RFC 7797, JSON Web Signature (JWS) Unencoded Payload Option](https://www.rfc-editor.org/rfc/rfc7797). Proposed Standard; updates RFC 7519. Section used: [3](https://www.rfc-editor.org/rfc/rfc7797#section-3) (declined for verification).
+- [RFC 7516, JSON Web Encryption (JWE)](https://www.rfc-editor.org/rfc/rfc7516). Proposed Standard. Five-part tokens are declined; no section is applied.
+- [RFC 4648, The Base16, Base32, and Base64 Data Encodings](https://www.rfc-editor.org/rfc/rfc4648). Proposed Standard. Sections used: [3.5](https://www.rfc-editor.org/rfc/rfc4648#section-3.5) and [5](https://www.rfc-editor.org/rfc/rfc4648#section-5).
