@@ -14,7 +14,7 @@ limitations:
 
 The tool page is [tamperbox.dev/what-is-my-ip](https://tamperbox.dev/what-is-my-ip). It has no input box: opening it reads your connection and shows the address in large type, with the network it belongs to, and a device test checks IPv4 and IPv6 separately. This page is the long version: where each value comes from, why the page never shows a sample address, how the device test works, and how to use the result for an allowlist or a support ticket.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> opening the page sends one request to the Tamperbox server, which reads the address your browser connected from and the network metadata of that connection, returns them, and returns the observation. The device test runs only when you press it: your browser sends two requests to the public echo service ipify, one over IPv4 and one over IPv6, without cookies or a referrer. Nothing else is sent, and the address is never passed to advertisers.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> opening the page sends one request to the Tamperbox server, which reads the address your browser connected from and the network metadata of that connection, returns that observation. The device test runs only when you press it: your browser sends two requests to the public echo service ipify, one over IPv4 and one over IPv6, without cookies or a referrer. Nothing else is sent, and the address is never passed to advertisers.</div>
 
 ## What the tool answers
 
@@ -58,6 +58,25 @@ Two lanes, one per family: Works (with the address), Not found, or Not tested, a
 ### Your network
 
 Network name, autonomous system and country, with a link to the full connection details.
+
+### Take it further
+
+These links carry values derived from the current result. A link is absent when its required evidence is missing; the tool does not invent a target.
+
+| Destination | Value and condition |
+| --- | --- |
+| [ASN Lookup](/tools/asn-lookup/) | The public address reported for this connection |
+| [Reverse DNS](/tools/reverse-dns/) | The same observed address |
+| [BGP Route Lookup](/tools/bgp-lookup/) | The same observed address |
+| [ASN Lookup for IPv6](/tools/asn-lookup/) | The device test's IPv6 address, when the page connection used IPv4 and the IPv6 test succeeded |
+
+Check the rest opens sibling pages without carrying the address. Take it further is the explicit address transfer. These pages have no editable source, Break it, Heal it or input History; Check again refreshes the connection reading.
+
+### What this result means
+
+Six cards explain the current findings: Ask your agent, In plain words, What does it mean?, What good looks like, How to fix it, and Tool limitations. Expand a card to read the explanation and its method or guide link. Copying an agent prompt does not run another check. The cards interpret the evidence already shown; they are not an additional measurement or an independent confirmation.
+
+If the connection reading fails or no result is available, result-specific cards clear and contextual links disappear. Read the verdict before relying on a card, and distinguish a missing observation from a confirmed negative result.
 
 ## Method
 
@@ -153,7 +172,7 @@ See [Connect an MCP client](/mcp/connect/) and [Security and privacy](/reference
 
 ### Transfers to another tool
 
-Explicit sibling-tool controls can carry the current input or observed address to another page. The shared navigation stores that value temporarily in tab-scoped `sessionStorage` and puts a random transfer token in the URL fragment. The receiving page consumes the transfer and applies its own input rules; tools with a manual Run button still require that action for live checks. This is not a saved result, and the destination can send the value to the services it needs. Ordinary edits and lookups do not create a durable report archive.
+Explicit sibling-tool controls can carry the current input or observed address to another page. The shared navigation stores that value temporarily in tab-scoped `sessionStorage`, accepts a transfer for at most one minute, and puts a random transfer token in the URL fragment. The input itself is not placed in the URL. The receiving page consumes the transfer and applies its own input rules; tools with a manual Run button still require that action for live checks. This is not a saved result, and the destination can send the value to the services it needs. Ordinary edits and lookups do not create a durable report archive.
 
 ## Limits
 

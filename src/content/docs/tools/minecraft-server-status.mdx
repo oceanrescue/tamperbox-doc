@@ -51,6 +51,28 @@ The server as the game's multiplayer list draws it: an initial in place of the i
 
 The address entered, the SRV record (or why it was not used), the address and port connected to, the TCP connect time, the status ping, the version, the protocol number with the release it belongs to where that is certain, the secure chat flag, and the region the check ran from.
 
+### History
+
+History records input changes made by Break it and Heal it. It appears after the complete result and before Take it further. Revert undoes the newest change; Reset input returns to the input before the first retained change. Restore input before this break is also available in Heal it when there is a change to undo. Restoring does not create another history entry. This history is held in the page and disappears on reload. Restoring a live target stages it for the run button; reserved samples can render immediately. Typing or pasting a different input starts a new history.
+
+### Take it further
+
+These links carry values derived from the current result. A link is absent when its required evidence is missing; the tool does not invent a target.
+
+| Destination | Value and condition |
+| --- | --- |
+| [SRV Lookup](/tools/srv-lookup/) | `_minecraft._tcp.<host>` for a live hostname entered without a port |
+| [TCP Ping](/tools/tcp-ping/) | The connected address and game port, for live results |
+| [ASN Lookup](/tools/asn-lookup/) | The server address, when available |
+
+Reserved sample results offer only the derived links supported by local sample data. A live destination applies its own input rules; measurement tools still wait for an explicit run.
+
+### What this result means
+
+Six cards explain the current findings: Ask your agent, In plain words, What does it mean?, What good looks like, How to fix it, and Tool limitations. Expand a card to read the explanation and its method or guide link. Copying an agent prompt does not run another check. The cards interpret the evidence already shown; they are not an additional measurement or an independent confirmation.
+
+When the input is cleared, a check fails, or no result is available, result-specific cards clear and contextual links disappear. Read the verdict before relying on a card, and distinguish a missing observation from a confirmed negative result.
+
 ## Method
 
 ### 1. Following the SRV record
@@ -172,7 +194,7 @@ See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/), and
 
 ### Transfers to another tool
 
-Explicit sibling-tool controls can carry the current input or observed address to another page. The shared navigation stores that value temporarily in tab-scoped `sessionStorage` and puts a random transfer token in the URL fragment. The receiving page consumes the transfer and applies its own input rules; tools with a manual Run button still require that action for live checks. This is not a saved result, and the destination can send the value to the services it needs. Ordinary edits and lookups do not create a durable report archive.
+Explicit sibling-tool controls can carry the current input or observed address to another page. The shared navigation stores that value temporarily in tab-scoped `sessionStorage`, accepts a transfer for at most one minute, and puts a random transfer token in the URL fragment. The input itself is not placed in the URL. The receiving page consumes the transfer and applies its own input rules; tools with a manual Run button still require that action for live checks. This is not a saved result, and the destination can send the value to the services it needs. Ordinary edits and lookups do not create a durable report archive.
 
 ## Limits
 

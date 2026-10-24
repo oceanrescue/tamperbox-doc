@@ -12,13 +12,13 @@ limitations:
   - Tests only the public address the request came from (a VPN exit or carrier-grade NAT gateway when present); TCP only; one region; no answer is inconclusive
 ---
 
-The tool page is [tamperbox.dev/open-port-checker](https://tamperbox.dev/open-port-checker). It opens ready to check port 25565, the Minecraft Java default and the port people most often forward at home, and tests it only when you press Check port. This page is the long version: which address is tested and why only that one, how the single connection is classified, what each outcome means for a port forward, and how to confirm a fix.
+The tool page is [tamperbox.dev/open-port-checker](https://tamperbox.dev/open-port-checker). It opens ready to check port 25565, the Minecraft Java default, and tests it only when you press Check port. This page is the long version: which address is tested and why only that one, how the single connection is classified, what each outcome means for a port forward, and how to confirm a fix.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> choosing a port, the common-port chips and Break it are handled in your browser and send nothing. Opening the page asks the Tamperbox server for your public address. Pressing Check port asks the server to open one TCP connection to that address on that port; it sends nothing over the connection and stores nothing. The address is never taken from anything you type, so the tool cannot be pointed at someone else.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> choosing a port, the common-port chips and Break it are handled in your browser and send nothing. Opening the page asks the Tamperbox server for your public address. Pressing Check port asks the server to open one TCP connection to that address on that port; it sends no application data over the connection. The page keeps measurements and input changes in memory until reload; explicit tool transfers may use temporary session storage. The address is never taken from anything you type, so the tool cannot be pointed at someone else.</div>
 
 ## What the tool answers
 
-1. **Can the internet reach this port on my connection?** Open, refused, or no answer.
+1. **Can our measurement region reach this port on my connection?** Open, refused, or no answer.
 2. **What does that mean for my setup?** The service, the address it listens on, the router forward, a firewall, carrier-grade NAT or a VPN.
 3. **Is there a catch for this port?** A UDP-only service the TCP test cannot see, or a port home providers often block.
 
@@ -26,7 +26,7 @@ The tool page is [tamperbox.dev/open-port-checker](https://tamperbox.dev/open-po
 
 ### A port
 
-A number from 1 to 65535, typed or chosen from the common ports: 22 (SSH), 80 (HTTP), 443 (HTTPS), 3389 (Remote Desktop), 25565 (Minecraft), 32400 (Plex), 8096 (Jellyfin) and 8080 (an alternative web port). Anything else is refused with "Use a port from 1 to 65535.". The check runs only on Enter or the Check port button; changing the port says what will be tested and waits.
+A number from 1 to 65535, typed or chosen from the common ports: 22 (SSH), 80 (HTTP), 443 (HTTPS), 3389 (Remote Desktop), 25565 (Minecraft), 32400 (Plex), 8096 (Jellyfin) and 8080 (an alternative web port). Anything else is refused with a message naming the invalid value and the valid range, 1 to 65535. The check runs only on Enter or the Check port button; changing the port says what will be tested and waits.
 
 ### Your address
 
@@ -40,7 +40,7 @@ Not an input. The server takes the address the request came from: the `CF-Connec
 
 ### Findings
 
-The current page explains the outcome in its verdict and What to do next section. The [finding reference](#finding-reference) below maps those outcomes and advice notes; it does not imply a separate Findings panel.
+A separate Findings panel follows the verdict. It explains the measured outcome, warns about UDP-only ports, notes ports commonly filtered by providers, and states which public address was tested. Passing findings are folded; CHECK and FAIL findings count toward the number to check. The [finding reference](#finding-reference) maps their wording and severity.
 
 ### The probe line
 
@@ -53,6 +53,28 @@ Numbered steps written for the outcome and the port, with a note when the port i
 ### Checked on this visit
 
 The last twelve checks, newest first, with their outcome and time. Kept in the page only; reloading clears it.
+
+### History
+
+History records input changes made by Break it and Heal it. It appears after the complete result and before Take it further. Revert undoes the newest change; Reset input returns to the input before the first retained change. Restore input before this break is also available in Heal it when there is a change to undo. Restoring does not create another history entry. This history is held in the page and disappears on reload. Here the changed value is the port. Restoring it does not spend a probe. History is separate from Checked on this visit, which records measurement outcomes rather than edits.
+
+### Take it further
+
+These links carry values derived from the current result. A link is absent when its required evidence is missing; the tool does not invent a target.
+
+| Destination | Value and condition |
+| --- | --- |
+| [TCP Ping](/tools/tcp-ping/) | The observed address and port, after an open result |
+| [Minecraft Server Status](/tools/minecraft-server-status/) | The observed address, only after port 25565 is open |
+| [ASN Lookup](/tools/asn-lookup/) | The observed public address, when available |
+
+These links use the observed public address rather than a user-supplied target. The destination applies its own input rules; measurement tools still wait for an explicit run.
+
+### What this result means
+
+Six cards explain the current findings: Ask your agent, In plain words, What does it mean?, What good looks like, How to fix it, and Tool limitations. Expand a card to read the explanation and its method or guide link. Copying an agent prompt does not run another check. The cards interpret the evidence already shown; they are not an additional measurement or an independent confirmation.
+
+When the input is cleared, a check fails, or no result is available, result-specific cards clear and contextual links disappear. Read the verdict before relying on a card, and distinguish a missing observation from a confirmed negative result.
 
 ## Method
 
@@ -99,12 +121,12 @@ The steps under What to do next  follow the outcome: for open, confirm you meant
 
 | Finding | Severity | What it means for the device behind the port | Fix |
 | --- | --- | --- | --- |
-| Port N is open (verdict) | PASS | The measurement region connected; other sources may be filtered | Keep it updated; close the forward when not needed |
-| Port N is closed (verdict) | FAIL | The forward or device answers, but nothing listens | Start the service; bind to the network; fix the forward target |
+| Port N accepts connections from the internet | PASS | The measurement region connected; other sources may be filtered | Keep it updated; close the forward when not needed |
+| Port N refused the connection | FAIL | The forward or device answers, but nothing listens | Start the service; bind to the network; fix the forward target |
 | No answer on port N | CHECK | Dropped before anything answered: no forward, a firewall, CGNAT or a VPN | Add the forward; allow it in the firewall; check for CGNAT |
-| … uses UDP (advice) | INFO | The TCP result says nothing about this UDP service | Test the UDP service from outside with the app itself |
-| Port N may be blocked by home providers (advice) | INFO | The provider may filter it before your router | Ask the provider or use another port |
-| Request-source address (scope) | INFO | A VPN, proxy or CGNAT gateway is tested instead of your router | Turn the VPN off; ask for a public address |
+| … uses UDP | CHECK | The TCP result says nothing about this UDP service | Test the UDP service from outside with the app itself |
+| Port N is often blocked by home providers | INFO | The provider may filter it before your router | Ask the provider or use another port |
+| This tests the address our server sees | INFO | A VPN, proxy or CGNAT gateway is tested instead of your router | Turn the VPN off; ask for a public address |
 
 ## Guide
 
@@ -119,7 +141,7 @@ The steps under What to do next  follow the outcome: for open, confirm you meant
    On Windows, `netstat -an | findstr 25565`. A line with `127.0.0.1` means it listens only locally.
 2. In the router, forward TCP to the device's LAN address, and reserve that address so it does not change after a restart.
 3. Allow the port in the device's firewall.
-4. Press Check port. Open means friends can connect; refused or no answer tell you which step to revisit.
+4. Press Check port. Open confirms the measurement region completed a TCP connection. Friends may still be filtered or rejected by the application; refused or no answer suggest which steps to revisit.
 
 ### The chain a connection has to cross
 
@@ -151,6 +173,16 @@ nc -vz -w 2 <your public address> 25565
 
 Select a common-port button or enter a port from 1 to 65535. This stages the target but does not send a probe until you press Check port or Enter. Results from earlier checks remain in Checked on this visit, up to twelve entries, and disappear on reload. Compare the target address and timestamp before interpreting repeated results.
 
+### Break it and restore the port
+
+| Case | Port loaded | What to expect before running |
+| --- | --- | --- |
+| A UDP-only port | 51820 | A UDP caveat; a TCP check cannot establish WireGuard reachability |
+| Often blocked by providers | 25 | A note about common inbound filtering |
+| Port out of range | 70000 | An invalid-port verdict and a disabled Check port button |
+
+These controls change the port without making a connection. Revert in History or Restore input before this break in Heal it restores the prior port; Reset input undoes the retained changes. Press Check port only when you intend to test the restored valid port.
+
 ## Worked example
 
 The page starts ready to test TCP port 25565 on the request-source address. Nothing has been probed yet. After Check port, read the address actually tested and the outcome: handshake completed, explicit refusal, no answer or unavailable measurement.
@@ -169,7 +201,7 @@ See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/), and
 
 ### Transfers to another tool
 
-Explicit sibling-tool controls can carry the current input or observed address to another page. The shared navigation stores that value temporarily in tab-scoped `sessionStorage` and puts a random transfer token in the URL fragment. The receiving page consumes the transfer and applies its own input rules; tools with a manual Run button still require that action for live checks. This is not a saved result, and the destination can send the value to the services it needs. Ordinary edits and lookups do not create a durable report archive.
+Explicit sibling-tool controls can carry the current input or observed address to another page. The shared navigation stores that value temporarily in tab-scoped `sessionStorage`, accepts a transfer for at most one minute, and puts a random transfer token in the URL fragment. The input itself is not placed in the URL. The receiving page consumes the transfer and applies its own input rules; tools with a manual Run button still require that action for live checks. This is not a saved result, and the destination can send the value to the services it needs. Ordinary edits and lookups do not create a durable report archive.
 
 ## Limits
 

@@ -45,6 +45,24 @@ Three steps: this device (address, network, AS number, country), the link (round
 
 Every layer with its value, grade and what it means, then the edge location, network and address as reported values.
 
+### Take it further
+
+These links carry values derived from the current result. A link is absent when its required evidence is missing; the tool does not invent a target.
+
+| Destination | Value and condition |
+| --- | --- |
+| [ASN Lookup](/tools/asn-lookup/) | The address reported for this connection |
+| [BGP Route Lookup](/tools/bgp-lookup/) | The same observed address |
+| [Reverse DNS](/tools/reverse-dns/) | The same observed address |
+
+Check the rest opens sibling pages without carrying the address. Take it further is the explicit address transfer. These pages have no editable source, Break it, Heal it or input History; Check again refreshes the connection reading.
+
+### What this result means
+
+Six cards explain the current findings: Ask your agent, In plain words, What does it mean?, What good looks like, How to fix it, and Tool limitations. Expand a card to read the explanation and its method or guide link. Copying an agent prompt does not run another check. The cards interpret the evidence already shown; they are not an additional measurement or an independent confirmation.
+
+If the connection reading fails or no result is available, result-specific cards clear and contextual links disappear. Read the verdict before relying on a card, and distinguish a missing observation from a confirmed negative result.
+
 ## Method
 
 ### 1. Where the values come from
@@ -171,7 +189,7 @@ See [Connect an MCP client](/mcp/connect/) and [Security and privacy](/reference
 
 ### Transfers to another tool
 
-Explicit sibling-tool controls can carry the current input or observed address to another page. The shared navigation stores that value temporarily in tab-scoped `sessionStorage` and puts a random transfer token in the URL fragment. The receiving page consumes the transfer and applies its own input rules; tools with a manual Run button still require that action for live checks. This is not a saved result, and the destination can send the value to the services it needs. Ordinary edits and lookups do not create a durable report archive.
+Explicit sibling-tool controls can carry the current input or observed address to another page. The shared navigation stores that value temporarily in tab-scoped `sessionStorage`, accepts a transfer for at most one minute, and puts a random transfer token in the URL fragment. The input itself is not placed in the URL. The receiving page consumes the transfer and applies its own input rules; tools with a manual Run button still require that action for live checks. This is not a saved result, and the destination can send the value to the services it needs. Ordinary edits and lookups do not create a durable report archive.
 
 ## Limits
 
