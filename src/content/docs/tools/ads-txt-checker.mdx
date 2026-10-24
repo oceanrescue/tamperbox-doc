@@ -12,7 +12,7 @@ limitations:
   - At most 12 ad systems and 100 seller IDs each are looked up; a match is evidence, not proof of an active account; unreadable sellers.json files confirm nothing
 ---
 
-The tool page is [tamperbox.dev/ads-txt-checker](https://tamperbox.dev/ads-txt-checker). It checks `tamperbox.dev` live when opened,  says how many lines buyers will skip and how many sellers sellers.json confirms, and lists every record. This page is the long version: where the file is fetched from, every rule, the sellers.json cross-check, what each finding means for the site's ad revenue, and how to fix it.
+The tool page is [tamperbox.dev/ads-txt-checker](https://tamperbox.dev/ads-txt-checker). It checks `tamperbox.dev` live when opened, says how many lines buyers will skip and how many sellers sellers.json confirms, and lists every record. This page is the long version: where the file is fetched from, every rule, the sellers.json cross-check, what each finding means for the site's ad revenue, and how to fix it.
 
 <div class="tb-callout"><strong>Where processing happens:</strong> a pasted file is read in your browser. Its sellers are looked up only when you press <strong>Look up sellers</strong>, which sends the ad system domains and seller IDs (not the file) to the Tamperbox server. A host name is sent to the server, which fetches the file and the ad systems' sellers.json files without cookies. Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history. Sample hosts on the reserved <code>.example</code> zone are answered in the browser from a fixture.</div>
 
@@ -43,13 +43,7 @@ A pasted address loses quotes, brackets and trailing punctuation and keeps the h
 
 ### Findings
 
-Worst first, line findings prefixed with their line; passing findings remain visible.
-
-### Related checks and input transfer
-
-Use Check the rest to open another website tool with the current address. Pasted files are not transferred through these links. Transfers temporarily use browser `sessionStorage` with a one-use random token in the URL fragment; the input itself is not in the URL. The destination accepts a transfer for less than one minute and removes the token. Manual checks still wait for their run button or Enter.
-
-To inspect a value from the result, copy that specific address into the relevant tool. A separate check collects new evidence and can return a different result; do not interpret navigation as confirmation of the original verdict.
+Worst first, line findings prefixed with their line; two or more passing findings are grouped under an expandable **checks passed** row. A single passing finding stays visible.
 
 ### Summary
 
@@ -61,7 +55,33 @@ One row per record: its line, the ad system and seller ID, the relationship, and
 
 ### File
 
-The file as written, numbered, with issue lines tinted, its variables above, and **Download** for the file as it stands (useful after a repair). Long files show their first 60 lines and every marked line; **Show all n lines** lists the rest.
+The file as written, numbered, with issue lines tinted, its variables above, and **Download** for the file as it stands (useful after a repair). Long files show their first 60 lines and every marked line; **Show all n lines** lists the rest, and **Show the first 60 lines** folds it again. Folding is offered only when at least ten unmarked lines after line 60 can be hidden; marked lines remain visible.
+
+### History
+
+History follows the current result evidence. Break it and Heal it record input changes, newest first. **Revert** restores the input before the latest recorded change; **Reset input** restores the input before the first retained change and clears the list. **Restore input before this break** under Heal it also reverts the latest change.
+
+These actions reload and check the restored input. Restoring a public address can therefore send a new request, including on the two tools whose ordinary typing waits for a run button. Editing or pasting a new input clears History. The list lives in the current page; it is not saved monitoring data and does not restore an old network response.
+
+### Take it further
+
+Only links with an available result value appear.
+
+| Follow-up | Value carried | When offered |
+| --- | --- | --- |
+| [Redirect Checker](https://tamperbox.dev/redirect-checker) | Checked host and selected `/ads.txt` or `/app-ads.txt` path | A host was checked |
+| [Website Down Checker](https://tamperbox.dev/website-down-checker) | First unavailable ad system's `/sellers.json` URL | A sellers.json lookup was unavailable |
+| [Email Domain Checker](https://tamperbox.dev/email-domain) | CONTACT value with a leading `mailto:` removed | The file's CONTACT value contains `@` |
+
+### Related checks and input transfer
+
+Check the rest carries the current address to a sibling tool. Take it further carries the specific value listed above. Pasted file contents are not transferred through these links. Transfers temporarily use browser `sessionStorage` with a one-use random token in the URL fragment; the input itself is not in the URL. The destination accepts a transfer for less than one minute and removes the token. Manual destination tools wait for their run button or Enter.
+
+Each destination collects new evidence. A follow-up link does not confirm the original verdict or repair the remote site.
+
+### Result cards
+
+Six expandable cards below the result explain its meaning, give a beginner explanation, offer an agent prompt, describe good practice, suggest fixes and state limitations. Their text follows the current result; it is not another measurement. Open a card for its full explanation and the relevant [Method](#method) or [Guide](#guide). The agent prompt can be copied for review; copying it does not run a repair or send it to an agent.
 
 ## Method
 

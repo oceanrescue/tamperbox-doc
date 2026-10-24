@@ -12,7 +12,7 @@ limitations:
   - Previews approximate each platform's card; platforms cache cards; tags added by scripts are not seen; live images stop at 5 MiB
 ---
 
-The tool page is [tamperbox.dev/open-graph-preview](https://tamperbox.dev/open-graph-preview). It checks `tamperbox.dev` live when opened,  says whether the link is ready to share, and draws the cards platforms make from it. This page is the long version: where each card gets its text and image, every rule, what each finding means, and how to fix it.
+The tool page is [tamperbox.dev/open-graph-preview](https://tamperbox.dev/open-graph-preview). It checks `tamperbox.dev` live when opened, says whether the link is ready to share, and draws the cards platforms make from it. This page is the long version: where each card gets its text and image, every rule, what each finding means, and how to fix it.
 
 <div class="tb-callout"><strong>Where processing happens:</strong> pasted HTML is read in your browser. Its share image is fetched only if you press the button that loads it, and then through the Tamperbox server, so your browser never contacts that site. A page address is fetched by the Tamperbox server, with its share image, when you stop typing. Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history. Sample addresses on the reserved <code>.example</code> zone are answered in the browser from a fixture.</div>
 
@@ -43,13 +43,7 @@ One of: "Ready to share.", "Shares with a small image.", "Shares without a pictu
 
 ### Findings
 
-Every finding, worst first; passing findings remain visible.
-
-### Related checks and input transfer
-
-Use Check the rest to open another website tool with the current address. Pasted files are not transferred through these links. Transfers temporarily use browser `sessionStorage` with a one-use random token in the URL fragment; the input itself is not in the URL. The destination accepts a transfer for less than one minute and removes the token. Manual checks still wait for their run button or Enter.
-
-To inspect a value from the result, copy that specific address into the relevant tool. A separate check collects new evidence and can return a different result; do not interpret navigation as confirmation of the original verdict.
+Every finding, worst first; two or more passing findings are grouped under an expandable **checks passed** row. A single passing finding stays visible.
 
 ### Previews
 
@@ -62,6 +56,34 @@ The missing tags as code to paste inside `<head>`, built only from values the pa
 ### Tags found
 
 Every Open Graph, Twitter, description, robots and viewport tag, the canonical and icon links and any JSON-LD types, each with the previews that read it.
+
+### History
+
+History follows the current result evidence. Break it and Heal it record input changes, newest first. **Revert** restores the input before the latest recorded change; **Reset input** restores the input before the first retained change and clears the list. **Restore input before this break** under Heal it also reverts the latest change.
+
+These actions reload and check the restored input. Restoring a public address can therefore send a new request, including on the two tools whose ordinary typing waits for a run button. Editing or pasting a new input clears History. The list lives in the current page; it is not saved monitoring data and does not restore an old network response.
+
+### Take it further
+
+Only links with an available result value appear.
+
+| Follow-up | Value carried | When offered |
+| --- | --- | --- |
+| [Redirect Checker](https://tamperbox.dev/redirect-checker) | Resolved `og:url`, or the canonical URL as fallback | Fetched HTML names either address |
+| [Website Down Checker](https://tamperbox.dev/website-down-checker) | Share image URL | Fetched HTML names an HTTP(S) image |
+| [SSL Checker](https://tamperbox.dev/ssl-checker) | Share image host | An HTTPS image failed, or its host differs from the page host |
+
+These follow-ups are hidden for pasted HTML, even when its tags contain addresses.
+
+### Related checks and input transfer
+
+Check the rest carries the current address to a sibling tool. Take it further carries the specific value listed above. Pasted file contents are not transferred through these links. Transfers temporarily use browser `sessionStorage` with a one-use random token in the URL fragment; the input itself is not in the URL. The destination accepts a transfer for less than one minute and removes the token. Manual destination tools wait for their run button or Enter.
+
+Each destination collects new evidence. A follow-up link does not confirm the original verdict or repair the remote site.
+
+### Result cards
+
+Six expandable cards below the result explain its meaning, give a beginner explanation, offer an agent prompt, describe good practice, suggest fixes and state limitations. Their text follows the current result; it is not another measurement. Open a card for its full explanation and the relevant [Method](#method) or [Guide](#guide). The agent prompt can be copied for review; copying it does not run a repair or send it to an agent.
 
 ## Method
 
@@ -212,7 +234,7 @@ Platforms cache cards. Use each platform's own refresh tool to fetch the link ag
 | Image too small | A sample page with a small image | Shown as a small thumbnail; the small card layout |
 | Image missing | A sample page whose image answers 404 | og:image did not load |
 
-The first three build on your own input: the HTML you pasted, or the HTML your address returned. Break it replaces the field with an adapted input or a labelled fixture. Keep a copy of your original input if you want to restore it after experimenting.
+The first three build on your own input: the HTML you pasted, or the HTML your address returned. Break it replaces the field with an adapted input or a labelled fixture. Use History to Revert the latest change or Reset input to the starting input; restoring a live address runs a new check.
 
 ## Worked example
 
