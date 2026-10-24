@@ -24,6 +24,15 @@ Each tool's documentation has the same shape, so a finding on the page always ha
 | For agents | How to run the same check through the MCP server and what the result does not prove | The For agents band on the page |
 
 <div class="tb-doc-grid">
+  <a class="tb-doc-card" href="/tools/cdn-detector/"><strong>CDN Detector</strong><span>How Tamperbox combines DNS, network and HTTPS response clues to identify a likely content delivery network.</span></a>
+  <a class="tb-doc-card" href="/tools/dns-provider/"><strong>DNS Provider Lookup</strong><span>How Tamperbox groups authoritative nameservers, recognises providers, and flags fragile or mixed delegation.</span></a>
+  <a class="tb-doc-card" href="/tools/domain-health/"><strong>Domain Health Check</strong><span>How Tamperbox combines DNS, mail, TLS, HTTP and security-header observations into one bounded health report.</span></a>
+  <a class="tb-doc-card" href="/tools/website-hosting/"><strong>Website Hosting Checker</strong><span>How Tamperbox follows website DNS, maps public addresses to networks, and compares the apex with www.</span></a>
+  <a class="tb-doc-card" href="/tools/website-technology/"><strong>Website Technology Detector</strong><span>How Tamperbox identifies web technologies from bounded HTML and response-header signatures without executing the page.</span></a>
+  <a class="tb-doc-card" href="/tools/saas-stack/"><strong>SaaS Stack Detector</strong><span>How Tamperbox reads public TXT records for service-verification tokens and SPF senders without claiming that an account is active.</span></a>
+  <a class="tb-doc-card" href="/tools/subdomain-finder/"><strong>Subdomain Finder</strong><span>How Tamperbox extracts DNS names from public Certificate Transparency observations and labels risky-looking names.</span></a>
+  <a class="tb-doc-card" href="/tools/email-domain/"><strong>MX Lookup &amp; Email Domain Checker</strong><span>How Tamperbox validates a mail domain, reads MX and address fallback records, identifies null MX, and explains what public routing evidence proves.</span></a>
+  <a class="tb-doc-card" href="/tools/email-provider/"><strong>Email Provider Lookup</strong><span>How Tamperbox attributes public MX hostnames to mailbox services and gateways, handles mixed routes, and preserves uncertainty about the downstream mailbox host.</span></a>
   <a class="tb-doc-card" href="/tools/ssl-checker/"><strong>SSL Certificate Checker</strong><span>The certificate a server really sends, its chain on one time axis, the names it covers, the connection it negotiated.</span></a>
   <a class="tb-doc-card" href="/tools/dane-checker/"><strong>DANE &amp; TLSA Checker</strong><span>The TLSA records of every mail server, whether DNSSEC protects them, and which one matches the certificate the server presents.</span></a>
   <a class="tb-doc-card" href="/tools/security-headers/"><strong>Security Headers Checker</strong><span>The six headers a response sends to protect visitors, the rule behind each point of the grade, and the lines to send instead.</span></a>
@@ -48,7 +57,7 @@ Each tool's documentation has the same shape, so a finding on the page always ha
 
 Every tool page says, next to its verdict, where your input goes. The rule is the same across tools:
 
-- **Pasted input stays in your browser.** A certificate chain, a DNS record, a message header: the page reads it locally and sends nothing.
+- **Pasted evidence is parsed locally when the tool supports that mode.** A pasted domain still starts a live lookup. Website Hosting Checker also looks up network information for pasted public IP addresses. Read the tool’s processing notice before running it.
 - **A host name or domain means a named server-side check.** The server makes the required connection, DNS queries or published-file fetches, returns what it saw, and keeps nothing. The page names the port and the records or files it checks before it runs them.
 
 Nothing you enter is stored, put in a URL, or shown to advertisers.

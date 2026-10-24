@@ -3,7 +3,9 @@ import { extname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const defaultRoot = resolve(import.meta.dirname, '..');
-const defaultSiteRoot = resolve(defaultRoot, '../toolkit-apps');
+const defaultSiteRoot = process.env.TAMPERBOX_SITE_ROOT
+  ? resolve(process.env.TAMPERBOX_SITE_ROOT)
+  : resolve(defaultRoot, '../toolkit-apps');
 const exists = path => access(path).then(() => true, () => false);
 
 async function filesBelow(directory) {
