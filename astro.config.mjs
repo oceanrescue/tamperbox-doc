@@ -23,6 +23,7 @@ export default defineConfig({
       },
       customCss: ['./src/styles/tamperbox.css'],
       components: {
+        SocialIcons: './src/components/docs/DocsSocialIcons.astro',
         Head: './src/components/docs/DocsHead.astro',
         PageTitle: './src/components/docs/DocsPageTitle.astro',
         PageSidebar: './src/components/docs/DocsPageSidebar.astro',
