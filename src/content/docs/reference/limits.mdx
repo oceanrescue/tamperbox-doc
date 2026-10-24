@@ -1,8 +1,8 @@
 ---
 title: Limits
 description: Execution, request, result, and concurrency limits for Tamperbox MCP code mode.
-updated: 2026-10-19
-productVersion: "MCP 0.2.0"
+updated: 2026-10-20
+productVersion: "MCP 0.3.0"
 agentSummary: Review the default Tamperbox MCP execution budgets and the behavior that occurs when a limit is reached.
 prerequisites: []
 outputs:
@@ -34,6 +34,8 @@ limitations:
 ## Execution completion
 
 Await every API request. Calls still running when the submitted function completes are cancelled. Responses do not retry or follow redirects unless the documented operation itself defines that behavior.
+
+The hosted API applies an approximate 60-request-per-minute caller budget; network probes have a separate, lower budget. Hosted MCP users can share the server's upstream caller identity. Twenty permitted bridge calls are therefore not a promise that twenty network checks will be accepted. Start with small batches, stop on rate denial and respect `details.retryAfterSeconds` when supplied. MCP exposes a bounded upstream error code and retry delay, not raw upstream error bodies, and does not automatically retry submitted work.
 
 ## Result serialization
 

@@ -1,0 +1,179 @@
+---
+title: Website Hosting Checker
+description: How Tamperbox follows website DNS, maps public addresses to networks, and compares the apex with www.
+updated: 2026-10-24
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and repair guide for the Tamperbox Website Hosting Checker.
+prerequisites:
+  - a domain name or pasted A, AAAA and CNAME evidence
+outputs:
+  - the apex and www DNS chains, public addresses, network attribution and routing findings
+limitations:
+  - Public observations are time-sensitive and do not prove ownership, intent or private configuration
+---
+
+The tool page is [tamperbox.dev/website-hosting](https://tamperbox.dev/website-hosting). It opens with a live lookup of `mozilla.org`; replace it to inspect your own target. This guide documents the actual input path, evidence contract, classifications and independent verification steps.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> input cleanup and report rendering happen in the browser. Direct public IP addresses are sent for network-information lookup, even when pasted. Live checks send only the validated public target to the Tamperbox server and the public services required for the lookup. The page stores no report; History is local to the current browser session.</div>
+
+## What the tool answers
+
+The checker answers which public network appears to serve a website and whether the apex and www names take materially different routes. Its conclusion is deliberately narrower than an ownership or security claim. A displayed provider, product, name or passing check means that the listed public evidence matched a documented rule at the observation time.
+
+Every conclusion is paired with evidence. The opening verdict is a summary for orientation, while Findings contains the actionable interpretation and the later result sections retain the underlying records, addresses, fields or names. If a conclusion matters operationally, verify that evidence through an authoritative account or an independent standards-aware client before changing production.
+
+## Inputs
+
+### Accepted source
+
+Enter a domain or one or more IP addresses separated by whitespace or commas. Domains trigger CNAME, A and AAAA lookups; unless the name already starts with `www.`, the tool also checks its `www` name. Direct public IP input triggers network-information requests. Pasting an IP address is therefore not an offline mode. Special-use addresses are classified locally without a network-information lookup. Invalid IPv4 octets are refused.
+
+Text files are read in the browser. The resulting input follows the same classification rules as the field; reading a file locally does not make a domain or public-IP lookup offline. Cleanup keeps an already accepted record intact and otherwise tries unwrapping a single-line address. Unusable text remains visible for correction.
+
+### When work runs
+
+Domain input runs after a 600-millisecond typing pause. Enter runs it immediately; pasted records run immediately. Drops and page-wide paste use the same input loader. Leaving the field applies cleanup and reruns only when cleanup changes the text. Each edit aborts the previous request and increments a generation marker. A slower old response therefore cannot replace a newer result, and clearing the source immediately clears copyable output.
+
+The opening input uses the same parser and processing path as a replacement. The labelled live default sends the same requests as another domain.
+
+## Reading the result
+
+### Verdict and privacy
+
+The verdict states what the available evidence supports and uses pass, check, fail or informational status consistently. Pass means the bounded rule succeeded. Check means a human should confirm context. Fail means a concrete operational rule was violated. Info describes a limitation, absence or neutral fact and must not be promoted into success or failure by an automated reader.
+
+Two privacy lines distinguish browser-only work from live lookup work. The Checked line names the cleaned input and source mode. Copy result is hidden while work is pending, after an error and when input is empty, preventing a stale report from being exported as current.
+
+### Findings and evidence
+
+Findings are ordered with failures first, then checks, informational notes and passes. Repeated passing details can fold into a disclosure so that exceptions remain visible. Each item states the observation and its consequence; any remediation is scoped to the evidence rather than presented as a universal configuration recipe.
+
+Evidence sections follow Findings and precede History. They are the audit trail for the verdict. A provider label derived from a catalog remains an inference, while a literal record or response field remains an observation. This distinction matters when signatures are incomplete, white-labelled or stale.
+
+### History and handoffs
+
+History records intentional input replacements, including Break it examples and their repairs. Revert restores the prior input and runs it again, including live requests when applicable; Reset input returns to the value at the beginning of the recorded sequence. History is not monitoring, persistence or an account log.
+
+Check the rest carries the current input to other tools in Domains & hosting. Take it further sends the derived hostname to the [CDN and Proxy Detector](/tools/cdn-detector/) or [Website Technology Detector](/tools/website-technology/). These links appear only when that hostname differs from the input. A receiving tool runs its own check; agreement is not guaranteed.
+
+Explicit tool links transfer the input through temporary browser `sessionStorage` and, when needed, a same-origin browser channel. The URL fragment contains a random transfer token, not the input. Transfers are accepted for less than one minute, consumed once, and bound to the destination path. The destination removes the token from its address. Ordinary documentation links and direct visits do not restore a previous input; if transfer storage is unavailable, the link still opens the tool.
+
+
+## Method
+
+### Validation and collection
+
+Before collection, the same domain validation runs in the browser and on the server boundary. Requests are restricted to supported public DNS names and HTTPS roots, redirects are bounded, response sizes are capped and abort signals are propagated. These limits make the observation reproducible and prevent an entered value from becoming an unrestricted network fetch.
+
+Use the input modes above to determine which requests run. DNS evidence comes from a public recursive view and can reflect cache state. Local classification cannot add observations absent from the supplied evidence. A server lookup is a fresh observation, not confirmation that cached or pasted evidence is still current.
+
+### Classification rules
+
+The lookup resolves the entered name and its www counterpart, follows bounded CNAME chains, collects A and AAAA addresses and maps public prefixes to a maintained network catalog. [RFC 1034 section 3.6.2](https://www.rfc-editor.org/rfc/rfc1034#section-3.6.2) says an alias must not coexist with other data; contradictory chains are not silently flattened. The comparison is based on public routing evidence, not a contract with the hosting company.
+
+No confidence percentage is invented. When sources disagree, the disagreement is a finding. When a source is unavailable, the affected conclusion becomes informational or inconclusive rather than silently using a previous result. Catalog matches are exact bounded rules; unknown is a valid outcome.
+
+### Ordering and export
+
+The renderer calculates all findings from the current observation before updating the verdict, chips, evidence and landing cards. Status priority is fail, check, info, pass. Stable secondary ordering keeps repeated runs readable without changing severity.
+
+The Markdown mirror and Copy result output preserve input, summary, findings and important evidence in text form. They do not embed secrets, browser state or the expanded educational cards. Agents should cite the observation time and limitation alongside any exported conclusion.
+
+## Standards and conformance
+
+### Applied specifications
+
+| Source | Rule used | Boundary |
+| --- | --- | --- |
+| [RFC 1034 section 3.6.2](https://www.rfc-editor.org/rfc/rfc1034#section-3.6.2) | A CNAME aliases one owner to another canonical name | At most eight safe hops are followed |
+| [RFC 1035 section 3.4.1](https://www.rfc-editor.org/rfc/rfc1035#section-3.4.1) | A maps a name to an IPv4 address | Addresses are displayed; reachability is not tested |
+| [RFC 3596 section 2.1](https://www.rfc-editor.org/rfc/rfc3596#section-2.1) | AAAA carries an IPv6 address | IPv6 presence is reported, not path quality |
+| [RFC 6890 section 2.2](https://www.rfc-editor.org/rfc/rfc6890#section-2.2) | Special-purpose blocks have defined reachability properties | Non-public destinations are flagged |
+
+These references define the records and message semantics, not the provider catalogs. A catalog is product logic and can lag branding, acquisitions or custom deployments. Where a standard permits several valid configurations, the tool reports the observed form and avoids declaring one commercial pattern universally correct.
+
+### Where conformance stops
+
+The checker is an observer, not an authoritative DNS server, browser, certificate monitor, mail receiver or provider control plane. It does not claim protocol conformance for the target. It applies selected validation and interpretation rules to bounded evidence and exposes the boundary where a fuller protocol operation would begin.
+
+The phrase “public” refers to the server's Internet view. Private split-horizon answers, authenticated dashboards and regional routing can differ. Cached answers can remain until TTL expiry, and HTTP intermediaries can transform what the origin sent.
+
+## Finding reference
+
+### Emitted findings
+
+| Finding | Severity | Meaning | Repair or next check |
+| --- | --- | --- | --- |
+| Has no address | Fail | The chain ends without A or AAAA | Repair the target or remove the broken alias |
+| Points at a non-public address | Fail | Public DNS exposes a special-use destination | Publish a public address or keep the name private |
+| Uses a different network | Check | Apex and www map to different networks | Verify redirects and intended split before editing DNS |
+| IPv6 only | Info | No IPv4 destination was found | Add A unless IPv6-only service is deliberate |
+| No IPv6 | Info | Only IPv4 was observed | Consider AAAA after the origin and CDN support it |
+| Served through a CDN | Info | The visible network is an edge | Use CDN Detector to inspect response clues |
+| Network not looked up | Info | Attribution failed for an address | Retry and inspect the address independently |
+
+Wording can include the observed name, count, provider or status. Automated consumers should use the supplied status and evidence rather than parsing the English title as a permanent identifier. A missing finding is not evidence that the corresponding external condition is absent when its source could not be collected.
+
+### Status handling
+
+| Status | Consumer action | What not to infer |
+| --- | --- | --- |
+| Pass | Preserve the evidence and continue normal review | Permanent correctness, ownership or availability |
+| Check | Confirm intent and inspect the named evidence | Definite compromise or outage |
+| Fail | Prioritise the concrete broken rule and verify independently | That every user sees the same failure |
+| Info | Carry the limitation or neutral fact with the report | Success merely because no failure was emitted |
+
+## Guide
+
+### Verify independently
+
+Start with an authoritative or widely used command-line client. For DNS, use `dig` with the exact record type and compare every returned owner, target and TTL. Add `+trace` only when delegation matters; a trace and a recursive answer solve different questions. For HTTPS, use `curl -I --location https://host/` and retain each hop and response field. For certificates, use an established TLS client and a CT monitor you trust.
+
+Repeat from another network when geography or split routing could matter. Save the observation time and the original evidence before editing. After a DNS change, wait at least the prior TTL and then query both the intended authorities and independent recursive resolvers.
+
+### Repair safely
+
+Do not delete an unfamiliar record or reroute a public name merely because a catalog labels it. First identify the owning service, deployment repository or provider account. Confirm whether the item is current, a migration remnant, a failover path or a delegated responsibility. Make the smallest reversible change, keep the prior value, and have a rollback trigger.
+
+Re-run this page after propagation, then verify the user-visible service. A clean public lookup cannot prove application health. Conversely, an informational unknown does not require a speculative change.
+
+### Diagnose conflicting evidence
+
+When two signals disagree, ask whether they describe different layers: apex versus www, resolver cache versus authority, CDN edge versus origin, entered host versus redirected host, or certificate history versus current DNS. Compare literal evidence before comparing labels. The disagreement itself often reveals a migration or intermediary.
+
+If a lookup fails, preserve the error and retry once. Repeated timeouts are not equivalent to empty data. Use the specialist tool linked by the finding for deeper parsing rather than converting an inconclusive aggregate result into a failure.
+
+### Break it and heal it
+
+The Break it controls create documented edge cases from the visitor's own input or a reserved fixture. They are teaching states, not scans. Heal it restores a safe derived value when the repair is deterministic. Revert remains available when several changes have been made.
+
+Use these cases to learn how invalid, missing, mixed or stale evidence appears before diagnosing production. The control never edits DNS, hosting, certificates or provider accounts.
+
+## Worked example
+
+The live default is `mozilla.org`. Its apex and www names exercise different route evidence and produce a useful comparison instead of a single provider badge. That observation is time-sensitive; the reason for the default is the shape of the result.
+
+Read the example from verdict to Findings, then compare the literal evidence. Open one Break it case and use Heal it or Revert. Finally, replace the default with a domain you are authorised to assess. This sequence demonstrates both the successful path and the failure contract without implying that the named public domain endorses the tool.
+
+## For agents
+
+Agents can discover the `website_hosting` operation through Tamperbox MCP. The browser page id `website-hosting` is not the operation name. The server operation and browser renderer can expose different fields; inspect the operation schema before supplying arguments. Preserve the result's distinction between observed evidence, catalog inference and limitation. State whether the run was live or pasted, include the cleaned target and observation time, and never turn “not found” into “does not exist” unless the method truly establishes that condition.
+
+Choose a specialist operation when the task is narrow. Use this page's report when its combined view or educational findings add value. Do not pass credentials, private hostnames or customer data into a public lookup. If a repair would change production, present the exact evidence, expected effect, propagation window and rollback before acting.
+
+Machine readers should branch on status and structured fields where available, not English punctuation. Treat network and parse errors as inconclusive. Re-run after a meaningful interval rather than repeatedly polling a third-party source.
+
+## Limits
+
+IP ownership does not equal hosting responsibility. Anycast, resellers, cloud tenants, reverse proxies and bring-your-own-IP arrangements can obscure the operator. DNS cannot reveal an origin hidden behind a CDN, and two names on one network are not necessarily the same application.
+
+All outputs are point-in-time observations. Resolver caching, negative caching, anycast, geo steering, redirects and intermittent upstream failures can change a later run. The service does not retain a monitoring history or notify on change. Local History is an interaction aid, not durable evidence.
+
+No result grants permission to probe a target or modify it. Use authorised accounts and owner-approved procedures for deeper checks. Where business, security or legal decisions depend on attribution, obtain confirmation from the responsible provider or domain operator.
+
+## References
+
+- [RFC 1034](https://www.rfc-editor.org/rfc/rfc1034), Domain Names — Concepts and Facilities, especially [section 4.3.2](https://www.rfc-editor.org/rfc/rfc1034#section-4.3.2) for resolver behavior.
+- [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035), Domain Names — Implementation and Specification, especially [section 3.2.1](https://www.rfc-editor.org/rfc/rfc1035#section-3.2.1) for resource-record types and classes.
+- [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110), HTTP Semantics, especially [section 3.7](https://www.rfc-editor.org/rfc/rfc9110#section-3.7) for intermediaries and [section 15](https://www.rfc-editor.org/rfc/rfc9110#section-15) for status codes when HTTP evidence is collected.
+- [Tamperbox Website Hosting Checker](https://tamperbox.dev/website-hosting), the interactive tool and current Markdown mirror.

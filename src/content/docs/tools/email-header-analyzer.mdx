@@ -1,9 +1,9 @@
 ---
 title: Email Header Analyzer
 description: How the analyzer turns raw message headers into a route with delays and TLS per hop, reads the receiver's authentication results, compares the From, Return-Path and DKIM domains, every rule it applies, what each finding means, and what to do about it.
-updated: 2026-10-19
+updated: 2026-10-21
 productVersion: "tamperbox.dev, October 2026"
-agentSummary: Method, finding reference and guide for the Tamperbox Email Header Analyzer, which parses a message's header block in the browser, orders the Received hops oldest first with the delay each server added and whether the hop was encrypted, reads the topmost Authentication-Results header, compares identities for exact alignment, and looks up hop addresses only on request.
+agentSummary: Method, standards conformance, finding reference and guide for the Tamperbox Email Header Analyzer, which parses a message's header block in the browser, orders the Received hops oldest first with the delay each server added and whether the hop was encrypted, reads the topmost Authentication-Results header, compares identities for exact alignment, and looks up hop addresses only on request. It reports what the receiver recorded and does not verify DKIM, SPF, DMARC or ARC itself.
 prerequisites:
   - The raw headers of a message, or an .eml file
 outputs:
@@ -12,7 +12,7 @@ limitations:
   - Results are what the receiving server recorded, not fresh verification; headers below your own receiver can be forged; alignment is an exact domain match; delays depend on each server's clock
 ---
 
-The tool page is [tamperbox.dev/email-header-analyzer](https://tamperbox.dev/email-header-analyzer). It opens on a working example: an order confirmation sent through a mail service, held for 38 seconds at one hop, with SPF passing for the service rather than the brand. This page is the long version: how the header block is read, every rule applied to the route, the authentication results and the identities, what each finding means, and what to do about it.
+The tool page is [tamperbox.dev/email-header-analyzer](https://tamperbox.dev/email-header-analyzer). It opens on a working example: an order confirmation sent through a mail service, held for 38 seconds at one hop, with SPF passing for the service rather than the brand. This page is the long version: how the header block is read, every rule applied to the route, the authentication results and the identities, which parts of which standards the tool follows and where it stops, what each finding means, and what to do about it.
 
 <div class="tb-callout"><strong>Where processing happens:</strong> the whole header block is parsed in your browser and never uploaded. Only when you choose Look up hop addresses are the public IP addresses of the hops, and nothing else, sent to the Tamperbox server for public DNS and network registry lookups. Nothing is stored.</div>
 
@@ -65,68 +65,243 @@ The three results as the receiver recorded them, with the identity each one chec
 
 ### Message and every header
 
-The identity fields with what each one means, and the complete header list with a filter.
+The identity fields with what each one means, and the complete header list with a filter. Values are shown as written: encoded words such as `=?UTF-8?B?...?=` in From or Subject are not decoded.
 
 ## Method
 
+Each rule below names the section of the specification it comes from. Where a rule is a Tamperbox choice and no specification asks for it, the source says "none".
+
 ### Reading the header block
 
-The text is cut at the first blank line. Lines starting with a space or tab are joined to the field above. A field is `name: value`; with no fields at all, the input is refused.
+The text is cut at the first blank line, the boundary [RFC 5322 section 2.1](https://www.rfc-editor.org/rfc/rfc5322#section-2.1) defines between the header section and the body. A line that holds only spaces or tabs also counts as blank here. Lines starting with a space or tab are joined to the field above: "Unfolding is accomplished by simply removing any CRLF that is immediately followed by WSP" ([RFC 5322 section 2.2.3](https://www.rfc-editor.org/rfc/rfc5322#section-2.2.3)). The tool trims the continuation line and joins it with one space, so runs of white space inside a folded value become a single space.
 
-### Route and timing
+A field is `name: value`. The name must be printable US-ASCII except the colon, the rule of [RFC 5322 section 2.2](https://www.rfc-editor.org/rfc/rfc5322#section-2.2); a line that is neither a field nor a continuation is skipped without a message. With no fields at all, the input is refused. Field names are matched without regard to case.
 
-Received headers are reversed, so the first hop is the oldest. From each one the tool takes the `from`, `by` and `with` clauses, the timestamp after the last semicolon, and an address: the first IPv4 address in the `from` clause, else a bracketed IPv6 address there, else any IPv4 address in the header. An address outside public ranges is labelled non-public. A hop's delay is its timestamp minus the previous hop's: how long the earlier server held the message.
+### Route: hop order and clauses
 
-| Rule | Severity | Title |
-| --- | --- | --- |
-| The longest delay exceeds 30 seconds | CHECK | N s at server (the server that held the message) |
-| A hop is stamped more than 2 seconds before the hop before it | INFO | Clock skew at hop N |
-| A hop has a `from` clause, no TLS marker, and a public address | CHECK | No TLS into server |
+Received headers are reversed, so the first hop is the oldest. That order is reliable because "SMTP servers MUST prepend Received lines to messages; they MUST NOT change the order of existing lines" ([RFC 5321 section 4.4](https://www.rfc-editor.org/rfc/rfc5321#section-4.4)).
 
-A hop counts as encrypted when its header mentions `ESMTPS`, `ESMTPSA`, `TLS` or `version=TLS`. The end-to-end time runs from the oldest stamp to the newest.
+From each Received header the tool takes the `from`, `by` and `with` clauses and the timestamp after the last semicolon, following the Stamp grammar of [RFC 5321 section 4.4](https://www.rfc-editor.org/rfc/rfc5321#section-4.4). The address is the first IPv4 address in the `from` clause and its TCP-info comment, else an IPv6 address literal there (`[IPv6:...]`, [RFC 5321 section 4.1.3](https://www.rfc-editor.org/rfc/rfc5321#section-4.1.3)), else any IPv4 address anywhere in the header. That last fallback can pick up the receiving server's own address. An address outside public ranges is labelled non-public.
 
-### Authentication results
+The timestamp is read with the browser's date parser after a trailing comment is removed. A hop's delay is its timestamp minus the previous hop's: how long the earlier server held the message. The end-to-end time runs from the oldest stamp to the newest.
 
-The topmost `Authentication-Results` header is read, or `ARC-Authentication-Results` when there is none: the reporting server, then every `method=result` entry with its properties (`smtp.mailfrom`, `header.i`, `header.d`, `header.s`, `header.from`). When a method appears more than once, a passing entry is preferred.
+### Route rules
 
-| Rule | Severity | Title |
-| --- | --- | --- |
-| Always | INFO | Reported results, not independent verification |
-| No Authentication-Results header | INFO | No Authentication-Results header |
-| DMARC pass | PASS | DMARC passed |
-| DMARC any other result | FAIL | DMARC result |
-| SPF pass for a Return-Path domain that is not the From domain | INFO | SPF passed but is not aligned |
-| SPF other than pass or none | FAIL | SPF result |
-| DKIM none | CHECK | DKIM none |
-| DKIM other than pass or none | FAIL | DKIM result |
+| Rule | Severity | Title | Source |
+| --- | --- | --- | --- |
+| The longest delay exceeds 30 seconds | CHECK | N s at server (the server that held the message) | none (Tamperbox threshold) |
+| A hop is stamped more than 2 seconds before the hop before it | INFO | Clock skew at hop N | [RFC 5321 §4.4](https://www.rfc-editor.org/rfc/rfc5321#section-4.4) |
+| A hop has a `from` clause, no TLS marker, and a public address | CHECK | No TLS into server | [RFC 3848 §1](https://www.rfc-editor.org/rfc/rfc3848#section-1) |
 
-### Alignment and reply identity
+Clock skew relies on header order over timestamps: the order is a MUST, while dates only carry "SHOULD use explicit offsets in the dates (e.g., -0800), rather than time zone names" ([RFC 5321 section 4.4](https://www.rfc-editor.org/rfc/rfc5321#section-4.4)).
 
-Alignment is an exact domain match; no public suffix list is used, so relaxed alignment is not evaluated. The Return-Path domain is compared with the From domain, and every `d=` of a DKIM-Signature header is compared with From. A DMARC pass is attributed to DKIM or SPF only when one of them matches exactly; a DKIM domain that is a parent or subdomain of From is labelled as a domain relationship.
+A hop counts as encrypted when its header mentions `ESMTPS`, `ESMTPSA`, `TLS` or `version=TLS` anywhere. [RFC 3848 section 1](https://www.rfc-editor.org/rfc/rfc3848#section-1) defines ESMTPS as "the use of ESMTP when STARTTLS [1] is also successfully negotiated". The other registered encrypted types, `LMTPS`, `LMTPSA` and the `UTF8SMTPS` family from [RFC 6531 section 4.3](https://www.rfc-editor.org/rfc/rfc6531#section-4.3), are not recognised unless the header also mentions TLS.
 
-A Reply-To domain that is neither the From domain nor one of its subdomains is CHECK, "Replies go to X". With a DMARC pass, the verdict keeps the pass and is raised to a CHECK.
+### Authentication results: which header
+
+The topmost `Authentication-Results` header is read, or the topmost `ARC-Authentication-Results` when there is none. Topmost is the newest, because the field "MUST be treated as though it were a trace header field" and "MUST be prepended to the message" ([RFC 8601 section 4.1](https://www.rfc-editor.org/rfc/rfc8601#section-4.1)). Lower Authentication-Results headers are ignored, including a second one from the same receiver.
+
+The value is split on semicolons, following `resinfo` in [RFC 8601 section 2.2](https://www.rfc-editor.org/rfc/rfc8601#section-2.2). The first part is shown as the reporting server, the authserv-id of [RFC 8601 section 2.5](https://www.rfc-editor.org/rfc/rfc8601#section-2.5). Every later part that starts with `method=result` becomes an entry, with its `ptype.property` values (`smtp.mailfrom`, `header.i`, `header.d`, `header.s`, `header.from`). When a method appears more than once, a passing entry is preferred.
+
+The authserv-id is shown, never checked against a list of servers you trust. Section 2.5 says consumers "SHOULD use this identifier to determine whether or not the data contained in an Authentication-Results header field ought to be used or ignored". The tool leaves that decision to you and says so in the INFO finding.
+
+### Authentication rules
+
+| Rule | Severity | Title | Source |
+| --- | --- | --- | --- |
+| Always | INFO | Reported results, not independent verification | [RFC 8601 §7.1](https://www.rfc-editor.org/rfc/rfc8601#section-7.1) |
+| No entries read from the header | INFO | No Authentication-Results header | [RFC 8601 §2.2](https://www.rfc-editor.org/rfc/rfc8601#section-2.2) |
+| DMARC pass | PASS | DMARC passed | [RFC 9989 §5.3.5](https://www.rfc-editor.org/rfc/rfc9989#section-5.3.5) |
+| DMARC fail or permerror | FAIL | DMARC result | [RFC 9989 §5.3.5](https://www.rfc-editor.org/rfc/rfc9989#section-5.3.5) |
+| SPF pass for a Return-Path domain that is not the From domain | INFO | SPF passed but is not aligned | [RFC 9989 §4.4.2](https://www.rfc-editor.org/rfc/rfc9989#section-4.4.2) |
+| SPF fail or permerror | FAIL | SPF result | [RFC 7208 §2.6](https://www.rfc-editor.org/rfc/rfc7208#section-2.6) |
+| DKIM none | INFO | DKIM none | [RFC 8601 §2.7.1](https://www.rfc-editor.org/rfc/rfc8601#section-2.7.1) |
+| DKIM fail or permerror | FAIL | DKIM result | [RFC 8601 §2.7.1](https://www.rfc-editor.org/rfc/rfc8601#section-2.7.1) |
+
+### Authentication rules: the sentences behind them
+
+DMARC decides the verdict. [RFC 9989 section 5.3.5](https://www.rfc-editor.org/rfc/rfc9989#section-5.3.5): "If one or more of the Authenticated Identifiers align with the Author Domain, the message is considered to pass the DMARC mechanism check." The tool takes the receiver's word for which side of that line the message fell. It treats `none` as informational, consistent with [RFC 9989 section 9.2](https://www.rfc-editor.org/rfc/rfc9989#section-9.2) registers as "No DMARC Policy Record exists for the Author Domain".
+
+SPF results follow [RFC 7208 section 2.6](https://www.rfc-editor.org/rfc/rfc7208#section-2.6). The tool treats `neutral` and `none` as informational, following [RFC 7208 section 8.2](https://www.rfc-editor.org/rfc/rfc7208#section-8.2), which says: "A "neutral" result MUST be treated exactly like the "none" result". `softfail` is a CHECK here; section 8.5 says receivers "SHOULD NOT reject the message based solely on this result".
+
+DKIM results follow [RFC 8601 section 2.7.1](https://www.rfc-editor.org/rfc/rfc8601#section-2.7.1): `none` means "The message was not signed", so it is INFO; fail and permerror are FAIL, temperror is CHECK, and neutral and other results are INFO.
+
+### Alignment
+
+Alignment is an exact domain match, compared in lower case. [RFC 9989 section 3.2.10.2](https://www.rfc-editor.org/rfc/rfc9989#section-3.2.10.2) calls this strict alignment: "When the Author Domain (Section 3.2.2) is identical to an Authenticated Identifier (Section 3.2.1), the two are said to be in strict alignment." Relaxed alignment ([section 3.2.10.1](https://www.rfc-editor.org/rfc/rfc9989#section-3.2.10.1)) needs the Organizational Domain, which RFC 9989 finds with a DNS tree walk ([section 4.10](https://www.rfc-editor.org/rfc/rfc9989#section-4.10)). The tool makes no DNS queries for authentication, so relaxed alignment is not evaluated.
+
+The Return-Path domain is compared with the From domain, and every `d=` of a DKIM-Signature header ([RFC 6376 section 3.5](https://www.rfc-editor.org/rfc/rfc6376#section-3.5)) is compared with From. A DMARC pass is attributed to DKIM or SPF only when one of them matches exactly; a DKIM domain that is a parent or subdomain of From is labelled as a domain relationship.
+
+The From domain is extracted from a single mailbox after excluding display names and nested comments. The value `"ceo@bank.example" <x@evil.example>` yields `evil.example`. Ambiguous lists, multiple From fields and unsupported syntax yield an unknown domain; encoded display words are not decoded. See [RFC 5322 section 3.4](https://www.rfc-editor.org/rfc/rfc5322#section-3.4).
+
+### Reply identity
+
+A Reply-To domain that is neither the From domain nor one of its subdomains is CHECK, "Replies go to X". Source: none; this is a Tamperbox phishing heuristic. [RFC 5322 section 3.6.2](https://www.rfc-editor.org/rfc/rfc5322#section-3.6.2) only says Reply-To "indicates the address(es) to which the author of the message suggests that replies be sent". With a DMARC pass, the verdict keeps the pass and is raised to a CHECK.
 
 ### Hop address lookup
 
-Nothing leaves the browser until you choose Look up hop addresses. Then up to 50 unique public addresses are sent to the server, three at a time, which returns the autonomous system, organisation and registry country from the network registry and the reverse name from public DNS. Documentation ranges are answered on the page without a request. Partial answers are counted and can be retried.
+Nothing leaves the browser until you choose Look up hop addresses. Then up to 50 unique public addresses are sent to the server, three at a time, which returns the autonomous system, organisation and registry country from the network registry and the reverse name from public DNS. Documentation ranges are answered on the page without a request. Partial answers are counted and can be retried. Source: none; this is a Tamperbox convenience, not part of any mail standard.
+
+## Standards and conformance
+
+The analyzer is a reader of trace and authentication headers. Everything in this section runs in your browser on the text you pasted. The only network request the code can make is the optional hop address lookup, which sends public IP addresses and nothing from the authentication section. The tool does not re-verify DKIM signatures, re-evaluate SPF, look up DMARC records or validate ARC seals. It reports what the receiver recorded, and where it parses more loosely than a specification allows, the tables below say so.
+
+### RFC 5322 Internet Message Format
+
+[RFC 5322](https://www.rfc-editor.org/rfc/rfc5322), Draft Standard, updated by [RFC 6854](https://www.rfc-editor.org/rfc/rfc6854).
+
+| Section | Requirement | What the tool does |
+| --- | --- | --- |
+| [2.1](https://www.rfc-editor.org/rfc/rfc5322#section-2.1) | An empty line separates the header section from the body | Cuts at the first empty line; a line of only white space also ends the header |
+| [2.2](https://www.rfc-editor.org/rfc/rfc5322#section-2.2) | Field name of printable US-ASCII except colon | Same character range; lines that do not match are skipped silently |
+| [2.2.3](https://www.rfc-editor.org/rfc/rfc5322#section-2.2.3) | Unfold by removing CRLF before WSP | Unfolds, but trims and joins with one space |
+| [3.3](https://www.rfc-editor.org/rfc/rfc5322#section-3.3) | date-time syntax | Read by the browser's date parser, which also accepts obsolete forms |
+| [3.4](https://www.rfc-editor.org/rfc/rfc5322#section-3.4) | `name-addr = [display-name] angle-addr` | Single mailbox parsed with display names and comments excluded; ambiguous input stays unknown |
+| [3.6.2](https://www.rfc-editor.org/rfc/rfc5322#section-3.6.2) | From is a mailbox list; Reply-To an address list | Only the first address of each is used |
+| [3.6.7](https://www.rfc-editor.org/rfc/rfc5322#section-3.6.7) | Return-Path and Received are trace fields | Read as trace; only the first Return-Path is used |
+
+The display-name gap matters for phishing. A From of `"ceo@bank.example" <x@evil.example>` is reported as from `bank.example`. Read the From row in Message and every header before you trust the domain.
+
+### RFC 5321 SMTP trace information
+
+[RFC 5321](https://www.rfc-editor.org/rfc/rfc5321), Draft Standard, updated by [RFC 7504](https://www.rfc-editor.org/rfc/rfc7504).
+
+| Section | Requirement | What the tool does |
+| --- | --- | --- |
+| [4.4](https://www.rfc-editor.org/rfc/rfc5321#section-4.4) | Received lines are prepended and never reordered | Reverses them to get the route oldest first |
+| [4.4](https://www.rfc-editor.org/rfc/rfc5321#section-4.4) | Stamp: `FROM`, `BY`, optional `WITH`, then `;` and date-time | Takes the first `from`, `by` and `with` words and the text after the last `;` |
+| [4.4](https://www.rfc-editor.org/rfc/rfc5321#section-4.4) | The FROM clause SHOULD carry the address from the TCP connection | Takes the first address in the clause, with fallbacks described under Method |
+| [4.4](https://www.rfc-editor.org/rfc/rfc5321#section-4.4) | obs- date forms MUST NOT be used in SMTP | Accepts them; a stamp in `EST` is read without a warning |
+| [4.4](https://www.rfc-editor.org/rfc/rfc5321#section-4.4) | Return-Path preserves the MAIL FROM reverse-path | Uses the Return-Path domain as the SPF identity for alignment |
+| [4.1.3](https://www.rfc-editor.org/rfc/rfc5321#section-4.1.3) | IPv6 address literal `[IPv6:...]` | Recognised in the `from` clause |
+
+Received headers below your own receiver were written by servers you do not control. Section 4.4 says a mail program "MUST NOT change or delete a Received: line", but nothing stops a sender from adding false ones before the first real hop. The tool draws them like any other hop.
+
+### RFC 3848 and RFC 6531 transmission types
+
+[RFC 3848](https://www.rfc-editor.org/rfc/rfc3848), Draft Standard, registers `ESMTPA`, `ESMTPS`, `ESMTPSA`, `LMTP`, `LMTPA`, `LMTPS` and `LMTPSA` for the `with` clause ([section 1](https://www.rfc-editor.org/rfc/rfc3848#section-1)). [RFC 6531](https://www.rfc-editor.org/rfc/rfc6531), Proposed Standard, adds the `UTF8SMTP` family, including `UTF8SMTPS` "ESMTP with SMTPUTF8 and STARTTLS" ([section 4.3](https://www.rfc-editor.org/rfc/rfc6531#section-4.3)).
+
+| Type | Means encrypted | Tool counts it as TLS |
+| --- | --- | --- |
+| `ESMTPS`, `ESMTPSA` | Yes | Yes |
+| `LMTPS`, `LMTPSA` | Yes | Only if `TLS` appears elsewhere in the header |
+| `UTF8SMTPS`, `UTF8SMTPSA` | Yes | Only if `TLS` appears elsewhere in the header |
+| Any type, with `TLS` in a comment | Not defined by these RFCs | Yes |
+
+The No TLS finding only applies to hops with a public address, so the usual LMTP hop to a mailbox store on an internal address is not flagged. [RFC 3848 section 3](https://www.rfc-editor.org/rfc/rfc3848#section-3) warns that these keywords "should not be used for mail filtering or relaying decisions except in very controlled environments"; the tool uses them only for a CHECK.
+
+### RFC 8601 Authentication-Results: parsing
+
+[RFC 8601](https://www.rfc-editor.org/rfc/rfc8601), Proposed Standard.
+
+| Section | Requirement | What the tool does |
+| --- | --- | --- |
+| [2.2](https://www.rfc-editor.org/rfc/rfc8601#section-2.2) | `authserv-id [version] (no-result / 1*resinfo)` | Splits on every `;` and shows the first part, version included, as the server |
+| [2.2](https://www.rfc-editor.org/rfc/rfc8601#section-2.2) | `no-result` is the literal `none` | Not recognised: the header is reported as missing |
+| [2.2](https://www.rfc-editor.org/rfc/rfc8601#section-2.2) | Comments (CFWS) may appear between tokens | A `;` inside a comment or quoted `reason` cuts the entry short and its properties are lost |
+| [2.3](https://www.rfc-editor.org/rfc/rfc8601#section-2.3) | `ptype.property=pvalue` | Read for every dotted property; `reason` is not read |
+| [2.6](https://www.rfc-editor.org/rfc/rfc8601#section-2.6) | A method may carry a version, `dkim/1` | Not recognised: the entry is dropped |
+| [2.7.1](https://www.rfc-editor.org/rfc/rfc8601#section-2.7.1), [2.7.2](https://www.rfc-editor.org/rfc/rfc8601#section-2.7.2) | DKIM and SPF result sets | Pass, none and failure, as listed under Method |
+| [4.1](https://www.rfc-editor.org/rfc/rfc8601#section-4.1) | Ignore unregistered results and unsupported methods | Shows only `spf`, `dkim` and `dmarc`; other methods are read but not displayed |
+
+The `;` problem is not theoretical: the expanded example in [RFC 7208 section 9.2](https://www.rfc-editor.org/rfc/rfc7208#section-9.2) has `reason="client-ip=192.0.2.1; smtp.helo=foo.example.com"`, which the tool splits in two.
+
+### RFC 8601 Authentication-Results: trust
+
+| Section | Requirement | What the tool does |
+| --- | --- | --- |
+| [2.5](https://www.rfc-editor.org/rfc/rfc8601#section-2.5) | Consumers SHOULD use the authserv-id to decide whether to use the header | Shows it; you decide |
+| [4.1](https://www.rfc-editor.org/rfc/rfc8601#section-4.1) | MUAs and filters "SHOULD NOT interpret this header field unless specifically configured to do so" | You start the reading by pasting; there is no trusted-server list |
+| [5](https://www.rfc-editor.org/rfc/rfc8601#section-5) | The receiving MTA MUST delete forged copies claiming its own authserv-id | Out of scope: the tool is not an MTA and assumes your receiver did this |
+| [7.1](https://www.rfc-editor.org/rfc/rfc8601#section-7.1) | Forged header fields: a trusted list "should initially be empty" | Always adds the INFO finding that results are reported, not verified |
+
+RFC 8601 says processing should not be on by default; the tool reads the header because that is its whole job, and every result is labelled as the receiver's claim. If the topmost header was added by a server outside your own mail system, or by the sender, treat every result on the page as unverified.
+
+### RFC 7208 SPF
+
+[RFC 7208](https://www.rfc-editor.org/rfc/rfc7208), Proposed Standard, updated by [RFC 7372](https://www.rfc-editor.org/rfc/rfc7372), [RFC 8553](https://www.rfc-editor.org/rfc/rfc8553) and [RFC 8616](https://www.rfc-editor.org/rfc/rfc8616).
+
+| Section | Requirement | What the tool does |
+| --- | --- | --- |
+| [2.4](https://www.rfc-editor.org/rfc/rfc7208#section-2.4) | With a null reverse-path, MAIL FROM is `postmaster@` the HELO identity | Not applied: a Return-Path of `<>` has no domain, so the Return-Path row shows none |
+| [2.6](https://www.rfc-editor.org/rfc/rfc7208#section-2.6) | Seven results: none, neutral, pass, fail, softfail, temperror, permerror | Displays the recorded result as written |
+| [4](https://www.rfc-editor.org/rfc/rfc7208#section-4) | check_host() evaluation | Not performed; no DNS query is made |
+| [8.2](https://www.rfc-editor.org/rfc/rfc7208#section-8.2) | Neutral MUST be treated exactly like none | Both are informational |
+| [8.5](https://www.rfc-editor.org/rfc/rfc7208#section-8.5) | Softfail is between fail and none | Reported as CHECK |
+| [9.2](https://www.rfc-editor.org/rfc/rfc7208#section-9.2) | SPF results in Authentication-Results with `smtp.mailfrom` | Shows `smtp.mailfrom` as the checked identity; alignment uses Return-Path instead |
+
+The `smtp.mailfrom` the receiver recorded and the Return-Path domain usually agree. When they do not, the SPF tile and the alignment table show different domains.
+
+### RFC 6376 DKIM
+
+[RFC 6376](https://www.rfc-editor.org/rfc/rfc6376), Internet Standard, updated by [RFC 8301](https://www.rfc-editor.org/rfc/rfc8301), [RFC 8463](https://www.rfc-editor.org/rfc/rfc8463), [RFC 8553](https://www.rfc-editor.org/rfc/rfc8553) and [RFC 8616](https://www.rfc-editor.org/rfc/rfc8616).
+
+| Section | Requirement | What the tool does |
+| --- | --- | --- |
+| [3.2](https://www.rfc-editor.org/rfc/rfc6376#section-3.2) | DKIM-Signature is a tag=value list | Parsed for `d=`, `s=` and `a=` |
+| [3.5](https://www.rfc-editor.org/rfc/rfc6376#section-3.5) | `d=` is the signing domain (SDID) | Compared with the From domain for alignment |
+| [6](https://www.rfc-editor.org/rfc/rfc6376#section-6) | "Verifiers MUST produce a result that is semantically equivalent to applying the steps listed in Sections 6.1, 6.1.1, and 6.1.2" | Not a verifier: no key lookup, no body hash, no signature check |
+
+Because it does not verify, the tool compares every `d=` it finds, including signatures the receiver marked as failed. With one aligned signature that failed and an unaligned one that passed, it still says DMARC passed through DKIM. RFC 9989 counts only a validated `d=` ([section 3.2.3](https://www.rfc-editor.org/rfc/rfc9989#section-3.2.3)). The receiver's own DMARC result is still the one shown.
+
+### RFC 9989 DMARC
+
+[RFC 9989](https://www.rfc-editor.org/rfc/rfc9989), Proposed Standard, May 2026. It obsoletes RFC 7489 together with [RFC 9990](https://www.rfc-editor.org/rfc/rfc9990) (aggregate reporting) and [RFC 9991](https://www.rfc-editor.org/rfc/rfc9991) (failure reporting); the tool uses neither report format.
+
+| Section | Requirement | What the tool does |
+| --- | --- | --- |
+| [3.2.4](https://www.rfc-editor.org/rfc/rfc9989#section-3.2.4) | The SPF Domain is the SPF-validated MAIL FROM | Uses the Return-Path domain |
+| [3.2.10.1](https://www.rfc-editor.org/rfc/rfc9989#section-3.2.10.1) | Relaxed alignment: same Organizational Domain | Not evaluated |
+| [3.2.10.2](https://www.rfc-editor.org/rfc/rfc9989#section-3.2.10.2) | Strict alignment: identical domains | Evaluated, without checking that SPF or DKIM passed |
+| [4.4](https://www.rfc-editor.org/rfc/rfc9989#section-4.4) | Domain comparisons are case-insensitive | Lower-cases before comparing |
+| [4.10](https://www.rfc-editor.org/rfc/rfc9989#section-4.10) | DNS tree walk for policy and Organizational Domain | Not performed |
+| [5.3.1](https://www.rfc-editor.org/rfc/rfc9989#section-5.3.1) | Zero or several From domains: validation is not possible | Uses the first domain and carries on |
+| [5.3.5](https://www.rfc-editor.org/rfc/rfc9989#section-5.3.5) | Pass when an Authenticated Identifier aligns | Takes the receiver's recorded result |
+| [9.2](https://www.rfc-editor.org/rfc/rfc9989#section-9.2) | Result names pass, fail, none, temperror, permerror | Pass is PASS; none is INFO; temperror is CHECK; fail and permerror are FAIL |
+
+The `dmarc=none` result is informational: it indicates no applicable policy, rather than a failed authentication check.
+
+### RFC 8617 ARC
+
+[RFC 8617](https://www.rfc-editor.org/rfc/rfc8617), Experimental. Not on the standards track.
+
+| Section | Requirement | What the tool does |
+| --- | --- | --- |
+| [4.1.1](https://www.rfc-editor.org/rfc/rfc8617#section-4.1.1) | AAR is `instance ";" authres-payload` | Read only when no Authentication-Results header exists; the instance tag `i=1` is shown as the server name and the real authserv-id is skipped |
+| [4.2.1](https://www.rfc-editor.org/rfc/rfc8617#section-4.2.1) | Instance tags order ARC sets | Not used; the topmost AAR is taken |
+| [5.2](https://www.rfc-editor.org/rfc/rfc8617#section-5.2) | Validator actions on ARC-Seal and ARC-Message-Signature | Not performed |
+
+An ARC-Authentication-Results header records what an intermediary saw, and without seal validation anyone could have written it.
+
+### RFC 2047 encoded words
+
+[RFC 2047](https://www.rfc-editor.org/rfc/rfc2047), Draft Standard. Encoded words ([section 2](https://www.rfc-editor.org/rfc/rfc2047#section-2)) are not decoded; From, Subject and other values are shown as written. The From domain is unaffected, because encoded words may not appear in an addr-spec ([section 5](https://www.rfc-editor.org/rfc/rfc2047#section-5)).
 
 ## Finding reference
 
-| Finding | Severity | What it means | What to do |
-| --- | --- | --- | --- |
-| Reported results, not independent verification | INFO | The receiver's word, not a re-check | Confirm the reporting server is yours |
-| No Authentication-Results header | INFO | Nothing was recorded, or the headers came from the sender's side | Copy from the received message |
-| DMARC passed | PASS | The From domain was proven by aligned SPF or DKIM | |
-| DMARC fail (or other) | FAIL | The From domain was not proven | Treat as unverified; if yours, fix SPF or DKIM alignment |
-| SPF passed but is not aligned | INFO | Normal for a mail service; DMARC relies on DKIM | Nothing |
-| SPF softfail, fail, neutral, temperror, permerror | FAIL | The sending server is not in the bounce domain's SPF record | Add it, if the message is yours |
-| DKIM none | CHECK | The message was not signed | Sign outgoing mail |
-| DKIM fail (or other) | FAIL | The signature did not verify | Check the key; look for a forwarder that altered the message |
-| Replies go to X | CHECK | Answers leave the From domain | Verify the sender before replying |
-| N s at server | CHECK | The longest wait on the route | Nothing, unless it repeats |
-| Clock skew at hop N | INFO | Server clocks disagree | Fix the clock if the server is yours |
-| No TLS into server | CHECK | The hop was not recorded as encrypted | Enable STARTTLS; publish MTA-STS |
-| Nothing unusual | PASS | Authentication, identity and route look normal | |
+The RFC section column links the rule each finding comes from. "none" marks a Tamperbox recommendation that no specification requires.
+
+### Authentication findings
+
+| Finding | Severity | What it means | What to do | RFC section |
+| --- | --- | --- | --- | --- |
+| Reported results, not independent verification | INFO | The receiver's word, not a re-check | Confirm the reporting server is yours | [RFC 8601 §7.1](https://www.rfc-editor.org/rfc/rfc8601#section-7.1) |
+| No Authentication-Results header | INFO | Nothing was recorded, the header says `none`, or the headers came from the sender's side | Copy from the received message | [RFC 8601 §2.2](https://www.rfc-editor.org/rfc/rfc8601#section-2.2) |
+| DMARC passed | PASS | The receiver found an aligned SPF or DKIM pass | | [RFC 9989 §5.3.5](https://www.rfc-editor.org/rfc/rfc9989#section-5.3.5) |
+| DMARC fail (or other) | FAIL | The From domain was not proven; `none` means it has no DMARC policy | Treat as unverified; if yours, fix SPF or DKIM alignment | [RFC 9989 §9.2](https://www.rfc-editor.org/rfc/rfc9989#section-9.2) |
+| SPF passed but is not aligned | INFO | Normal for a mail service; DMARC relies on DKIM | Nothing | [RFC 9989 §4.4.2](https://www.rfc-editor.org/rfc/rfc9989#section-4.4.2) |
+| SPF fail, permerror | FAIL | The receiver reports failure or a permanent evaluation error | Add the server to the record, if the message is yours | [RFC 7208 §2.6](https://www.rfc-editor.org/rfc/rfc7208#section-2.6) |
+| DKIM none | INFO | The message was not signed | Sign outgoing mail | [RFC 8601 §2.7.1](https://www.rfc-editor.org/rfc/rfc8601#section-2.7.1) |
+| DKIM fail (or other) | FAIL | The signature did not verify or could not be checked | Check the key; look for a forwarder that altered the message | [RFC 8601 §2.7.1](https://www.rfc-editor.org/rfc/rfc8601#section-2.7.1) |
+
+### Identity and route findings
+
+| Finding | Severity | What it means | What to do | RFC section |
+| --- | --- | --- | --- | --- |
+| Replies go to X | CHECK | Answers leave the From domain | Verify the sender before replying | none (Tamperbox heuristic) |
+| N s at server | CHECK | The longest wait on the route | Nothing, unless it repeats | none (Tamperbox threshold) |
+| Clock skew at hop N | INFO | Server clocks disagree; header order still holds | Fix the clock if the server is yours | [RFC 5321 §4.4](https://www.rfc-editor.org/rfc/rfc5321#section-4.4) |
+| No TLS into server | CHECK | The hop was not recorded as encrypted | Enable STARTTLS; publish MTA-STS | [RFC 3848 §1](https://www.rfc-editor.org/rfc/rfc3848#section-1) |
 
 ## Guide
 
@@ -135,7 +310,8 @@ Nothing leaves the browser until you choose Look up hop addresses. Then up to 50
 1. Confirm that the server named in Authentication-Results is your own receiving server; everything below it was written by the sender.
 2. Read the DMARC result. A pass means the From domain was proven; a fail means it was not.
 3. Check Reply-To and Return-Path. A reply address on another domain is the common shape of phishing that asks you to answer.
-4. If in doubt, contact the supposed sender through a channel you already have.
+4. Read the From header itself in Message and every header. The display name may claim a different address than the actual mailbox; compare them.
+5. If in doubt, contact the supposed sender through a channel you already have.
 
 ### My own mail fails DMARC
 
@@ -183,12 +359,25 @@ See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for 
 - No signature or ARC verification; no DNS lookup for the authentication section.
 - Exact alignment only.
 - The topmost Authentication-Results header only.
+- From supports a single mailbox with display names and comments; ambiguous lists remain unknown and encoded words are not decoded.
 - Hop lookups: up to 50 public addresses, only on request; country is registry data, not location.
 - Nothing is stored.
 
 ## References
 
-- [RFC 8601, Message Header Field for Indicating Message Authentication Status](https://www.rfc-editor.org/rfc/rfc8601)
-- [RFC 5321, Simple Mail Transfer Protocol](https://www.rfc-editor.org/rfc/rfc5321), section 4.4 for the Received header
-- [RFC 7489, DMARC](https://www.rfc-editor.org/rfc/rfc7489), section 3.1 for alignment
-- [DKIM Record Checker](/tools/dkim-checker/), for the key behind a message's signature
+| Specification | Status | Sections used |
+| --- | --- | --- |
+| [RFC 5322, Internet Message Format](https://www.rfc-editor.org/rfc/rfc5322) | Draft Standard, updated by RFC 6854 | [2.1](https://www.rfc-editor.org/rfc/rfc5322#section-2.1), [2.2](https://www.rfc-editor.org/rfc/rfc5322#section-2.2), [2.2.3](https://www.rfc-editor.org/rfc/rfc5322#section-2.2.3), [3.3](https://www.rfc-editor.org/rfc/rfc5322#section-3.3), [3.4](https://www.rfc-editor.org/rfc/rfc5322#section-3.4), [3.6.2](https://www.rfc-editor.org/rfc/rfc5322#section-3.6.2), [3.6.7](https://www.rfc-editor.org/rfc/rfc5322#section-3.6.7) |
+| [RFC 5321, Simple Mail Transfer Protocol](https://www.rfc-editor.org/rfc/rfc5321) | Draft Standard, updated by RFC 7504 | [4.1.3](https://www.rfc-editor.org/rfc/rfc5321#section-4.1.3), [4.4](https://www.rfc-editor.org/rfc/rfc5321#section-4.4) |
+| [RFC 3848, ESMTP and LMTP Transmission Types Registration](https://www.rfc-editor.org/rfc/rfc3848) | Draft Standard | [1](https://www.rfc-editor.org/rfc/rfc3848#section-1), [3](https://www.rfc-editor.org/rfc/rfc3848#section-3) |
+| [RFC 6531, SMTP Extension for Internationalized Email](https://www.rfc-editor.org/rfc/rfc6531) | Proposed Standard | [4.3](https://www.rfc-editor.org/rfc/rfc6531#section-4.3) |
+| [RFC 8601, Message Header Field for Indicating Message Authentication Status](https://www.rfc-editor.org/rfc/rfc8601) | Proposed Standard | [2.2](https://www.rfc-editor.org/rfc/rfc8601#section-2.2), [2.3](https://www.rfc-editor.org/rfc/rfc8601#section-2.3), [2.5](https://www.rfc-editor.org/rfc/rfc8601#section-2.5), [2.6](https://www.rfc-editor.org/rfc/rfc8601#section-2.6), [2.7.1](https://www.rfc-editor.org/rfc/rfc8601#section-2.7.1), [2.7.2](https://www.rfc-editor.org/rfc/rfc8601#section-2.7.2), [4.1](https://www.rfc-editor.org/rfc/rfc8601#section-4.1), [5](https://www.rfc-editor.org/rfc/rfc8601#section-5), [7.1](https://www.rfc-editor.org/rfc/rfc8601#section-7.1) |
+| [RFC 7208, Sender Policy Framework](https://www.rfc-editor.org/rfc/rfc7208) | Proposed Standard, updated by RFC 7372, 8553, 8616 | [2.4](https://www.rfc-editor.org/rfc/rfc7208#section-2.4), [2.6](https://www.rfc-editor.org/rfc/rfc7208#section-2.6), [4](https://www.rfc-editor.org/rfc/rfc7208#section-4), [8.2](https://www.rfc-editor.org/rfc/rfc7208#section-8.2), [8.5](https://www.rfc-editor.org/rfc/rfc7208#section-8.5), [9.2](https://www.rfc-editor.org/rfc/rfc7208#section-9.2) |
+| [RFC 6376, DomainKeys Identified Mail Signatures](https://www.rfc-editor.org/rfc/rfc6376) | Internet Standard, updated by RFC 8301, 8463, 8553, 8616 | [3.2](https://www.rfc-editor.org/rfc/rfc6376#section-3.2), [3.5](https://www.rfc-editor.org/rfc/rfc6376#section-3.5), [6](https://www.rfc-editor.org/rfc/rfc6376#section-6) |
+| [RFC 9989, DMARC](https://www.rfc-editor.org/rfc/rfc9989) | Proposed Standard; obsoletes RFC 7489 with RFC 9990 and 9991 | [3.2.3](https://www.rfc-editor.org/rfc/rfc9989#section-3.2.3), [3.2.4](https://www.rfc-editor.org/rfc/rfc9989#section-3.2.4), [3.2.10.1](https://www.rfc-editor.org/rfc/rfc9989#section-3.2.10.1), [3.2.10.2](https://www.rfc-editor.org/rfc/rfc9989#section-3.2.10.2), [4.4](https://www.rfc-editor.org/rfc/rfc9989#section-4.4), [4.4.2](https://www.rfc-editor.org/rfc/rfc9989#section-4.4.2), [4.10](https://www.rfc-editor.org/rfc/rfc9989#section-4.10), [5.3.1](https://www.rfc-editor.org/rfc/rfc9989#section-5.3.1), [5.3.5](https://www.rfc-editor.org/rfc/rfc9989#section-5.3.5), [9.2](https://www.rfc-editor.org/rfc/rfc9989#section-9.2) |
+| [RFC 9990, DMARC Aggregate Reporting](https://www.rfc-editor.org/rfc/rfc9990) | Proposed Standard | none; cited as a successor of RFC 7489 |
+| [RFC 9991, DMARC Failure Reporting](https://www.rfc-editor.org/rfc/rfc9991) | Proposed Standard | none; cited as a successor of RFC 7489 |
+| [RFC 8617, Authenticated Received Chain](https://www.rfc-editor.org/rfc/rfc8617) | Experimental | [4.1.1](https://www.rfc-editor.org/rfc/rfc8617#section-4.1.1), [4.2.1](https://www.rfc-editor.org/rfc/rfc8617#section-4.2.1), [5.2](https://www.rfc-editor.org/rfc/rfc8617#section-5.2) |
+| [RFC 2047, MIME Part Three: Message Header Extensions](https://www.rfc-editor.org/rfc/rfc2047) | Draft Standard, updated by RFC 2184, 2231 | [2](https://www.rfc-editor.org/rfc/rfc2047#section-2), [5](https://www.rfc-editor.org/rfc/rfc2047#section-5) |
+
+RFC 9990 and RFC 9991 are cited only as the documents that, with RFC 9989, replace RFC 7489; the tool reads no DMARC reports. For the key behind a message's signature, see the [DKIM Record Checker](/tools/dkim-checker/).

@@ -1,0 +1,191 @@
+---
+title: My Connection Info
+description: How My Connection Info reads the TLS version, cipher, HTTP version, round trip, edge location and network of your browser's connection, how each layer is graded, and what to change when one is out of date.
+updated: 2026-10-24
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and guide for the Tamperbox My Connection Info page, which reads the visitor's connection metadata at Tamperbox's Cloudflare edge (TLS version and cipher, HTTP protocol, TCP or QUIC round trip, edge location, AS number, network and country) and grades each layer.
+prerequisites:
+  - A browser on the connection to describe
+outputs:
+  - The path from the device to the edge, each layer (TLS, cipher, HTTP, round trip) graded, the edge location and network, and findings for deprecated TLS, older ciphers, high latency and HTTP/3
+limitations:
+  - Describes one connection to one site's edge; a VPN or proxy negotiates its own settings; the round trip is to the nearest edge only
+---
+
+The tool page is [tamperbox.dev/connection-info](https://tamperbox.dev/connection-info). Like What Is My IP, it has no input box: opening it reads how this browser connected to our edge and grades each layer. This page is the long version: where each value comes from, the rule behind every grade, and what usually causes an old TLS version, an older cipher, HTTP/1.1 or a high round trip.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> opening the page sends one request to the Tamperbox server. Cloudflare's edge, which terminates the connection, attaches its measurements to that request; the server returns only the allowlisted values. The browser renders and grades the returned fields. This check performs no general device or network scan.</div>
+
+## What the tool answers
+
+1. **How is this connection protected?** The TLS version and the cipher suite negotiated.
+2. **Which HTTP version is in use?** HTTP/1.1, HTTP/2 or HTTP/3.
+3. **How far away is the edge?** The round-trip time measured by the edge, and which location answered.
+4. **Through which network?** The address, AS number, network name and estimated country.
+
+## Inputs
+
+There is nothing to type. Check again reads the connection again, which is how you compare a browser, a VPN or a network with another: open the page there and check.
+
+## Reading the result
+
+### Verdict and chips
+
+The verdict names the TLS and HTTP versions, for example "TLS 1.3 over HTTP/2", then the round trip and the edge location. Its tone is the worst graded layer. One chip per graded layer gives its word: Current, Secure, Deprecated; Modern, Older; HTTP/3, Multiplexed, One at a time; Fast, Typical, High.
+
+### Findings
+
+Every layer graded CHECK or FAIL, then the HTTP/3 note and the scope note; see the [Finding reference](#finding-reference).
+
+### From this device to our server
+
+Three steps: this device (address, network, AS number, country), the link (round trip, labelled TCP or QUIC), and our edge (its airport code and city).
+
+### Each layer
+
+Every layer with its value, grade and what it means, then the edge location, network and address as reported values.
+
+## Method
+
+### 1. Where the values come from
+
+Cloudflare's edge terminates TLS and HTTP for the site and records what it negotiated in the request's `cf` object. The server copies only these fields, with text values limited to 256 characters and numeric values retained only when finite and non-negative: `tlsVersion`, `tlsCipher`, `httpProtocol`, `clientTcpRtt` or `clientQuicRtt`, `colo`, `asn`, `asOrganization` and `country`. The address comes from `CF-Connecting-IP` (or `CF-Connecting-IPv6` when the edge replaced an IPv6 address with a pseudo IPv4 one). Missing values stay empty; they are never guessed. For HTTP/3 the TCP round trip is not reported and the QUIC one is used.
+
+### 2. Grading TLS
+
+| Value | Grade | Rule |
+| --- | --- | --- |
+| TLS 1.3 | PASS, Current | [RFC 8446](https://www.rfc-editor.org/rfc/rfc8446#section-1.2): only AEAD ciphers, one round trip fewer to set up |
+| TLS 1.2 | PASS, Secure | Still secure with a modern cipher; something may be holding the browser back from 1.3 |
+| TLS 1.0, 1.1 | FAIL, Deprecated | [RFC 8996, section 4](https://www.rfc-editor.org/rfc/rfc8996#section-4): "TLS 1.0 MUST NOT be used"; [section 5](https://www.rfc-editor.org/rfc/rfc8996#section-5) says the same for 1.1 |
+| Not reported | INFO, Unknown | Says nothing about whether the connection is encrypted |
+
+### 3. Grading the cipher
+
+| Cipher | Grade | Rule |
+| --- | --- | --- |
+| Name contains GCM, CHACHA20, POLY1305 or CCM | PASS, Modern | Authenticated encryption ([RFC 5116](https://www.rfc-editor.org/rfc/rfc5116#section-1)), the only kind TLS 1.3 allows |
+| Name contains CBC, or ends in SHA | CHECK, Older | CBC-mode suites kept for old clients; [RFC 9113, section 9.2.2](https://www.rfc-editor.org/rfc/rfc9113#section-9.2.2) forbids many of them for HTTP/2 |
+| Anything else | INFO, Reported | Shown as negotiated |
+
+### 4. Grading HTTP
+
+| Protocol | Grade | Meaning |
+| --- | --- | --- |
+| HTTP/3 | PASS | Over QUIC on UDP ([RFC 9114](https://www.rfc-editor.org/rfc/rfc9114#section-3.1)): avoids TCP head-of-line blocking between streams and can support connection migration |
+| HTTP/2 | PASS, Multiplexed | Many requests share one TCP connection ([RFC 9113, section 5](https://www.rfc-editor.org/rfc/rfc9113#section-5)) |
+| HTTP/1.1 | INFO, One at a time | Often forced by a proxy, an extension or an old client |
+
+A browser learns that a site offers HTTP/3 from the `Alt-Svc` header ([RFC 7838, section 3](https://www.rfc-editor.org/rfc/rfc7838#section-3); [RFC 9114, section 3.1.1](https://www.rfc-editor.org/rfc/rfc9114#section-3.1.1)) and usually switches on a later connection. So an HTTP/2 first visit adds the informational finding "HTTP/3 was not used": check again, and if it never switches, UDP 443 may be blocked on the network.
+
+### 5. Grading the round trip
+
+Under 50 ms is Fast and under 150 ms Typical, both PASS; 150 ms or more is High, CHECK. The edge measures the round trip itself, between it and your device, so the number includes your Wi-Fi and every network in between, but not the server behind the edge.
+
+### Reading a cipher suite name
+
+The cipher is shown as the edge names it, which follows OpenSSL's style rather than the IANA registry names. Two real-shaped values, part by part:
+
+| Part of `AEAD-AES128-GCM-SHA256` (TLS 1.3) | Meaning | Grade input |
+| --- | --- | --- |
+| `AEAD` | The record protection is authenticated encryption; TLS 1.3 suites name only this part, because key exchange and authentication are negotiated separately ([RFC 8446, section 1.2](https://www.rfc-editor.org/rfc/rfc8446#section-1.2)) | |
+| `AES128` | AES with a 128-bit key | |
+| `GCM` | Galois/Counter Mode, an AEAD mode | Matches GCM: Modern |
+| `SHA256` | The hash used by the key schedule, not a MAC on records | |
+
+| Part of `ECDHE-RSA-AES128-SHA` (TLS 1.2) | Meaning | Grade input |
+| --- | --- | --- |
+| `ECDHE` | Ephemeral elliptic-curve Diffie-Hellman key exchange: forward secrecy | |
+| `RSA` | The server authenticates with an RSA certificate | |
+| `AES128` | AES with a 128-bit key, in CBC mode (implied when no mode is named) | |
+| `SHA` | HMAC-SHA1 protects each record, MAC-then-encrypt | Ends in SHA: Older |
+
+The second suite still has forward secrecy, which is why it is graded CHECK, not FAIL. Its weakness is the CBC construction, the source of padding-oracle attacks such as Lucky Thirteen; AEAD suites avoid that class entirely.
+
+### What changes a reading
+
+- **A VPN** carries your traffic to its exit, and the edge measures the connection from that exit: the address, network, country and edge location are the VPN's, and the round trip includes the tunnel.
+- **A private relay** in some browsers sends traffic through two hops; the edge sees the second hop's address and a network belonging to the relay operator.
+- **HTTPS inspection** by antivirus or a company proxy ends your browser's TLS on your machine or network and opens a new connection with the product's own TLS version and cipher, which is what this page then shows.
+- **The network itself**: some networks block UDP, which keeps every connection on HTTP/2, and congested Wi-Fi raises the round trip without changing anything else.
+
+### 6. Edge location
+
+The `colo` code is the nearest airport to the location that answered. Common codes are named (AMS is Amsterdam, IAD is Ashburn, NRT is Tokyo); others are shown as reported. Your provider's routing, not distance alone, decides which location answers.
+
+<span id="standards"></span>
+
+## Standards and conformance
+
+| Specification | Sections used | How the tool applies them | Where it stops |
+| --- | --- | --- | --- |
+| [RFC 8446](https://www.rfc-editor.org/rfc/rfc8446) TLS 1.3 | [1.2](https://www.rfc-editor.org/rfc/rfc8446#section-1.2) | TLS 1.3 graded Current | Key exchange group and certificate are not shown; see the SSL Certificate Checker |
+| [RFC 8996](https://www.rfc-editor.org/rfc/rfc8996) | [4](https://www.rfc-editor.org/rfc/rfc8996#section-4), [5](https://www.rfc-editor.org/rfc/rfc8996#section-5) | TLS 1.0 and 1.1 graded Deprecated | |
+| [RFC 5116](https://www.rfc-editor.org/rfc/rfc5116) AEAD | [1](https://www.rfc-editor.org/rfc/rfc5116#section-1) | AEAD suites graded Modern by name | The grade reads the suite name; it does not test the cipher |
+| [RFC 9113](https://www.rfc-editor.org/rfc/rfc9113) HTTP/2 | [5](https://www.rfc-editor.org/rfc/rfc9113#section-5), [9.2.2](https://www.rfc-editor.org/rfc/rfc9113#section-9.2.2) | HTTP/2 graded Multiplexed; CBC suites flagged | |
+| [RFC 9114](https://www.rfc-editor.org/rfc/rfc9114) HTTP/3 | [3.1](https://www.rfc-editor.org/rfc/rfc9114#section-3.1), [3.1.1](https://www.rfc-editor.org/rfc/rfc9114#section-3.1.1) | HTTP/3 detected from the edge's protocol value | Does not test UDP reachability itself |
+| [RFC 7838](https://www.rfc-editor.org/rfc/rfc7838) Alt-Svc | [3](https://www.rfc-editor.org/rfc/rfc7838#section-3) | Explains why HTTP/3 appears on a later visit | |
+
+## Finding reference
+
+| Finding | Severity | What it means for your browsing | Fix |
+| --- | --- | --- | --- |
+| TLS: TLS 1.0 or 1.1 | FAIL | Most sites refuse the connection | Update the browser and OS; check HTTPS-inspecting software |
+| Cipher: a CBC suite | CHECK | Older protection chosen, often by a proxy | Update the browser; check the proxy |
+| Round trip: 150 ms or more | CHECK | Pages and calls feel slow | Try without VPN; use a cable; compare networks |
+| HTTP/3 was not used | INFO | Normal on a first visit; persistent means UDP 443 may be blocked | Check again; ask the network admin about UDP 443 |
+| Only this connection is described | INFO | Other sites, VPNs and proxies negotiate their own | |
+
+## Guide
+
+### Old TLS or an older cipher
+
+Update the browser and the operating system first. If they are current, something between the browser and the internet is choosing for it: antivirus with "HTTPS scanning", a company proxy, or a parental-control filter. These intercept TLS and open their own connection with their own settings. Ask the administrator to check or update the inspection software, then repeat the observation under the approved configuration.
+
+### Stuck on HTTP/1.1
+
+Browser extensions that rewrite traffic, corporate proxies and some security products downgrade to HTTP/1.1. Try a private window without extensions, then another network.
+
+### High round trip
+
+Turn off any VPN and check again; compare Wi-Fi with a cable, and with mobile data. A high number on every network points at the device or a distant edge; a high number on one network points at that network.
+
+### Confirm without Tamperbox
+
+```sh
+curl -sI --http2 -o /dev/null -w '%{http_version}\n' https://tamperbox.dev/
+openssl s_client -connect tamperbox.dev:443 -brief </dev/null
+```
+
+The first prints the HTTP version curl negotiated, the second the TLS version and cipher. They describe curl's connection, which may differ from the browser's.
+
+## Worked example
+
+A current browser on a home connection typically reads "TLS 1.3 over HTTP/2", a round trip of a few tens of milliseconds, and an edge in the nearest large city. TLS is Current, the cipher (for example `AEAD-AES128-GCM-SHA256`) is Modern, HTTP/2 is Multiplexed, and the informational finding notes that HTTP/3 was not used. Checking again often switches to HTTP/3, with the round trip now labelled QUIC. With a VPN on, the edge location and network change to the VPN's exit. This page never shows a sample connection, so there is no fixed example to describe.
+
+## For agents
+
+Through the Tamperbox MCP server, `connection_info` describes the connection of whatever calls it: the agent's server or HTTP client, not the person using the agent, and the result carries that warning. Use it to inspect the caller context reported by the service; a proxy or gateway may be the visible peer.
+
+See [Connect an MCP client](/mcp/connect/) and [Security and privacy](/reference/security/). [What Is My IP](/tools/what-is-my-ip/) shows the address and tests both IP families from the device.
+
+### Transfers to another tool
+
+Explicit sibling-tool controls can carry the current input or observed address to another page. The shared navigation stores that value temporarily in tab-scoped `sessionStorage` and puts a random transfer token in the URL fragment. The receiving page consumes the transfer and applies its own input rules; tools with a manual Run button still require that action for live checks. This is not a saved result, and the destination can send the value to the services it needs. Ordinary edits and lookups do not create a durable report archive.
+
+## Limits
+
+- One connection to one site's edge.
+- A VPN, proxy or HTTPS-inspecting product negotiates its own settings.
+- The round trip is to the answering edge, not to every server.
+- Values the edge does not report stay empty.
+- The page keeps results in memory. Explicit transfers to another tool use temporary session storage.
+
+## References
+
+- [RFC 8446](https://www.rfc-editor.org/rfc/rfc8446), The Transport Layer Security (TLS) Protocol Version 1.3: section 1.2.
+- [RFC 8996](https://www.rfc-editor.org/rfc/rfc8996), Deprecating TLS 1.0 and TLS 1.1: sections 4 and 5.
+- [RFC 5116](https://www.rfc-editor.org/rfc/rfc5116), An Interface and Algorithms for Authenticated Encryption: section 1.
+- [RFC 9113](https://www.rfc-editor.org/rfc/rfc9113), HTTP/2: sections 5 and 9.2.2.
+- [RFC 9114](https://www.rfc-editor.org/rfc/rfc9114), HTTP/3: sections 3.1 and 3.1.1.
+- [RFC 7838](https://www.rfc-editor.org/rfc/rfc7838), HTTP Alternative Services: section 3.

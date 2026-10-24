@@ -1,197 +1,248 @@
 ---
 title: Mixed Content & Cookie Checker
-description: How the mixed content checker reads an HTTPS page and its cookies, which addresses browsers block or upgrade, every cookie rule it applies, what each finding means for visitors, and how to fix and verify it.
-updated: 2026-10-20
+description: How the Mixed Content & Cookie Checker fetches or reads a page, sorts every insecure address by what browsers do with it, judges every Set-Cookie header, and how to fix and verify each finding.
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
-agentSummary: Method, finding reference and repair guide for the Tamperbox Mixed Content & Cookie Checker, which fetches one page through the Tamperbox server (or reads pasted HTML and headers in the browser), finds http:// resources and forms by what browsers do with them, and judges every Set-Cookie attribute.
+agentSummary: Method, finding reference and repair guide for the Tamperbox Mixed Content & Cookie Checker, which fetches a public page from the Tamperbox server (or reads pasted HTML and headers in the browser), lists every http:// subresource and form on an HTTPS page as blocked, upgraded or warned, and checks every Set-Cookie header for Secure, HttpOnly, SameSite, Domain, lifetime, size and prefix rules.
 prerequisites:
-  - A public HTTPS address, or the page's HTML to paste (optionally after its response headers and a blank line)
+  - A public HTTP or HTTPS address on port 80 or 443, or the page's HTML, optionally preceded by its response headers and a blank line
 outputs:
-  - A verdict, findings, insecure addresses grouped as blocked, upgraded or insecure forms with their line numbers, every cookie with its attributes, and corrected Set-Cookie lines
+  - A verdict naming the insecure addresses and the cookies that need attention, chips, findings worst first, the insecure addresses grouped by browser behaviour with tag and line, every cookie with its attributes and notes, and corrected Set-Cookie lines
 limitations:
-  - Initial HTML only, scripts are not run; one page; whether https:// versions answer is not tested; cookie values are removed
+  - Only the first 512 KiB of the HTML as served is read with a tag scanner; resources added by scripts, addresses inside external style sheets and requests made inside frames are not seen, and upgraded addresses are not tested over HTTPS
 ---
 
-The tool page is [tamperbox.dev/mixed-content-checker](https://tamperbox.dev/mixed-content-checker). It opens on a sample shop whose page and headers are a fixture on the reserved `.example` zone: a script over `http://`, a partner badge, a newsletter form and three cookies. This page is the long version: what is read, how each address and cookie is judged, what each finding means, and how to fix and confirm it.
+The tool page is [tamperbox.dev/mixed-content-checker](https://tamperbox.dev/mixed-content-checker). It opens by fetching `tamperbox.dev` live, answers in one sentence whether the page loads anything over plain HTTP and how its cookies fare, and lists the evidence under it. This page is the long version: what is fetched, every rule the page applies, what each finding means, and how to fix and verify each one.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> an address is sent to the Tamperbox server, which requests the page, follows redirects and returns its HTML and headers with cookie values removed. It runs no scripts. Pasted source is read in your browser and never uploaded. Nothing is stored.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> an address is sent to the Tamperbox server, which fetches the page once, following up to 10 redirects, and returns the headers of every response and the first 512 KiB of HTML. Cookie values are replaced on the server by their length, so only names and attributes reach your browser. Pasted HTML and headers are read in your browser and never uploaded. History and tool-to-tool transfers remain in the browser; see Browser transfers below.</div>
 
 ## What the tool answers
 
-1. **Is the page itself on HTTPS?** If not, mixed content does not apply: everything is exposed.
-2. **Which addresses on it are `http://`, and what do browsers do with each?** Block it, upgrade it to `https://`, or warn before a form sends.
-3. **Are the cookies it sets safe?** Secure, HttpOnly where scripts do not need them, a SameSite value browsers accept, and the cookie prefix rules.
-4. **What should change?** The addresses to rewrite and the corrected `Set-Cookie` lines.
+Four questions, in the order a browser meets them:
+
+1. **Is the page itself on HTTPS?** If the final address is `http://`, mixed content does not apply; the whole page is exposed, and that is the finding.
+2. **What does the page load over plain HTTP?** Each `http://` address in the HTML, sorted by what browsers do: block it, upgrade it to `https://`, or warn before a form sends.
+3. **Does a policy soften it?** A Content-Security-Policy with `upgrade-insecure-requests`, and a `<base href>` that turns relative addresses insecure.
+4. **Are the cookies safe?** Every Set-Cookie header, on the final response and on each redirect, judged for what a browser rejects, what it exposes and what it merely notes.
+
+The verdict sentence answers the second and fourth questions; the chips count blocked, upgraded and form addresses and rejected or weak cookies, and each chip scrolls to its section. Findings under the verdict list the problems worst first, with passes folded into one line.
 
 ## Inputs
 
+The field takes three forms. What runs depends on the first characters of the text.
+
+| Input | Recognised by | What runs | Where |
+| --- | --- | --- | --- |
+| An address | anything that is not HTML or a header block | one page fetch, up to 10 redirects | Tamperbox server |
+| HTML | starts with `<` after leading whitespace | tag scan and classification | your browser |
+| Headers, blank line, HTML | starts with a status line or header lines | cookie checks, CSP read, then the HTML scan | your browser |
+
 ### An address
 
-An `https://` address, or a host (`https://` is assumed). The check runs when you stop typing, or on Enter. The server follows up to ten redirects and reads the final page, up to 512 KB of HTML. A pasted quoted address is tidied; the path is kept, because pages differ. IP addresses, credentials and ports other than 80 and 443 are refused before anything is sent.
+`example.com`, `https://www.example.com/shop` or a full address with a query. The fetch starts when you stop typing, or on Enter. An address without a scheme is fetched over `https://`. The parser refuses, with a message in the field, an address with spaces, a scheme other than `http` or `https`, an IP address, a host without a top-level domain, a port other than 80 or 443, and a user name or password; the last two offer a repair under Heal it. The server repeats these checks for the input and every redirect target and requires each host to resolve to public addresses only. It sends `Accept: text/html,application/xhtml+xml;q=0.9,*/*;q=0.8` with a fixed user agent and no cookies. If the final response is not `text/html` or `application/xhtml+xml`, its body is discarded and only headers and cookies are checked.
 
-### Pasted source
+### Pasted HTML and headers
 
-Paste the page's HTML, or the response headers, a blank line and the HTML, the way `curl -i` prints a page. With headers, cookies are checked too; with HTML only, a note says cookies need the headers. With headers only, a note says the page source is missing. Pasted source is treated as an HTTPS page. A dropped or opened file is read the same way, up to 2 MB.
+Paste the page source, or the output of `curl -si https://example.com/`: headers first, a blank line, then the HTML. Only the last response's headers are used, so cookies set on a redirect in pasted output are not read. Pasted source is treated as an HTTPS page at an unknown address, so relative addresses never count as insecure. Files (`.html`, `.htm`, `.txt`) up to 2 MiB can be dropped or opened and are read the same way.
+
+### What the page does to pasted text
+
+The shared input cleaner runs on paste, drop and Enter. This is a page tool, so a pasted full address stays whole (path and query included) rather than being cut to a host; quotes and angle brackets around it are dropped. Text that is neither an address nor HTML nor headers stays exactly as pasted and the parser's error explains it. Break it and Heal it loads are never rewritten.
 
 ## Reading the result
 
 ### Verdict and chips
 
-"3 insecure addresses on this HTTPS page: browsers block 1, upgrade 1, and 1 form posts in plain text." followed by the cookie line ("2 of 3 cookies need attention; browsers reject 1."), "No mixed content on example.com." or "Plain HTTP page." Chips count blocked, upgraded and form addresses, rejected cookies and cookies to tighten.
+The verdict leads with the count of insecure addresses and what browsers do with them, or "No mixed content on" the host, or "Plain HTTP page." The second line counts the cookies that need attention and how many browsers reject. Copy result copies the verdict and evidence as text.
 
 ### Findings
 
-One list, worst first: the page itself, one row per group of insecure addresses with the first address, and every cookie problem. Passing rows ("No insecure addresses", "N cookies set safely") fold into one line.
-
-### History and Take it further
-
-History lists what Break it and Heal it replaced, with Revert and Reset input. Take it further hands the insecure addresses on, rewritten to `https://`, to the [redirect checker](https://tamperbox.dev/redirect-checker), which shows whether the HTTPS address answers before you change the page; and, for a live page, the host serving the first insecure resource to the [certificate checker](https://tamperbox.dev/ssl-checker).
+One line per problem class: each group of insecure addresses, each cookie rule broken (with the cookie names), the plain-HTTP page, an `http://` base, and notes such as "upgrade-insecure-requests is set". Informational cookie notes stay with their cookie in the Cookies section. The count on the right says how many findings need fixing.
 
 ### Insecure addresses
 
-Grouped by what browsers do, each with its tag and attribute, the address with `http://` marked, and its line in the source.
+Grouped into Blocked by browsers, Upgraded to https:// and Forms that send in plain text. Each row shows the tag and attribute (`<script src>`, `<img srcset>`, `<form action>`, `url()`), the resolved address with `http://` marked, and the line in the source.
 
 ### Cookies
 
-Every `Set-Cookie`, from the final page and any redirect along the way, with its attributes as chips (missing ones marked "no Secure", "no HttpOnly"), its lifetime and size, and its own findings, info notes included.
+One row per Set-Cookie header, labelled "Set by the page" or "Set by redirect n" with the host. Attribute pills show what is present and what is missing; red marks a missing attribute that gets the cookie rejected. Notes under each cookie are its findings.
 
 ### Corrected Set-Cookie lines
 
-The cookies a repair applies to, with the missing attributes added. For a fetched page, `[redacted:n]` stands for each value the server removed; keep your own value there.
+For every cookie a repair applies to, the same line with Secure, HttpOnly or the `__Host-` shape added. Live values appear as `[redacted:n]`; put your own value back.
+
+### History and Take it further
+
+History logs every Break it, Heal it and Revert, newest first; Revert puts the earlier input back and Reset input returns to where you started. Take it further hands a derived value to another security check: the host of an insecure address or of a form target into the [SSL Certificate Checker](/tools/ssl-checker/), to see whether that host serves HTTPS at all, and, when the fetch was redirected, the final address into the Security Headers checker and the final host into the certificate check. Reserved `.example` hosts are not linked.
+
+### Browser transfers
+
+Explicit tool links temporarily place the transferred input in browser `sessionStorage`. The URL fragment carries a random token, not the input. The receiving page accepts that token once, for its destination path and for less than one minute, then removes it from the address. A same-origin browser channel can complete a transfer into another tab. Ordinary documentation links do not transfer input. When browser storage is unavailable, navigation still works but the input may need to be pasted again.
 
 ## Method
 
-### The page
+### Fetching the page
 
-A page fetched over `http://` gets "The page itself is served over plain HTTP" (FAIL) and no address scan: mixed content only exists on secure pages. A `<base href>` on `http://` is a CHECK, because every relative address then resolves to `http://`. A Content-Security-Policy (header or `<meta http-equiv>`) with `upgrade-insecure-requests` is a PASS and turns every group into information, because [Upgrade Insecure Requests](https://www.w3.org/TR/upgrade-insecure-requests/#delivery) tells browsers to request every `http://` address over `https://` first.
+The server follows redirects one hop at a time, up to 11 requests, re-validating every target, and keeps the first 524,288 bytes (512 KiB) of the final body. Every Set-Cookie header of every response is kept, with its value replaced by `[redacted:n]`, where n is the value's length, so the size rule still works. Authentication headers are dropped from the evidence.
 
-### Addresses
+### Is the page on HTTPS
 
-The HTML is scanned tag by tag; each address is resolved against the page (and `<base>`), and those that are `http://` are sorted following the [Mixed Content](https://w3c.github.io/webappsec-mixed-content/) specification:
+If the final address uses `http://`, the result is the Fail "The page itself is served over plain HTTP" and no address list is shown. The [Mixed Content](https://www.w3.org/TR/mixed-content/#terms) specification defines mixed content only for a document delivered over a secure connection; an HTTP page has no secure context to protect.
 
-| Group | Tags and attributes | Severity | What browsers do |
-| --- | --- | --- | --- |
-| Blocked | `script src`, `iframe src`, `frame src`, `object data`, `embed src`, `link href` for stylesheet, preload, modulepreload, prefetch or manifest, font files in inline `url()` | FAIL | Refuse to load them |
-| Upgraded | `img src` and `srcset`, `audio src`, `video src` and `poster`, `track src`, `source src` and `srcset`, icons, other inline `url()` | INFO | Request them over `https://` instead |
-| Insecure forms | `form action` | CHECK | Warn before sending |
+### Scanning the HTML
 
-[Section 3.1](https://w3c.github.io/webappsec-mixed-content/#category-upgradeable) defines upgradeable content: content whose blocking would break "significant portions of the web", chiefly images and media, which [section 4.1](https://w3c.github.io/webappsec-mixed-content/#upgrade-algorithm) rewrites to HTTPS. [Section 3.2](https://w3c.github.io/webappsec-mixed-content/#category-blockable) says "Any mixed content that is not upgradeable as defined above is considered to be blockable", with scripts as the typical example, and [section 4.4](https://w3c.github.io/webappsec-mixed-content/#should-block-fetch) blocks it. Forms are not fetches in the specification's sense; browsers show a warning before an insecure submission, which is why they are a separate group.
+The HTML is read as text by a tag scanner, not parsed into a DOM. Comments are skipped; the contents of `script`, `style`, `title`, `textarea`, `noscript`, `template` and `xmp` are not searched for tags (style text is searched for `url()`). At most 20,000 tags are read. Each candidate address is resolved against `<base href>` when present, otherwise against the page, as [RFC 3986, section 5](https://www.rfc-editor.org/rfc/rfc3986#section-5) describes, and kept only when the result starts with `http:`. Protocol-relative addresses such as `//cdn.example.com/a.js` resolve to HTTPS on an HTTPS page and are not flagged.
 
-An upgraded address still breaks if its host has no HTTPS, which is why the group says so and Take it further offers the `https://` address to test.
+### Classifying each address
 
-### Cookies
+The classification follows the two categories in [Mixed Content, section 3](https://www.w3.org/TR/mixed-content/#categories): upgradeable content, which browsers now fetch over HTTPS, and blockable content, which they refuse.
 
-Every `Set-Cookie` on the final response and on each redirect hop is parsed. The rules follow [RFC 6265](https://www.rfc-editor.org/rfc/rfc6265) and its successor draft, [RFC 6265bis](https://datatracker.ietf.org/doc/draft-ietf-httpbis-rfc6265bis/), which defines SameSite, the cookie prefixes and the 400-day cap browsers apply.
-
-| Rule | Severity | Finding |
+| Group | Elements and attributes | Severity |
 | --- | --- | --- |
-| No cookie name | FAIL | Cookie has no name |
-| `SameSite=None` without `Secure` | FAIL | SameSite=None without Secure: browsers reject it |
-| `__Host-` without Secure, with Domain, or Path not `/` | FAIL | __Host- rules broken |
-| `__Secure-` without Secure | FAIL | __Secure- cookie without Secure |
-| Name and value over 4,096 bytes | FAIL | Cookie is N bytes |
-| On HTTPS, no `Secure` | CHECK | Sent over plain HTTP too |
-| A session-like name without `HttpOnly` | CHECK | Readable by scripts |
-| No `SameSite` | INFO | No SameSite: treated as Lax |
-| `SameSite=None; Secure` without `Partitioned` | INFO | Third-party cookie |
-| `Domain` wider than the host | INFO | Shared with every *.domain host |
-| Lifetime over 400 days | INFO | Expires in N days |
-| Expiry in the past | INFO | Already expired: this deletes the cookie |
-| An unknown attribute | INFO | Unknown attribute |
+| Blocked | `script src`, `iframe src`, `frame src`, `embed src`, `object data`, `link href` with rel `stylesheet`, `preload`, `modulepreload`, `prefetch` or `manifest`, font files (`.woff`, `.woff2`, `.ttf`, `.otf`, `.eot`) in `url()` inside `<style>`, image sets: `img` with `srcset` (its `src` and every candidate), and `img` or `source` inside `picture` | Fail |
+| Upgraded | `img src` outside `picture` and without `srcset`, `source` inside `audio` or `video`, `audio src`, `video src` and `poster`, `track src`, `link` with an `icon` rel, other `url()` in `<style>`, every `url()` in a `style` attribute | Info |
+| Form | `form action` resolving to `http://` | Check |
 
-[RFC 6265 section 4.1.2.5](https://www.rfc-editor.org/rfc/rfc6265#section-4.1.2.5) defines Secure: the cookie is sent only over secure channels. [Section 4.1.2.6](https://www.rfc-editor.org/rfc/rfc6265#section-4.1.2.6) defines HttpOnly: the cookie is withheld from non-HTTP APIs such as `document.cookie`. "Session-like" means a name matching session, sid, token, auth, login, jwt, csrf, xsrf or remember. Only fail and check cookie findings appear in Findings; info notes stay on the cookie's own row.
+### Policies that change the reading
 
-### Repairs
+If any Content-Security-Policy, from a header or a `<meta http-equiv>`, contains `upgrade-insecure-requests`, the Pass "upgrade-insecure-requests is set" is shown and each group notes that browsers try HTTPS first, as [Upgrade Insecure Requests, section 4](https://www.w3.org/TR/upgrade-insecure-requests/#delivery) describes. Blocked rows still count against the verdict, because the upgrade fails when the other host has no HTTPS. A `<base href>` written with `http://` is its own Check.
 
-For pasted source, Heal it rewrites every insecure subresource address to `https://` ("Rewrite N addresses to https://") and adds the missing attributes to cookies ("Fix N cookies"). Corrected `Set-Cookie` lines are shown for fetched pages too.
+### Cookie rules
+
+Each Set-Cookie line is split on `;`; attribute names are case-insensitive, a leading dot on Domain is ignored, and Max-Age wins over Expires, because [RFC 6265, section 4.1.2.2](https://www.rfc-editor.org/rfc/rfc6265#section-4.1.2.2) says: "If a cookie has both the Max-Age and the Expires attribute, the Max-Age attribute has precedence". A cookie on an HTTPS response without Secure is a Check: [section 4.1.2.5](https://www.rfc-editor.org/rfc/rfc6265#section-4.1.2.5) states that "The Secure attribute limits the scope of the cookie to "secure" channels", so without it the cookie also travels on `http://`. A name matching `sess`, `sid`, `token`, `auth`, `login`, `jwt`, `csrf`, `xsrf` or `remember` without HttpOnly is a Check, since "The HttpOnly attribute limits the scope of the cookie to HTTP requests" ([section 4.1.2.6](https://www.rfc-editor.org/rfc/rfc6265#section-4.1.2.6)). The Fails follow the rules current browsers enforce from [RFC 6265bis](https://datatracker.ietf.org/doc/draft-ietf-httpbis-rfc6265bis/): SameSite=None requires Secure, the `__Secure-` prefix requires Secure, the `__Host-` prefix requires Secure, `Path=/` and no Domain, and a name plus value over 4,096 bytes is ignored.
+
+### Heal it
+
+For pasted HTML, "Rewrite n addresses to https://" replaces every flagged address written with `http://` by its `https://` form wherever that exact text appears, and scans again. "Fix n cookies" applies the corrected lines to the pasted headers. Neither requests anything; test each address before publishing.
 
 ## Standards and conformance
 
-| Specification | Sections | How the tool applies them | Where it stops |
-| --- | --- | --- | --- |
-| [Mixed Content](https://w3c.github.io/webappsec-mixed-content/) | 3.1, 3.2, 4.1, 4.4 | Static classification of addresses in the HTML | Requests made by scripts, XHR and fetch, and addresses in external style sheets are not seen |
-| [Upgrade Insecure Requests](https://www.w3.org/TR/upgrade-insecure-requests/) | Delivery | Detects the directive in the header or a meta tag | Does not test the upgraded addresses |
-| [RFC 6265](https://www.rfc-editor.org/rfc/rfc6265) | 4.1.2.5, 4.1.2.6, 5.3 | Secure and HttpOnly as defined | |
-| [RFC 6265bis draft](https://datatracker.ietf.org/doc/draft-ietf-httpbis-rfc6265bis/) | SameSite, prefixes, lifetime cap | Applied as browsers implement them | Still an Internet-Draft in the RFC Editor queue at the time of writing |
+### Mixed Content (W3C)
+
+Implemented: the secure-context precondition and the blockable and upgradeable categories of [Mixed Content](https://www.w3.org/TR/mixed-content/#categories), evaluated statically on the HTML. Where it stops: browsers decide by request destination at fetch time; the tool decides by tag and attribute. Image sets follow the specification's [upgradeable set](https://www.w3.org/TR/mixed-content/#category-upgradeable), which excludes requests whose initiator is `imageset`: an `img` with `srcset` and any `img` or `source` inside `picture` are listed as blocked, not upgraded. It still labels `track` and `url()` in a `style` attribute as upgraded, while the upgradeable set is images, audio and video only, so a browser may block a `track` or an inline-style font the tool lists as upgraded. Requests made by scripts, workers, `fetch()`, external style sheets and documents inside frames are not seen. The specification has replaced the earlier Level 1 optionally-blockable model; older browsers may block images instead of upgrading them.
+
+### Upgrade Insecure Requests (W3C)
+
+Implemented: detection of the directive in any delivered policy, header or `meta`, per [section 4](https://www.w3.org/TR/upgrade-insecure-requests/#delivery). Not modelled: navigation upgrades and the directive's effect inside frames. The tool reports the directive but does not lower severities, by design.
+
+### RFC 6265 and RFC 6265bis
+
+Implemented from [RFC 6265](https://www.rfc-editor.org/rfc/rfc6265) (Proposed Standard, the current RFC): attribute parsing ([5.2](https://www.rfc-editor.org/rfc/rfc6265#section-5.2)), Max-Age precedence ([4.1.2.2](https://www.rfc-editor.org/rfc/rfc6265#section-4.1.2.2)), Secure ([4.1.2.5](https://www.rfc-editor.org/rfc/rfc6265#section-4.1.2.5)), HttpOnly ([4.1.2.6](https://www.rfc-editor.org/rfc/rfc6265#section-4.1.2.6)) and Domain widening ([4.1.2.3](https://www.rfc-editor.org/rfc/rfc6265#section-4.1.2.3)). Stricter than RFC 6265 and taken from the [RFC 6265bis](https://datatracker.ietf.org/doc/draft-ietf-httpbis-rfc6265bis/) draft that browsers ship: SameSite and its Lax default, the prefixes, the 4,096-byte name-plus-value limit (RFC 6265 [section 6.1](https://www.rfc-editor.org/rfc/rfc6265#section-6.1) only sets a minimum a user agent should store) and the 400-day lifetime cap. Not checked: Path matching against the page, public-suffix Domain rejection, cookie count per domain, and what the server does with the cookie.
+
+### Partitioned cookies and HTTP
+
+The Partitioned note follows the [CHIPS draft](https://datatracker.ietf.org/doc/draft-cutler-httpbis-partitioned-cookies/). HTTP semantics for headers and redirects follow [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110#section-15.4).
 
 ## Finding reference
 
-| Finding | Severity | What it means for visitors | Fix |
+### Page and addresses
+
+| Finding | Severity | Source | What it means | Fix |
+| --- | --- | --- | --- | --- |
+| The page itself is served over plain HTTP | Fail | [Mixed Content, terms](https://www.w3.org/TR/mixed-content/#terms) | Everything on the page can be read and changed on the network | Serve HTTPS and redirect `http://` to it |
+| n insecure addresses blocked by browsers | Fail | [Mixed Content, categories](https://www.w3.org/TR/mixed-content/#categories) | Scripts, styles, frames, fonts or objects never load | Use `https://` or relative addresses; self-host if the other host has no HTTPS |
+| n forms send in plain text | Check | [Mixed Content, 7.1](https://www.w3.org/TR/mixed-content/#requirements-forms) | Browsers warn; typed data travels unencrypted | Point `action` at HTTPS |
+| `<base href>` uses http:// | Check | [RFC 3986, 5.1](https://www.rfc-editor.org/rfc/rfc3986#section-5.1) | Every relative address becomes insecure | Use `https://` or remove the tag |
+| n insecure addresses upgraded to https:// | Info | [Mixed Content, categories](https://www.w3.org/TR/mixed-content/#categories) | Loads over HTTPS if the host serves it there | Rewrite to `https://` |
+| upgrade-insecure-requests is set | Pass | [Upgrade Insecure Requests, 4](https://www.w3.org/TR/upgrade-insecure-requests/#delivery) | Browsers try HTTPS first | Keep it as a safety net |
+| No HTML in the input / Cookies need the response headers | Info | none | Part of the evidence is missing | Paste headers, a blank line, then HTML |
+
+### Cookies browsers reject
+
+| Finding | Source | Fix |
+| --- | --- | --- |
+| SameSite=None without Secure | [RFC 6265bis](https://datatracker.ietf.org/doc/draft-ietf-httpbis-rfc6265bis/), SameSite | Add Secure, or use SameSite=Lax |
+| __Host- rules broken | RFC 6265bis, cookie name prefixes | Secure, `Path=/`, no Domain |
+| __Secure- cookie without Secure | RFC 6265bis, cookie name prefixes | Add Secure |
+| Cookie is n bytes | RFC 6265bis, storage limits; [RFC 6265, 6.1](https://www.rfc-editor.org/rfc/rfc6265#section-6.1) | Keep an identifier, store data server-side |
+| Cookie has no name | [RFC 6265, 5.2](https://www.rfc-editor.org/rfc/rfc6265#section-5.2); RFC 6265bis section 5.6 instead accepts a nameless cookie with a value | Give it a name |
+
+### Cookies to tighten and notes
+
+| Finding | Severity | Source | Meaning |
 | --- | --- | --- | --- |
-| The page itself is served over plain HTTP | FAIL | Everything can be read and changed | Move the site to HTTPS |
-| Blocked by browsers | FAIL | That script, style or frame is missing | Use https:// or host it yourself |
-| Forms that send in plain text | CHECK | Typed data travels unencrypted, after a warning | Post to https:// |
-| Upgraded to https:// | INFO | Works only if the host answers over HTTPS | Use https:// |
-| No insecure addresses | PASS | | |
-| `<base href>` uses http:// | CHECK | Relative addresses resolve to http:// | Use https:// in base |
-| upgrade-insecure-requests is set | PASS | Browsers try https:// first | |
-| SameSite=None without Secure, prefix rules broken, no name, over 4 KB | FAIL | The browser drops the cookie | Add the attributes, shorten it |
-| Sent over plain HTTP too | CHECK | The cookie can leak on any http:// request | Add Secure |
-| Readable by scripts | CHECK | An injected script can steal the session | Add HttpOnly |
-| N cookies set safely | PASS | | |
+| Sent over plain HTTP too | Check | [RFC 6265, 4.1.2.5](https://www.rfc-editor.org/rfc/rfc6265#section-4.1.2.5) | Missing Secure on an HTTPS response |
+| Readable by scripts | Check | [RFC 6265, 4.1.2.6](https://www.rfc-editor.org/rfc/rfc6265#section-4.1.2.6) | Session-like name without HttpOnly; a name-based hint |
+| No SameSite | Info | RFC 6265bis, SameSite | Treated as Lax |
+| Third-party cookie | Info | [CHIPS](https://datatracker.ietf.org/doc/draft-cutler-httpbis-partitioned-cookies/) | SameSite=None without Partitioned; dropped where third-party cookies are blocked |
+| Shared with every *.domain host | Info | [RFC 6265, 4.1.2.3](https://www.rfc-editor.org/rfc/rfc6265#section-4.1.2.3) | Domain widens it to subdomains |
+| Expires in n days | Info | RFC 6265bis, lifetime cap | Over 400 days; browsers cap it |
+| Already expired | Info | [RFC 6265, 4.1.2.1](https://www.rfc-editor.org/rfc/rfc6265#section-4.1.2.1) | This header deletes the cookie |
+| Unknown attribute | Info | [RFC 6265, 5.2](https://www.rfc-editor.org/rfc/rfc6265#section-5.2) | Ignored by browsers |
 
 ## Guide
 
-Confirm outside Tamperbox:
+### A blocked script, style sheet or frame
 
-```sh
-curl -s https://example.com/ | grep -noE '(src|href|action|poster)="http://[^"]+'
-curl -sI https://example.com/ | grep -i '^set-cookie'
-```
+1. Find where the address is written: the line number points at the tag; search templates, theme settings, CMS content and third-party snippets for the `http://` text.
+2. Open the address with `https://` in a browser. If it loads, change the reference. If not, host the file yourself or replace the provider.
+3. Check the page again until the Blocked group is gone, and open the browser console on the live page to catch requests made by scripts, which this scan cannot see.
 
-The first lists `http://` addresses with their line numbers; the second shows the cookies and their attributes. A browser's console also reports mixed content as it loads the page.
+### A form posting over HTTP
 
-### Blocked scripts, styles or frames
+Change `action` to the HTTPS endpoint, or to a relative address on your own site. For a third-party form service, use the HTTPS endpoint it documents, then submit once and confirm no warning appears.
 
-1. Open the `https://` version of the address. If it answers, change the page to use it, or a protocol-relative or relative address.
-2. If the host has no HTTPS, copy the file to your own server or replace the widget.
-3. Search templates, the CMS database and theme settings for `http://`; hard-coded addresses usually live there.
-4. Check the page again; the blocked group should be gone. Add `upgrade-insecure-requests` as a safety net.
+### Upgraded images and media
 
-### Insecure forms
+Nothing is broken today if the host serves HTTPS. Rewrite the addresses anyway, so the page does not rely on browser behaviour, and add `Content-Security-Policy: upgrade-insecure-requests` as a safety net.
 
-Point the form at the `https://` endpoint after checking it accepts posts there. Newsletter and payment providers almost always have one.
+### Cookie attributes
 
-### Cookies
+Copy the line from Corrected Set-Cookie lines into the framework's cookie settings rather than editing headers by hand, so every response gets the attributes. Use the `__Host-` prefix for session cookies: the browser then enforces Secure, `Path=/` and no Domain. Leave HttpOnly off a cookie your own scripts must read.
 
-Add `Secure` to every cookie on an HTTPS site, `HttpOnly` to session cookies scripts never read, and `SameSite=Lax` unless a cookie must travel cross-site, in which case it needs `SameSite=None; Secure`. In PHP, `session.cookie_secure = 1` and `session.cookie_httponly = 1`; in Express, the `cookie` options of the session middleware.
+### Reproduce the check outside Tamperbox
+
+| Command | Confirms |
+| --- | --- |
+| `curl -sI https://example.com/ \| grep -i '^set-cookie'` | the cookies and attributes the page sets |
+| `curl -s https://example.com/ \| grep -noE '(src\|href\|action\|poster)="http://[^"]+'` | `http://` addresses in the HTML, with line numbers |
+| `curl -sI https://example.com/ \| grep -i content-security-policy` | whether `upgrade-insecure-requests` is delivered |
+
+The browser's developer tools are the final check: the console reports each blocked request, and the Application panel shows which cookies were stored or rejected.
 
 ### Break it cases
 
 | Case | What it loads | What it shows |
 | --- | --- | --- |
-| Insecure script | Your page with an http:// script added to the head | A blocked address |
-| Form posts over HTTP | Your page with an http:// form added | An insecure form |
-| Cookie without Secure | Your headers with a session cookie lacking Secure | Sent over plain HTTP too |
-| SameSite=None, no Secure | Your headers with a cookie browsers reject | SameSite=None without Secure |
-| Plain HTTP page | A sample page served over http:// | The page itself is on HTTP |
+| Insecure script | your page with an `http://` script on its own host added | Blocked group, Fail |
+| Form posts over HTTP | your page with a subscribe form posting to `http://` | Form group, Check |
+| Cookie without Secure | your headers plus `session_id` with HttpOnly only | Sent over plain HTTP too |
+| SameSite=None, no Secure | your headers plus `cart` with SameSite=None | rejected cookie, Fail |
+| Plain HTTP page | `http://insecure.harbor-supply.example/` | plain-HTTP page, Fail |
 
-Breaks build on your own page when you entered an address or pasted source. Heal it offers the rewrite and cookie repairs for pasted source, or restores the input before the break.
+Each case builds on your own input; with nothing loaded yet, the reserved sample shop is used. Heal it offers the address rewrite and the cookie fix for pasted source, or "Restore input before this break".
 
 ## Worked example
 
-The sample shop `www.harbor-supply.example` is reserved sample data, answered in the browser. Its HTTPS page loads `http://widgets.ticketdesk.example/chat/loader.js` (blocked), links a partner badge at `http://cdn.harbor-supply.example/…` (upgraded), and has a newsletter form posting to `http://newsletter.bulkpost.example/subscribe`. Of its three cookies, `wp_lang` sets `SameSite=None` without `Secure` (rejected), `woocommerce_session_…` lacks `Secure` and `HttpOnly` (two checks), and `__cf_bm` is set safely with info notes. The verdict counts three insecure addresses; the corrected `Set-Cookie` lines add the missing attributes. Take it further sends the script's `https://` address and the form's `https://` target to the redirect checker, answered by sample data.
+The page opens on `wikipedia.org`, fetched live by our server when the page loads. It was chosen because, when the candidates were compared, it redirected its apex to `www.wikipedia.org` and set cookies on both responses, which shows how the tool reads a redirect chain. Read the result top down: the verdict says whether any insecure address was found and how the cookies fare; the chips repeat the counts; the Insecure addresses section confirms that every resource uses `https://` or a relative address; the Cookies section lists each Set-Cookie header, labelled with the redirect hop or the page that set it, with its notes (a missing SameSite read as Lax, SameSite=None marking a third-party cookie, a Domain attribute that widens the cookie to every subdomain). When the fetch was redirected, Take it further carries the final address to the Security Headers Checker and the final host to the SSL Certificate Checker. The cookies, their attributes and the redirect belong to the site and can change at any time, so no values are reproduced here.
+
+To see every group at once, enter the reserved sample `www.harbor-supply.example`, which is answered in your browser: a chat widget script from `widgets.ticketdesk.example` is blocked, a partner badge on `cdn.harbor-supply.example` is upgraded, the newsletter form posts to `newsletter.bulkpost.example` in plain text, one of three cookies is rejected (SameSite=None without Secure) and a session cookie lacks Secure and HttpOnly. The Corrected Set-Cookie lines show both repairs.
 
 ## For agents
 
-The Tamperbox MCP server runs the address scan as the `mixed_content_checker` operation with a public `url`. Inspect its input schema before calling it. Keep these with any conclusion:
+The Tamperbox MCP server exposes `search` and `execute`. Use `execute` to call `POST /v1/tools/mixed_content_checker` with a full public `url`; it returns `evidence` (final `url`, `status`, `headers` with redacted cookies, `redirects`, `html`, `truncated`) and `report` (`https`, `upgrade`, `base`, `items` with `tag`, `attr`, `url`, `line` and `kind`). For HTML you already have, `mixed_content_analyze` takes `input`, optional `headers` and `url`, and returns `report`, `cookies` and, with `upgrade`, the rewritten HTML; `cookie_analyze` judges one Set-Cookie value. Apply the rules in [Method](#method) and keep these warnings:
 
-- The HTML was read statically; requests made by scripts were not observed.
-- One page was checked, not the site.
-- Whether the `https://` versions answer was not tested.
+- The scan is static: it does not execute scripts or prove what a browser loads.
+- Upgraded addresses are not tested over HTTPS.
+- A live fetch is one observation from one place at one moment.
 
 See [Connect an MCP client](/mcp/connect/) for the calling pattern.
 
 ## Limits
 
-- Initial HTML only, up to 512 KB; no scripts are run.
-- Addresses in external style sheets and those added by JavaScript are not seen.
-- Cookies set by JavaScript are not seen; values of server cookies are removed.
-- One page, from the Tamperbox server, at one moment.
+- First 512 KiB of HTML, at most 20,000 tags, up to 10 redirects, ports 80 and 443, public hosts only.
+- Script-inserted resources, external style sheets, frames' own content and service workers are not seen.
+- Addresses written inside scripts or JSON are not found.
+- Pasted input uses only the last response's headers and is assumed to be HTTPS.
+- The session-cookie name match is a hint; Path and public-suffix rules are not checked.
+- History is a browser interaction record, not server monitoring. Explicit tool links use temporary browser storage as described in [Browser transfers](#browser-transfers).
 
 ## References
 
-- [Mixed Content](https://w3c.github.io/webappsec-mixed-content/): sections 3.1, 3.2, 4.1 and 4.4. W3C editor's draft; the [W3C snapshot](https://www.w3.org/TR/mixed-content/) carries the same categories.
-- [Upgrade Insecure Requests](https://www.w3.org/TR/upgrade-insecure-requests/). W3C candidate recommendation.
-- [RFC 6265](https://www.rfc-editor.org/rfc/rfc6265): HTTP State Management Mechanism. Sections 4.1.2.5, 4.1.2.6 and 5.3. Proposed standard.
-- [RFC 6265bis](https://datatracker.ietf.org/doc/draft-ietf-httpbis-rfc6265bis/): Cookies, the revision of RFC 6265. Internet-Draft in the RFC Editor queue.
+- [Mixed Content](https://www.w3.org/TR/mixed-content/), W3C Candidate Recommendation Draft; sections used: [terms](https://www.w3.org/TR/mixed-content/#terms), [categories](https://www.w3.org/TR/mixed-content/#categories) and [form submission](https://www.w3.org/TR/mixed-content/#requirements-forms).
+- [Upgrade Insecure Requests](https://www.w3.org/TR/upgrade-insecure-requests/), W3C Candidate Recommendation; section used: [4, delivery](https://www.w3.org/TR/upgrade-insecure-requests/#delivery).
+- [RFC 6265, HTTP State Management Mechanism](https://www.rfc-editor.org/rfc/rfc6265), Proposed Standard; to be obsoleted by RFC 6265bis. Sections used: [4.1.2.1](https://www.rfc-editor.org/rfc/rfc6265#section-4.1.2.1), [4.1.2.2](https://www.rfc-editor.org/rfc/rfc6265#section-4.1.2.2), [4.1.2.3](https://www.rfc-editor.org/rfc/rfc6265#section-4.1.2.3), [4.1.2.5](https://www.rfc-editor.org/rfc/rfc6265#section-4.1.2.5), [4.1.2.6](https://www.rfc-editor.org/rfc/rfc6265#section-4.1.2.6), [5.2](https://www.rfc-editor.org/rfc/rfc6265#section-5.2) and [6.1](https://www.rfc-editor.org/rfc/rfc6265#section-6.1).
+- [draft-ietf-httpbis-rfc6265bis](https://datatracker.ietf.org/doc/draft-ietf-httpbis-rfc6265bis/), Internet-Draft; SameSite, cookie name prefixes, size and lifetime limits.
+- [draft-cutler-httpbis-partitioned-cookies](https://datatracker.ietf.org/doc/draft-cutler-httpbis-partitioned-cookies/), Internet-Draft; the Partitioned attribute.
+- [RFC 3986, URI Generic Syntax](https://www.rfc-editor.org/rfc/rfc3986), Internet Standard; sections used: [5](https://www.rfc-editor.org/rfc/rfc3986#section-5) and [5.1](https://www.rfc-editor.org/rfc/rfc3986#section-5.1).
+- [RFC 9110, HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110), Internet Standard; section used: [15.4](https://www.rfc-editor.org/rfc/rfc9110#section-15.4).

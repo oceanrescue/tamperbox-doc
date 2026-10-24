@@ -1,253 +1,258 @@
 ---
 title: Security Headers Checker
-description: Which response headers the Security Headers Checker grades, every rule behind the six points and the letter, what each finding means for a site's visitors, and how to fix and verify each one.
-updated: 2026-10-20
+description: How the security headers checker fetches a page or reads pasted headers, the six headers it scores and every rule behind the grade, what each finding means, and how to fix and verify each header.
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
-agentSummary: Method, finding reference and repair guide for the Tamperbox Security Headers Checker, which fetches one public page through the Tamperbox server (or reads pasted headers in the browser) and grades HSTS, Content-Security-Policy, X-Content-Type-Options, framing, Referrer-Policy and Permissions-Policy on the final response.
+agentSummary: Method, finding reference and repair guide for the Tamperbox Security Headers Checker, which grades the final response of a public website (fetched by the Tamperbox server after up to 10 redirects) or pasted response headers (read in the browser) on six headers, from A+ to F, and writes the missing lines in server syntax.
 prerequisites:
-  - A public web address on port 80 or 443, or response headers to paste (curl -I output or a browser's network panel)
+  - A public website on port 80 or 443, or response headers copied from curl -I or a browser's network panel
 outputs:
-  - A letter grade from A+ to F with a score out of six, one finding per header worst first, the missing headers as server configuration, and the raw response headers
+  - A grade from A+ to F with the points out of 6, chips, findings worst first with the value received and the line to send instead, a configuration snippet in six server syntaxes, and the response headers as received
 limitations:
-  - One response is graded, the final one after redirects; other routes can differ; the grade is configuration evidence, not a security audit; HSTS preload coverage is not checked here
+  - One response from one address at one moment is graded; other pages, error responses and signed-in views can differ
+  - HSTS preload lists and the non-script directives of a Content-Security-Policy are not evaluated
+  - A grade is configuration evidence, not a security assessment of the site
 ---
 
-The tool page is [tamperbox.dev/security-headers](https://tamperbox.dev/security-headers). It opens on a sample shop whose headers are a fixture on the reserved `.example` zone, grades them, and shows the lines that would fix them. This page is the long version: what is fetched, every rule behind the score, what each finding means, and how to fix and verify each one.
+The tool page is [tamperbox.dev/security-headers](https://tamperbox.dev/security-headers). It opens by grading `mozilla.org` live, answers in one sentence with a letter and the headers that cost points, and lists every header under it. This page is the long version: what our server requests, every rule behind the grade, what each finding means, and how to send each header and confirm it.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> an address is sent to the Tamperbox server, which requests the page, follows redirects and returns the response headers with cookie values removed. Pasted headers are graded in your browser and never uploaded. Nothing is stored.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> a website is sent to the Tamperbox server, which requests the page itself, follows up to 10 redirects, removes cookie values and returns the final response's headers. Pasted headers are graded in your browser and never uploaded. History and tool-to-tool transfers remain in the browser; see Browser transfers below.</div>
 
 ## What the tool answers
 
-Three questions, in the order a reviewer asks them:
+Four questions, in the order the result answers them:
 
-1. **Which protective headers does the final response send, and do they work?** Six headers count: Strict-Transport-Security, Content-Security-Policy, X-Content-Type-Options, framing (CSP `frame-ancestors` or X-Frame-Options), Referrer-Policy and Permissions-Policy.
-2. **What does that add up to?** A score out of six and a letter from A+ to F, so two responses can be compared at a glance.
-3. **What do I send instead?** For every slot that did not earn its point, the exact line, and all of them as configuration for nginx, Apache, Caddy, a `_headers` file, IIS or Express.
+1. **How well does this response protect visitors?** A letter from A+ to F, from six headers worth one point each.
+2. **Which headers cost points, and why?** Every header the grade reads, worst first, with the value received and what that value lets an attacker do.
+3. **What exactly should be sent instead?** The line for each header that missed a point, and the whole set written for nginx, Apache, Caddy, a `_headers` file, IIS or Express.
+4. **What else does the response say about the server?** Version numbers in `Server` and `X-Powered-By`, obsolete headers, and Cross-Origin-Opener-Policy, which decide an A+ without changing the letter.
 
-The grade is a summary of configuration. It does not test the application, and an A does not mean the site is secure.
+The verdict sentence names the grade and the headers that cost the most. The chips count the headers doing their job, the ones missing or not working, the weak ones and any versions announced.
 
 ## Inputs
 
-### A web address
+The field takes either form. What decides it is the first line: a status line such as `HTTP/2 200`, or a `name: value` header line, is read as pasted headers; anything else is read as an address.
 
-`example.com`, `www.example.com/shop` or a full `https://` address. Without a scheme, `https://` is assumed. The check runs when you stop typing, or at once on Enter. The server requests the address with a `GET`, follows up to ten redirects, and returns the headers of the response the chain ends on. The address must be a public host name: IP addresses, user names and passwords, and ports other than 80 and 443 are refused before anything is sent, with a repair in Heal it where one exists ("Remove them", "Use the standard port").
+| Input | What happens | Where |
+| --- | --- | --- |
+| `example.com` or `https://example.com/page` | Checked when you stop typing or on Enter, as `https://` when no scheme is given | Our server |
+| `http://example.com/` | Checked from `http://`, so a missing redirect to HTTPS is graded | Our server |
+| Output of `curl -sI` or `curl -sIL` | Graded at once; only the last response in the paste counts | Your browser |
+| A `.txt` or `.http` file up to 256 KiB | Read into the field and graded like a paste | Your browser |
 
-Before checking, a pasted address is tidied: quotes, angle brackets and trailing punctuation are dropped. The address keeps its path and query, because headers can differ by route; a fragment (`#…`) stays in the box but is never sent. What you type is never rewritten while you type.
+### A website
+
+The address is cleaned before it is checked: a pasted full link keeps its scheme, host and path, quotes and trailing punctuation are dropped, and text that is not an address stays as pasted so the error explains it. The parser refuses, with a message in the field, an address with spaces, a scheme other than `http` or `https`, an IP address, a host without a top-level domain, a port other than 80 or 443, and a user name or password; the last two offer a repair under Heal it. The fragment is dropped.
+
+Our server applies the same rules again, requires the host to resolve only to public addresses, and gives the whole check 45 seconds. It sends one `GET` per hop as `TamperboxBot/1.0`, without cookies, follows at most 10 redirects and grades the response that is not a redirect. `Set-Cookie` values are replaced by `[redacted:n]` before the headers reach your browser.
 
 ### Pasted headers
 
-Paste the output of `curl -I https://example.com/`, or copy the response headers from a browser's network panel. The field is read as headers when its first line is a status line (`HTTP/2 200`) or a `name: value` line that is not a URL. When the paste holds several responses, such as `curl -IL` output through a redirect, only the last one is graded, and the verdict says how many there were. Pasted headers are graded as if they arrived over HTTPS, because the transport cannot be known from text. The field takes up to 200,000 characters; a dropped or opened file up to 256 KB.
-
-### Files
-
-A `.txt` or `.http` file dropped on the page or opened from the field is read in the browser like a paste.
+The paste may hold several responses, as `curl -sIL` prints them; each status line starts a new one and only the last is graded. Header names are compared without regard to case. Pasted headers are graded as if they arrived over HTTPS, because a paste carries no transport. Text without a single header line is refused with "No headers found".
 
 ## Reading the result
 
 ### Verdict and chips
 
-The verdict names the letter and the gaps that cost the most, for example "Grade D. No Content-Security-Policy, no Permissions-Policy, and PHP announces its version." The line under it gives the score and where the headers came from: the final address and the number of redirects, or "from the pasted headers". The chips count headers doing their job, missing or not working, weak, and software versions announced; each jumps to the evidence.
+The line reads `Grade B.` followed by the gaps that cost the most: up to two header titles, or the first and "n more headers missing or not working", then a version leak if there is one. Under it, the points and where they came from: "5 of 6 points, from https://www.example.com/ after 1 redirect", with the status when the final response was 400 or above.
 
 ### Findings
 
-One row per header, worst first: the six that count, any header that names a software version, and the headers that are reported without scoring. Each row shows the header's value as received ("Not sent" when absent), what it means, and for the six that count, the line to send instead with a Copy button. Two or more passing rows fold into one "n checks passed" line.
-
-### History and Take it further
-
-History lists what Break it and Heal it replaced, with Revert for the newest change and Reset input to return to what you entered. Take it further hands the host that answered to the certificate checker, the security.txt checker and the post-quantum checker, each opening with the host already in its box. Pasted headers have no host, so the links are hidden.
+Every header the grade reads, one row each, worst first: failures, then warnings, then notes, then passes; within a status, the header that lost a whole point comes before one that lost half. Each row shows the header name, its badge, a title, what the value means, the value received or "Not sent", and, when the header missed a point, an **Add** or **Send instead** line with a Copy button. Two or more passes fold into one "n checks passed" line. Version leaks and the headers that do not count (Cross-Origin-Opener-Policy, X-XSS-Protection, Public-Key-Pins, Expect-CT) sit in the same list.
 
 ### Grade
 
-The letter, the score, and six slots, one per counted header, each showing Set, Weak, Not working or Missing. A slot jumps to its row in Findings, opening the folded passes when it has to.
+The letter, the points, and six slots, one per scored header: Set, Weak, Not working or Missing, with a two-step meter. Each slot jumps to its row in Findings, opening the folded passes when needed.
 
 ### Add the missing headers
 
-The lines for every slot that did not pass, in the server syntax you choose. The note under it says where the lines go; for nginx it warns that an `add_header` in a `location` block replaces every inherited `add_header`.
+One configuration block for every scored header that missed a point and has a suggested line, in the server syntax you pick. The note under it says where the block goes and warns when it contains a Content-Security-Policy, which enforces as soon as it is published.
 
-### Response headers
+### Response headers, History and Take it further
 
-Every header as received, with the ones that count marked. Cookie values arrive as `[redacted:N]`, where N is the length of the removed value.
+The full response as received, folded, with the scored headers marked "counts", "weak" or "not working". History lists every Break it and Heal it change with Revert and Reset input. Take it further hands the host the headers came from to the other checks in this category; see [Guide](#guide).
+
+### Browser transfers
+
+Explicit tool links temporarily place the transferred input in browser `sessionStorage`. The URL fragment carries a random token, not the input. The receiving page accepts that token once, for its destination path and for less than one minute, then removes it from the address. A same-origin browser channel can complete a transfer into another tab. Ordinary documentation links do not transfer input. When browser storage is unavailable, navigation still works but the input may need to be pasted again.
 
 ## Method
 
-Rules are applied in this order to one header list. Severity is shown as FAIL (a protection is missing or switched off), CHECK (present but weak, or worth attention) and INFO (worth knowing, not scored).
+The grade is computed by `gradeSecurityHeaders` from one list of headers: the final response for an address, the last response of a paste. Six slots score 0, 0.5 or 1. The rules run in the order below; the first rule that matches a slot decides it.
 
 ### Strict-Transport-Security
 
-HSTS is defined by [RFC 6797](https://www.rfc-editor.org/rfc/rfc6797). The tool reads the first header and notes any repeat, following [section 8.1](https://www.rfc-editor.org/rfc/rfc6797#section-8.1): "If a UA receives more than one STS header field in an HTTP response message over secure transport, then the UA MUST process only the first such header field."
+[RFC 6797, section 8.1](https://www.rfc-editor.org/rfc/rfc6797#section-8.1) decides two rules: "If an HTTP response is received over insecure transport, the UA MUST ignore any present STS header field(s)", and with more than one header "the UA MUST process only the first such header field". The `max-age` directive is required by [section 6.1.1](https://www.rfc-editor.org/rfc/rfc6797#section-6.1.1), where zero means the host is no longer a known HSTS host.
 
-| Condition | Severity | Points | Finding |
-| --- | --- | --- | --- |
-| The final response is plain `http://` | FAIL | 0 | Served over plain HTTP |
-| No header | FAIL | 0 | No HSTS response header |
-| `max-age` missing, repeated or not a whole number | FAIL | 0 | HSTS cannot be read |
-| `max-age=0` | FAIL | 0 | HSTS switched off (max-age=0) |
-| `max-age` under 31536000 seconds | CHECK | 0.5 | HSTS for N days |
-| One year or more | PASS | 1 | HSTS for 1 year (with subdomains) |
+| Condition | Points | Finding |
+| --- | --- | --- |
+| Final address is `http://` | 0 | Served over plain HTTP |
+| No header | 0 | No HSTS response header |
+| `max-age` missing, repeated or not a whole number | 0 | HSTS cannot be read |
+| `max-age=0` | 0 | HSTS switched off (max-age=0) |
+| Below 31536000 seconds | 0.5 | HSTS for _duration_ |
+| One year or more | 1 | HSTS for _duration_, with subdomains when `includeSubDomains` is present |
 
-The plain-HTTP rule follows the same section: "If an HTTP response is received over insecure transport, the UA MUST ignore any present STS header field(s)." `max-age` is required by [section 6.1.1](https://www.rfc-editor.org/rfc/rfc6797#section-6.1.1), and [section 6.1](https://www.rfc-editor.org/rfc/rfc6797#section-6.1) says "All directives MUST appear only once"; a header that breaks either is ignored by browsers, so it scores zero. A zero `max-age` "signals the UA to cease regarding the host as a Known HSTS Host" (section 6.1.1). `includeSubDomains` ([section 6.1.2](https://www.rfc-editor.org/rfc/rfc6797#section-6.1.2)) is described in the finding but not required for the point; `preload` is not part of the RFC and is not scored here. The one-year threshold is not in the RFC: it is the minimum the browser preload list asks for, and the common baseline.
+A second header adds the note "Sent more than once: browsers read only the first." `includeSubDomains` is described but not required, and `preload` is not scored. Unknown directives do not change the score.
 
 ### Content-Security-Policy
 
-Only the enforced `Content-Security-Policy` header ([CSP3 section 3.1](https://www.w3.org/TR/CSP3/#csp-header)) scores. The first policy is parsed; within it, a repeated directive keeps its first occurrence. The script policy is `script-src`, falling back to `default-src`, as [CSP3 section 6.1.10](https://www.w3.org/TR/CSP3/#directive-script-src) and [6.1.3](https://www.w3.org/TR/CSP3/#directive-default-src) define.
+Only the enforced header scores. The first policy is parsed; a repeated directive keeps its first occurrence. Scripts are governed by [`script-src`](https://www.w3.org/TR/CSP3/#directive-script-src), falling back to [`default-src`](https://www.w3.org/TR/CSP3/#directive-default-src).
 
-| Condition | Severity | Points | Finding |
-| --- | --- | --- | --- |
-| Only `Content-Security-Policy-Report-Only` | CHECK | 0 | Content-Security-Policy is report-only |
-| No policy | FAIL | 0 | No Content-Security-Policy |
-| Neither `script-src` nor `default-src` | CHECK | 0.5 | CSP does not restrict scripts |
-| `'unsafe-inline'` without a nonce, a hash or `'strict-dynamic'` | CHECK | 0.5 | CSP allows inline scripts |
-| `*`, `http:`, `https:` or `data:` as a script source, without `'strict-dynamic'` | CHECK | 0.5 | CSP allows scripts from any host |
-| Otherwise | PASS | 1 | CSP restricts scripts |
+| Condition | Points | Finding |
+| --- | --- | --- |
+| Only [Content-Security-Policy-Report-Only](https://www.w3.org/TR/CSP3/#cspro-header) | 0 | Content-Security-Policy is report-only |
+| No policy | 0 | No Content-Security-Policy |
+| Neither `script-src` nor `default-src` | 0.5 | CSP does not restrict scripts |
+| `'unsafe-inline'` without a nonce, a hash or `'strict-dynamic'` | 0.5 | CSP allows inline scripts ('unsafe-inline') |
+| `*`, `http:`, `https:` or `data:` without `'strict-dynamic'` | 0.5 | CSP allows scripts from any host |
+| Anything else | 1 | CSP restricts scripts |
 
-A report-only policy is defined in [section 3.2](https://www.w3.org/TR/CSP3/#cspro-header) as "monitoring (but not enforcing)" its effects, so it scores zero however strict it is. `'strict-dynamic'` ([section 8.2](https://www.w3.org/TR/CSP3/#strict-dynamic-usage)) makes browsers ignore host lists and `'unsafe-inline'` when nonces or hashes are present, which is why it lifts the two weaker conditions. `'unsafe-eval'` is mentioned in the passing finding but costs nothing. When two enforced policies are sent, the row notes that browsers enforce every policy, so the strictest combination applies ([section 8.1](https://www.w3.org/TR/CSP3/#multiple-policies)); only the first is graded. Style, image, connect and other directives are not evaluated.
+`'unsafe-eval'` is mentioned in the passing finding but costs nothing. Several enforced headers add a note, because every policy is enforced and the strictest combination applies ([CSP Level 3, multiple policies](https://www.w3.org/TR/CSP3/#multiple-policies)).
 
-### X-Content-Type-Options
+### Framing and content sniffing
 
-The [Fetch standard](https://fetch.spec.whatwg.org/#x-content-type-options-header) defines the header and its one value. The tool follows its "determine nosniff" step: the first value must be an ASCII case-insensitive match for `nosniff`. Anything else, including typos and extra tokens, is FAIL with zero points, because browsers ignore it.
+[`frame-ancestors`](https://www.w3.org/TR/CSP3/#directive-frame-ancestors) in the enforced policy earns the framing point whatever X-Frame-Options says. Without it, X-Frame-Options is read as [RFC 7034, section 2.1](https://www.rfc-editor.org/rfc/rfc7034#section-2.1) defines it: `DENY` or `SAMEORIGIN` scores 1 ("Never shown in a frame", "Framed only by this site"), `ALLOW-FROM` scores 0.5 because current browsers ignore it, any other value scores 0, and no header scores 0 ("Any site can frame this page").
 
-### Framing
+X-Content-Type-Options scores 1 only when its value is `nosniff`, compared without case, as the [Fetch Standard](https://fetch.spec.whatwg.org/#x-content-type-options-header) defines it. Any other value scores 0 with the value in the title; no header scores 0.
 
-Framing earns its point from either header. CSP `frame-ancestors` ([CSP3 section 6.4.2](https://www.w3.org/TR/CSP3/#directive-frame-ancestors)) in the enforced policy passes and takes precedence. Without it, X-Frame-Options is read as the [HTML standard](https://html.spec.whatwg.org/multipage/speculative-loading.html#the-x-frame-options-header) now defines it: `DENY` or `SAMEORIGIN` pass; `ALLOW-FROM` is CHECK with half a point, because the standard says it "is not to be implemented"; any other value is FAIL; no header at all is FAIL. The HTML standard's text supersedes [RFC 7034](https://www.rfc-editor.org/rfc/rfc7034) and states that when a CSP `frame-ancestors` directive and X-Frame-Options are both present, X-Frame-Options is ignored.
+### Referrer-Policy and Permissions-Policy
 
-### Referrer-Policy
+All Referrer-Policy values are joined and the last recognised token wins, as [Referrer Policy, parsing the header](https://www.w3.org/TR/referrer-policy/#parse-referrer-policy-from-header) specifies. The [policies](https://www.w3.org/TR/referrer-policy/#referrer-policies) `no-referrer`, `same-origin`, `strict-origin`, `strict-origin-when-cross-origin`, `origin` and `origin-when-cross-origin` score 1. `no-referrer-when-downgrade` and unrecognised values score 0.5, `unsafe-url` scores 0. No header scores 0.5, because current browsers default to `strict-origin-when-cross-origin`.
 
-All `Referrer-Policy` values are joined and the last recognised token wins, as [Referrer Policy section 8.1](https://w3c.github.io/webappsec-referrer-policy/#parse-referrer-policy-from-header) parses them. `no-referrer`, `same-origin`, `strict-origin`, `strict-origin-when-cross-origin`, `origin` and `origin-when-cross-origin` pass. `no-referrer-when-downgrade` and an unrecognised value are CHECK with half a point; `unsafe-url` is FAIL. No header is CHECK with half a point: current browsers apply the default policy, which the editor's draft states as "The default referrer policy is "strict-origin-when-cross-origin"" ([section 3](https://w3c.github.io/webappsec-referrer-policy/#default-referrer-policy)), but the older W3C snapshot and older browsers default to `no-referrer-when-downgrade`.
+Any [Permissions-Policy](https://www.w3.org/TR/permissions-policy/#permissions-policy-http-header-field) header scores 1; the tool counts the features it lists but does not judge them. The old `Feature-Policy` name alone scores 0.5. Neither scores 0.
 
-### Permissions-Policy
+### Letter, A+ and leaks
 
-Any `Permissions-Policy` header ([Permissions Policy section 6.1](https://www.w3.org/TR/permissions-policy/#permissions-policy-http-header-field)) passes, and the finding counts the features it sets. The tool does not judge which features are allowed. The old `Feature-Policy` name alone is CHECK with half a point; neither header is CHECK with zero points.
-
-### The letter, A+ and versions
-
-The six points add up: 6 is A, 5 to 5.5 is B, 4 to 4.5 is C, 3 to 3.5 is D, 2 to 2.5 is E, below 2 is F. A+ needs all six at a full point, `Cross-Origin-Opener-Policy` set to `same-origin` or `same-origin-allow-popups` ([HTML, cross-origin opener policies](https://html.spec.whatwg.org/multipage/browsers.html#cross-origin-opener-policies)), and no header that names a software version.
-
-A version leak is a `Server` header containing a digit, or any `X-Powered-By`, `X-AspNet-Version`, `X-AspNetMvc-Version` or `X-Generator`. [RFC 9110 section 10.2.4](https://www.rfc-editor.org/rfc/rfc9110#section-10.2.4) says "An origin server SHOULD NOT generate a Server header field containing needlessly fine-grained detail". Leaks are CHECK, block A+, and never lower the letter.
-
-Reported without scoring: `X-XSS-Protection` with any value other than `0` (INFO, obsolete), `Expect-CT` (INFO, obsolete), `Public-Key-Pins` (CHECK, obsolete and able to lock out old clients), and a missing or weak `Cross-Origin-Opener-Policy` (INFO).
+6 points is A, 5 or 5.5 is B, 4 or 4.5 is C, 3 or 3.5 is D, 2 or 2.5 is E, below 2 is F. A+ needs every slot at 1, [Cross-Origin-Opener-Policy](https://html.spec.whatwg.org/multipage/browsers.html#cross-origin-opener-policies) set to `same-origin` or `same-origin-allow-popups`, and no leak. A leak is a `Server` value containing a digit, or any `X-Powered-By`, `X-AspNet-Version`, `X-AspNetMvc-Version` or `X-Generator`. Leaks block A+ and never lower the letter.
 
 ## Standards and conformance
 
-| Specification | Sections the tool applies | How | Where it stops |
+| Specification | Sections used | How the tool applies it | Where it stops |
 | --- | --- | --- | --- |
-| [RFC 6797](https://www.rfc-editor.org/rfc/rfc6797) HSTS | 6.1, 6.1.1, 6.1.2, 8.1 | Parsed from the first header; plain-HTTP responses fail | Preload is checked by the HTTP/3 checker, not here; stricter than the RFC by asking for one year |
-| [CSP Level 3](https://www.w3.org/TR/CSP3/) | 3.1, 3.2, 6.1.3, 6.1.10, 6.4.2, 8.1, 8.2 | Script policy and `frame-ancestors` of the first enforced policy | Other directives, nonce freshness and `<meta>` policies are not evaluated |
-| [Fetch](https://fetch.spec.whatwg.org/#x-content-type-options-header) | X-Content-Type-Options, determine nosniff | Exact match on the first header's whole value | Stricter than Fetch: a comma-separated value such as `nosniff, nosniff` fails here; MIME types of the site's scripts are not checked |
-| [HTML](https://html.spec.whatwg.org/multipage/speculative-loading.html#the-x-frame-options-header) | X-Frame-Options processing, cross-origin opener policies | `DENY`/`SAMEORIGIN` pass, `ALLOW-FROM` half; COOP for A+ | Multiple conflicting X-Frame-Options values are graded on the first |
-| [Referrer Policy](https://w3c.github.io/webappsec-referrer-policy/) | 3, 8.1 | Last recognised token wins | Per-element `referrerpolicy` attributes are not seen |
-| [Permissions Policy](https://www.w3.org/TR/permissions-policy/) | 6.1 | Presence and feature count | Which features are allowed is not judged |
-| [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110) HTTP semantics | 10.2.4, 15.4 | Version leaks; redirects followed by status code | |
+| [RFC 6797](https://www.rfc-editor.org/rfc/rfc6797) HSTS, Proposed Standard | [6.1](https://www.rfc-editor.org/rfc/rfc6797#section-6.1), [6.1.1](https://www.rfc-editor.org/rfc/rfc6797#section-6.1.1), [7.2](https://www.rfc-editor.org/rfc/rfc6797#section-7.2), [8.1](https://www.rfc-editor.org/rfc/rfc6797#section-8.1) | Parses directives locally; ignores the header on `http://`; reads only the first header | Preload lists and stored policies are not consulted; a one-year floor is a grading choice, not an RFC rule |
+| [CSP Level 3](https://www.w3.org/TR/CSP3/), W3C Working Draft | `script-src`, `default-src`, `frame-ancestors`, Report-Only, multiple policies | Reads the script source list of the first enforced policy | Style, image, connect, form and other directives, nonce validity and `report-to` are not evaluated |
+| [RFC 7034](https://www.rfc-editor.org/rfc/rfc7034) X-Frame-Options, Informational | [2.1](https://www.rfc-editor.org/rfc/rfc7034#section-2.1) | Accepts `DENY` and `SAMEORIGIN`; half a point for `ALLOW-FROM` | Superseded in practice by `frame-ancestors`, which takes precedence |
+| [Fetch Standard](https://fetch.spec.whatwg.org/#x-content-type-options-header) | X-Content-Type-Options | Exact `nosniff`, case-insensitive | Does not check that each response carries a correct Content-Type |
+| [Referrer Policy](https://www.w3.org/TR/referrer-policy/) | Policies, header parsing | Last recognised token wins | Per-element `referrerpolicy` attributes and `meta` tags are not seen |
+| [Permissions Policy](https://www.w3.org/TR/permissions-policy/) | The HTTP header field | Presence only | Feature allowlists are not judged |
+| [HTML Standard](https://html.spec.whatwg.org/multipage/browsers.html#cross-origin-opener-policies) | Cross-origin opener policies | `same-origin` or `same-origin-allow-popups` for A+ | COEP and CORP are not graded |
 
-RFC 7034 is informational and superseded for processing by the HTML standard. HPKP ([RFC 7469](https://www.rfc-editor.org/rfc/rfc7469)) was removed from browsers, and Expect-CT ([RFC 9163](https://www.rfc-editor.org/rfc/rfc9163)) is obsolete now that Certificate Transparency is enforced by default.
+Pasted headers are combined as [RFC 9110, section 5.3](https://www.rfc-editor.org/rfc/rfc9110#section-5.3) allows for list fields: Referrer-Policy values are joined with commas, while HSTS and CSP read the first field line. [RFC 7469](https://www.rfc-editor.org/rfc/rfc7469) (key pinning) and [RFC 9163](https://www.rfc-editor.org/rfc/rfc9163) (Expect-CT) are reported only as obsolete headers.
 
 ## Finding reference
 
-| Id | Severity | Title | What it means for visitors | Fix |
-| --- | --- | --- | --- | --- |
-| hsts | FAIL | Served over plain HTTP | The page can be read or changed on the network | Redirect to HTTPS and send HSTS there |
-| hsts | FAIL | No HSTS response header | The first request of a visit may go out unencrypted | `max-age=31536000` |
-| hsts | FAIL | HSTS cannot be read | Browsers ignore the header | `max-age=31536000` |
-| hsts | FAIL | HSTS switched off | The stored policy is removed | `max-age=31536000` |
-| hsts | CHECK | HSTS for N days | Protection lapses sooner | Raise to a year |
-| csp | FAIL | No Content-Security-Policy | An injected script runs with the page's power | A starter policy, tested first |
-| csp | CHECK | Content-Security-Policy is report-only | Violations are reported, not blocked | Enforce once reports are clean |
-| csp | CHECK | CSP does not restrict scripts | Scripts load from anywhere | Add `script-src` or `default-src` |
-| csp | CHECK | CSP allows inline scripts | Injected inline scripts run | Nonces or hashes |
-| csp | CHECK | CSP allows scripts from any host | Any site's script runs | List the hosts |
-| xcto | FAIL | No X-Content-Type-Options, or a wrong value | Uploaded files can be run as scripts | `nosniff` |
-| framing | FAIL | Any site can frame this page, or a wrong value | Clickjacking | `SAMEORIGIN` or `frame-ancestors` |
-| framing | CHECK | X-Frame-Options ALLOW-FROM is ignored | The page is frameable | `frame-ancestors` |
-| referrer | FAIL | Referrer-Policy is unsafe-url | Full addresses go everywhere | `strict-origin-when-cross-origin` |
-| referrer | CHECK | No Referrer-Policy, Full URLs go to other sites, or not a policy | Paths and queries can leak | `strict-origin-when-cross-origin` |
-| permissions | CHECK | No Permissions-Policy, or Feature-Policy is the old name | Embedded content can ask for features | `camera=(), microphone=(), geolocation=()` |
-| leak-* | CHECK | Server names its software version, and similar | Attackers can look up known vulnerabilities | Hide the version |
-| coop | INFO | No Cross-Origin-Opener-Policy | Needed for A+ | `same-origin` |
-| xxss, expectct | INFO | Obsolete header | Nothing; remove it | Remove |
-| hpkp | CHECK | Public-Key-Pins is obsolete and risky | Old clients can be locked out | Remove |
+### Scored headers that fail
 
-Each passing row has its own title ("CSP restricts scripts", "Referrer-Policy strict-origin-when-cross-origin") and no fix.
+| Finding | Points | Rule | Fix |
+| --- | --- | --- | --- |
+| Served over plain HTTP | 0 | [RFC 6797 §8.1](https://www.rfc-editor.org/rfc/rfc6797#section-8.1) | Redirect to HTTPS, then send HSTS there |
+| No HSTS response header | 0 | [RFC 6797 §6.1](https://www.rfc-editor.org/rfc/rfc6797#section-6.1) | `max-age=31536000` |
+| HSTS cannot be read | 0 | [RFC 6797 §6.1.1](https://www.rfc-editor.org/rfc/rfc6797#section-6.1.1) | One numeric `max-age` |
+| HSTS switched off (max-age=0) | 0 | [RFC 6797 §6.1.1](https://www.rfc-editor.org/rfc/rfc6797#section-6.1.1) | `max-age=31536000` |
+| No Content-Security-Policy | 0 | [CSP3 script-src](https://www.w3.org/TR/CSP3/#directive-script-src) | Starter policy, tested as Report-Only |
+| Content-Security-Policy is report-only | 0 | [CSP3 Report-Only](https://www.w3.org/TR/CSP3/#cspro-header) | Send the same policy enforced |
+| No X-Content-Type-Options, or a wrong value | 0 | [Fetch](https://fetch.spec.whatwg.org/#x-content-type-options-header) | `nosniff` |
+| Any site can frame this page, or a wrong X-Frame-Options | 0 | [RFC 7034 §2.1](https://www.rfc-editor.org/rfc/rfc7034#section-2.1) | `SAMEORIGIN` or `frame-ancestors` |
+| Referrer-Policy is unsafe-url | 0 | [Referrer Policy](https://www.w3.org/TR/referrer-policy/#referrer-policies) | `strict-origin-when-cross-origin` |
+| No Permissions-Policy | 0 | [Permissions Policy](https://www.w3.org/TR/permissions-policy/#permissions-policy-http-header-field) | `camera=(), microphone=(), geolocation=()` |
+
+### Scored headers that are weak
+
+| Finding | Points | Fix |
+| --- | --- | --- |
+| HSTS for _duration_ (under a year) | 0.5 | Raise `max-age` to 31536000 or more |
+| CSP does not restrict scripts | 0.5 | Add `script-src` or `default-src` |
+| CSP allows inline scripts ('unsafe-inline') | 0.5 | Nonces or hashes |
+| CSP allows scripts from any host | 0.5 | List the script hosts |
+| X-Frame-Options ALLOW-FROM is ignored | 0.5 | `frame-ancestors` with the origin |
+| No Referrer-Policy, Full URLs go to other sites, or an unknown value | 0.5 | `strict-origin-when-cross-origin` |
+| Feature-Policy is the old name | 0.5 | Send Permissions-Policy |
+
+### Not scored
+
+| Finding | Status | Meaning |
+| --- | --- | --- |
+| Server names its software version, x-powered-by names the framework | Check | Blocks A+; hide the version at the server or proxy |
+| No Cross-Origin-Opener-Policy, or another value | Note | Needed for A+; `same-origin` |
+| Public-Key-Pins is obsolete and risky | Check | Remove it |
+| X-XSS-Protection is obsolete, Expect-CT is obsolete | Note | Remove them, or send `X-XSS-Protection: 0` |
 
 ## Guide
 
-After every change, check the address again: the row should pass and the grade should move. To confirm outside Tamperbox, read the headers yourself:
+### Send the headers from the right layer
 
-```sh
-curl -sI https://example.com/ | grep -iE 'strict-transport|content-security|x-content-type|x-frame|referrer-policy|permissions-policy|cross-origin-opener|server|x-powered-by'
-```
+Add the block from **Add the missing headers** where every response passes: the CDN or reverse proxy when there is one, otherwise the web server's site block. In nginx, `add_header` inside a `location` replaces every `add_header` inherited from the server block, which is why a header often appears on the home page and not on other routes; `always` makes it apply to error responses too. In Apache, use `Header always set` with `mod_headers`.
 
-Add `-L` to follow redirects; the last block is the one graded.
+### Roll out a Content-Security-Policy
 
-### No Content-Security-Policy
+1. Send the starter policy as `Content-Security-Policy-Report-Only` with a `report-to` endpoint.
+2. Read the violations for a release cycle; add the hosts the site really loads from, and replace inline scripts with nonces or hashes.
+3. Rename the header to `Content-Security-Policy` and grade again: the slot should read "CSP restricts scripts".
 
-1. List what your pages load: scripts, styles, fonts, images and frames, with their hosts.
-2. Start from `default-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'` and add the hosts you need.
-3. Send it as `Content-Security-Policy-Report-Only` with a `report-to` endpoint for a few days. Fix what it reports.
-4. Rename the header to `Content-Security-Policy`. The CSP row should pass.
+### Raise HSTS safely
 
-### Inline scripts allowed
+Start with a short `max-age` only if you are unsure every page works over HTTPS, then raise it to `31536000`. Add `includeSubDomains` after every subdomain serves HTTPS; once set, a subdomain without a valid certificate becomes unreachable for visitors, with no click-through ([RFC 6797, section 12.1](https://www.rfc-editor.org/rfc/rfc6797#section-12.1)).
 
-Replace `'unsafe-inline'` in `script-src` with a nonce per response (`'nonce-…'`, generated by the server) or the hash of each inline script. Frameworks that inject scripts at runtime work best with nonces plus `'strict-dynamic'`.
+### Confirm outside Tamperbox
 
-### HSTS short, missing or off
+`curl -sI https://example.com/` prints the headers of one response; `curl -sIL http://example.com/` follows redirects so the last block is what the tool grades. Paste either into the tool to grade it locally. Check an error page and a static file too: `curl -sI https://example.com/missing` and the address of a script or image.
 
-Send `Strict-Transport-Security: max-age=31536000` on every HTTPS response. Add `includeSubDomains` only after every subdomain answers over HTTPS, and `preload` only when you intend to submit the domain to the preload list. The [HTTP/3 and compression checker](https://tamperbox.dev/http3-checker) says whether the host is already preloaded.
+### Break it and Heal it
 
-### Framing, nosniff, referrer and permissions
-
-These are one line each: `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN` (or `frame-ancestors` in the policy), `Referrer-Policy: strict-origin-when-cross-origin`, and `Permissions-Policy: camera=(), microphone=(), geolocation=()` with any feature your pages use removed from the list.
-
-### Versions announced
-
-nginx: `server_tokens off;`. Apache: `ServerTokens Prod`. PHP: `expose_php = Off`. Express: `app.disable('x-powered-by')`. Or remove the header at the proxy or CDN.
-
-### Headers on some pages but not others
-
-Headers are often set in one place and missing in another: nginx `add_header` inside a `location` block drops the server-level ones, error pages are served by another layer, and redirects come from the CDN. Check the home page, an inner page, a 404 and the redirect from `http://`.
-
-### Break it cases
-
-| Case | What it loads | What it shows |
+| Break it | Built from | Shows |
 | --- | --- | --- |
-| No security headers | Your headers with every security header removed | Grade F; only the browser referrer default earns half a point |
-| Inline scripts allowed | Your headers with `script-src 'self' 'unsafe-inline'` | The CSP half point |
-| HSTS for five minutes | Your headers with `max-age=300` | HSTS for 300 seconds |
-| Policy only reports | Your policy moved to report-only | Zero points for CSP |
-| Versions announced | Your headers with Apache and PHP versions | Leaks blocking A+ |
-| Plain HTTP site | A sample site served over `http://` | HSTS ignored on plain HTTP |
+| No security headers | Your headers without any security header | F, every slot missing |
+| Inline scripts allowed | Your headers with `script-src 'self' 'unsafe-inline'` | The half-point CSP rule |
+| HSTS for five minutes | `max-age=300` | The duration rule |
+| Policy only reports | Your policy renamed to Report-Only | Zero for an unenforced policy |
+| Versions announced | `Server: Apache/2.4.49`, `X-Powered-By: PHP/7.4.3` | Leaks that block A+ |
+| Plain HTTP site | A reserved sample host on `http://` | Served over plain HTTP |
 
-Each break builds on your own headers when you entered an address or pasted headers, and on the sample otherwise. Heal it then offers "Add N headers, drop versions" for pasted headers, or "Preview the fixed headers" for a fetched site, which loads the site's headers with the fixes applied so you see the grade they would get. Nothing changes on the site.
+Heal it adds every suggested line and drops version headers for a paste ("Add n headers"), or, for a website, loads its headers with the fixes applied ("Preview the fixed headers") so you see the grade they would get; nothing changes on the site.
+
+### Take it further
+
+When a website was fetched over HTTPS, the result hands its final host on: to the [SSL checker](https://tamperbox.dev/ssl-checker) when HSTS is set, since HSTS turns certificate errors into hard failures; the final page to the [mixed content checker](https://tamperbox.dev/mixed-content-checker); and, when redirects moved to another host, that host to the [DANE checker](https://tamperbox.dev/dane-checker) as `host:443` and to the [post-quantum checker](https://tamperbox.dev/post-quantum-checker). Pasted headers and reserved sample hosts show none.
 
 ## Worked example
 
-The sample shop `www.harbor-supply.example` is reserved sample data, answered in the browser. Its final response sends HSTS for 180 days (CHECK, half a point), no Content-Security-Policy (FAIL), `nosniff` (PASS), `X-Frame-Options: SAMEORIGIN` (PASS), `Referrer-Policy: no-referrer-when-downgrade` (CHECK, half a point) and no Permissions-Policy (CHECK, zero): 3 of 6, grade D. `X-Powered-By: PHP/8.1.27` is a version leak, and `X-XSS-Protection: 1; mode=block` is reported as obsolete. The fix block holds four lines: Strict-Transport-Security, Content-Security-Policy, Referrer-Policy and Permissions-Policy. Heal it's preview applies them and drops the leak; the grade becomes A, not A+, because the sample sends no Cross-Origin-Opener-Policy.
+The page opens on `mozilla.org`, checked live. It was chosen from a comparison of real runs because its response fills every block of the result, but it is someone else's site and its headers change, so read the result in this order rather than expecting fixed values.
+
+### The opening result
+
+1. **Score line.** It names the final address and the redirects that led there; `mozilla.org` moves to its `www` host, so the graded response is not the one you typed.
+2. **Verdict and Findings.** The letter, then the headers that cost points, worst first: a header that lost its whole point comes before one that lost half. Open each row for the value received and the line to send instead.
+3. **Grade.** The six slots show at a glance which headers are set, weak or missing.
+4. **Add the missing headers.** When a header with a suggested line missed its point, the block writes it in your server's syntax.
+5. **Heal it.** "Preview the fixed headers" loads the same response with those lines applied, so you see the grade they would earn; Revert brings the live result back.
+6. **Take it further.** Because the response came over HTTPS after a move to another host, the final host and page are handed to the other checks in the category.
+
+### A fixed contrast
+
+Break it builds on whatever is in the box. "No security headers" removes every security header from the opening response and turns it into an F with six lines to add; the repair under Heal it puts them back. `www.harbor-supply.example` is a reserved sample host graded locally, with fixed, synthetic headers, for a result that never changes.
 
 ## For agents
 
-The Tamperbox MCP server runs the same check as the `security_headers` operation with a public `url`. Inspect its input schema before calling it. The result carries the grade, the score and one item per header with its id, status and points, as listed in the [finding reference](#finding-reference). Keep these warnings with any conclusion:
-
-- One response was graded, the final one after redirects; other routes can send different headers.
-- A grade is configuration evidence, not a vulnerability assessment.
-- Preload coverage and the effect of a policy on the site's own resources are not tested.
-
-See [Connect an MCP client](/mcp/connect/) for the calling pattern and [Security and privacy](/reference/security/) for where the address travels.
+Over [Tamperbox MCP](https://docs.tamperbox.dev/mcp/connect/), the `security_headers` operation takes a URL, fetches it with the same server path and returns the fetch evidence and the report (grade, score, items, leaks). `security_headers_analyze` grades pasted headers without any network request and, given a `server` such as `nginx`, returns a snippet that transcribes the supplied headers. Keep the warnings when you report a result: the grade is configuration evidence for one response, not a vulnerability assessment; a suggested Content-Security-Policy enforces immediately and must be tested as Report-Only; and `includeSubDomains` can lock out subdomains without HTTPS.
 
 ## Limits
 
-- One response, from the Tamperbox server, at one moment. A CDN can answer differently by region or by user agent.
-- The fetch sends `TamperboxBot` as its user agent and no cookies; pages behind a login are not seen.
-- Up to ten redirects are followed; a loop or an unsafe target stops the check.
-- Only the script policy and `frame-ancestors` of a Content-Security-Policy are evaluated.
-- Pasted headers are graded as if received over HTTPS.
-- Cookie values are removed before the headers reach the browser; cookie attributes are judged by the [mixed content and cookie checker](https://tamperbox.dev/mixed-content-checker).
+- One response, from one location, at one moment. Other routes, error pages, static files, signed-in views and other regions of a CDN can send different headers.
+- HSTS is read from the header only: browser preload lists, including whole-TLD entries such as `.dev`, and policies stored from earlier visits are not consulted.
+- Only the script rules of a policy are judged. A policy can earn its point and still allow risky styles, images, forms or connections.
+- Permissions-Policy scores on presence; its allowlists are not reviewed.
+- Pasted headers are assumed to have arrived over HTTPS, and only the last pasted response counts.
+- The letter is this tool's scale. Other graders weigh headers differently, so letters are not comparable across tools.
 
 ## References
 
-- [RFC 6797](https://www.rfc-editor.org/rfc/rfc6797): HTTP Strict Transport Security. Sections 6.1, 6.1.1, 6.1.2 and 8.1. Proposed standard.
-- [Content Security Policy Level 3](https://www.w3.org/TR/CSP3/): sections 3.1, 3.2, 6.1.3, 6.1.10, 6.4.2, 8.1 and 8.2. W3C working draft.
-- [Fetch standard, X-Content-Type-Options](https://fetch.spec.whatwg.org/#x-content-type-options-header). WHATWG living standard.
-- [HTML standard, the X-Frame-Options header](https://html.spec.whatwg.org/multipage/speculative-loading.html#the-x-frame-options-header) and [cross-origin opener policies](https://html.spec.whatwg.org/multipage/browsers.html#cross-origin-opener-policies). WHATWG living standard; supersedes RFC 7034 for processing.
-- [RFC 7034](https://www.rfc-editor.org/rfc/rfc7034): X-Frame-Options. Informational.
-- [Referrer Policy, editor's draft](https://w3c.github.io/webappsec-referrer-policy/): sections 3 and 8.1. The [W3C snapshot](https://www.w3.org/TR/referrer-policy/) still names the older default.
-- [Permissions Policy](https://www.w3.org/TR/permissions-policy/): section 6.1. W3C working draft.
-- [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110): HTTP Semantics. Sections 10.2.4 and 15.4. Internet standard.
-- [RFC 7469](https://www.rfc-editor.org/rfc/rfc7469): Public Key Pinning, removed from browsers. [RFC 9163](https://www.rfc-editor.org/rfc/rfc9163): Expect-CT, obsolete.
+- [RFC 6797: HTTP Strict Transport Security](https://www.rfc-editor.org/rfc/rfc6797), sections 6.1, 6.1.1, 7.2, 8.1 and 12.1. Proposed Standard; not obsoleted.
+- [Content Security Policy Level 3](https://www.w3.org/TR/CSP3/): script-src, default-src, frame-ancestors, the Report-Only header, multiple policies. W3C Working Draft.
+- [RFC 7034: HTTP Header Field X-Frame-Options](https://www.rfc-editor.org/rfc/rfc7034), section 2.1. Informational.
+- [Fetch Standard: X-Content-Type-Options](https://fetch.spec.whatwg.org/#x-content-type-options-header). Living Standard.
+- [Referrer Policy](https://www.w3.org/TR/referrer-policy/): policies and header parsing. W3C Candidate Recommendation.
+- [Permissions Policy](https://www.w3.org/TR/permissions-policy/): the HTTP header field. W3C Working Draft.
+- [HTML Standard: cross-origin opener policies](https://html.spec.whatwg.org/multipage/browsers.html#cross-origin-opener-policies). Living Standard.
+- [RFC 9110: HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110#section-5.3), section 5.3, field order. Internet Standard.
+- [RFC 7469: Public Key Pinning](https://www.rfc-editor.org/rfc/rfc7469) and [RFC 9163: Expect-CT](https://www.rfc-editor.org/rfc/rfc9163), cited only to mark the headers obsolete.
