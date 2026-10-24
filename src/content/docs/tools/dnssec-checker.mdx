@@ -14,7 +14,7 @@ limitations:
 
 The tool page is [tamperbox.dev/dnssec-checker](https://tamperbox.dev/dnssec-checker). It opens with a live lookup of `tamperbox.dev` and takes a domain, or the DS and DNSKEY records you are about to submit to a registrar. This page is the long version: what the verdict rests on, every rule applied to the chain, what each finding means, and how to fix and confirm each one.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> a domain is sent to the Tamperbox server, which asks a public validating resolver for the verdict and fetches the DS, DNSKEY and RRSIG records at each zone cut, then returns them. Key tags, matching and dates are worked out in your browser. Pasted records never leave the browser. The page does not persist the input or report.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> a domain is sent to the Tamperbox server, which asks a public validating resolver for the verdict and fetches the DS, DNSKEY and RRSIG records at each zone cut, then returns them. Key tags, matching and dates are worked out in your browser. Pasted records never leave the browser. History stays in memory in the open page. Explicit links to another tool may temporarily keep a one-use transfer in browser session storage; transfers expire after one minute and do not put the input in the URL.</div>
 
 ## What the tool answers
 
@@ -59,7 +59,7 @@ The verdict line states the outcome: Secure, Bogus, Not signed, Not determined, 
 
 ### Findings
 
-Every check, worst first: failures, then things to check, then information. Passing checks are omitted for a multi-level chain and retained for a single level. When the chain has more than one level, each finding starts with its level (`example: DS 41657 matches a key`). The count on the right is problems and things to check. The [finding reference](#finding-reference) lists every finding.
+Every check, worst first: failures, then things to check, then information. Passing checks are retained and folded into an expandable group when there are several. When the chain has more than one level, each finding starts with its level (`example: DS 41657 matches a key`). The count on the right is problems and things to check. The [finding reference](#finding-reference) lists every finding.
 
 ### Chain of trust
 
@@ -68,6 +68,12 @@ One block per zone cut, from the root down. Each block shows:
 - **DS at the parent**: each DS record with its key tag, algorithm and digest type, and an arrow to the key it names, or "no such key". The root shows the trust anchor that validators carry built in instead.
 - **Keys**: each DNSKEY with its computed key tag, whether it is a key-signing key (flag 257) or a zone-signing key (256), "Revoked" when the revoke bit is set, and its algorithm.
 - **Signatures**: each RRSIG read with the keys, drawn as a bar from inception to expiration with today marked, labelled with the key tag that made it and the days left.
+
+### History and next checks
+
+History appears below the result evidence after Break it or Heal it changes the input. Revert restores the input before the latest recorded change; Reset input returns to the input before the first recorded change. Typing or pasting a new input starts a new history. Restoring a live input runs the lookup again, rather than restoring a saved response.
+
+Take it further can open the registry record for the derived zone, DANE for a secure zone, or a domain health report. Pasted records offer only the registry lookup when an owner name is available.
 
 ## Method
 
@@ -84,7 +90,7 @@ For a domain, the server first asks Cloudflare's public resolver (1.1.1.1, DNS o
 
 The AD flag carries the resolver's own validation. [RFC 4035, section 3.2.3](https://www.rfc-editor.org/rfc/rfc4035#section-3.2.3) says the server side "MUST NOT set the AD bit in a response unless the name server considers all RRsets in the Answer and Authority sections of the response to be authentic". Bogus rests on [section 5.5](https://www.rfc-editor.org/rfc/rfc4035#section-5.5): when no signature validates, a recursive server "MUST return RCODE 2" (SERVFAIL) unless the query set CD, so a SERVFAIL that disappears with CD is the signature of a validation failure. A SERVFAIL that persists with CD can arise from resolver, network or authoritative-server failures, so the page reports it as not determined and says it does not establish that the zone is unsigned or broken.
 
-An insecure resolver answer is labelled "Not signed" even when keys are present. Read that label as "not authenticated by this resolver", not proof that no DNSKEY exists. The chain findings can still show a missing DS or deprecated algorithm.
+For an insecure answer with a deprecated key algorithm, the page says "Unsafe DNSSEC algorithm" and explains that the resolver did not validate the answer. With other published keys it says "Signed, but not validated"; without keys it says "Not signed". An insecure answer alone is not proof that no DNSKEY exists. Read the chain findings for a missing DS or deprecated algorithm.
 
 ### 2. Walking the chain
 
@@ -283,7 +289,7 @@ Separate absence from failure. A successful response with no applicable record, 
 - Only the signatures over each DNSKEY set are read; a lapsed signature on another record is not seen.
 - NSEC and NSEC3 denial of existence are not checked.
 - Reserved Break it fixtures use generated keys on the `.example` zone.
-- The page does not persist the input or report.
+- History stays in memory in the open page. Explicit links to another tool may temporarily keep a one-use transfer in browser session storage; transfers expire after one minute and do not put the input in the URL.
 
 ## References
 

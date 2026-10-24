@@ -14,7 +14,7 @@ limitations:
 
 The tool page is [tamperbox.dev/domain-availability](https://tamperbox.dev/domain-availability). It opens with a live lookup of `tamperbox.dev` and takes a domain or a saved RDAP record. This page is the long version: where the answer comes from, what "no registration found" does and does not prove, how each status code and date is read, and what to do next whether you want the name or own it.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> a domain is sent to the Tamperbox server, which finds the registry for its ending in the IANA bootstrap list and asks that registry's RDAP service for the domain, then returns the record unchanged. The record is read in your browser. Pasted RDAP JSON never leaves the browser. The page does not persist the input or report.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> a domain is sent to the Tamperbox server, which finds the registry for its ending in the IANA bootstrap list and asks that registry's RDAP service for the domain, then returns the record unchanged. The record is read in your browser. Pasted RDAP JSON never leaves the browser. History stays in memory in the open page. Explicit links to another tool may temporarily keep a one-use transfer in browser session storage; transfers expire after one minute and do not put the input in the URL.</div>
 
 ## What the tool answers
 
@@ -46,7 +46,7 @@ A domain record saved from an RDAP service (it starts with `{` and has `"objectC
 
 ### Findings
 
-The lifecycle checks, worst first: expiry, holds, the transfer lock, the registry lock, an unsigned delegation. The count reports failures and checks separately. The [finding reference](#finding-reference) lists them all.
+The lifecycle checks, worst first: expiry, holds, the transfer lock, the registry lock, an unsigned delegation. Passing checks are folded when there are several. The count reports problems and things to check, or "No problems". The [finding reference](#finding-reference) lists them all.
 
 ### Registration
 
@@ -56,6 +56,12 @@ A line from registration to expiry with today marked (it turns amber within 30 d
 
 Each status the record carries, with its plain name, what it means and a badge: locks are normal protection (PASS), holds stop the domain resolving (FAIL), grace periods are information.
 
+### History and next checks
+
+History appears below the result evidence after Break it or Heal it changes the input. Revert restores the input before the latest recorded change; Reset input returns to the input before the first recorded change. Typing or pasting a new input starts a new history. Restoring a live input runs the lookup again, rather than restoring a saved response.
+
+Take it further offers the expiry as a Unix timestamp and, when the registry reports a signed delegation, a DNSSEC check for the domain. When a longer name has no record, Heal it may offer the name one label up. This is a suggested next lookup, not a determination of the registrable domain.
+
 ## Method
 
 ### 1. Finding the registry
@@ -64,9 +70,9 @@ The server reads the IANA RDAP bootstrap file for domain names and picks the ser
 
 ### 2. Not found
 
-[RFC 7480, section 5.3](https://www.rfc-editor.org/rfc/rfc7480#section-5.3): a server with no data "returns a 404 (Not Found) response code. Optionally, it MAY include additional information … in the HTTP entity body." The tool treats a 404 as "no registration" only when it carries RDAP evidence: an error document with `errorCode` 404, or an empty body served as `application/rdap+json` or `application/json` (Verisign, which runs `.com` and `.net`, sends no body). An HTML 404 from a gateway is reported as an inconclusive answer, not as a free name. Other errors are reported as errors (rate limiting has its own message).
+[RFC 7480, section 5.3](https://www.rfc-editor.org/rfc/rfc7480#section-5.3): a server with no data "returns a 404 (Not Found) response code. Optionally, it MAY include additional information … in the HTTP entity body." The tool treats a 404 as "no registration" only when it carries RDAP evidence: an error document with `errorCode` 404, or an empty body served as `application/rdap+json` or `application/json` (Verisign, which runs `.com` and `.net`, sends no body). The empty-body case requires a successful body read and a JSON or RDAP JSON media type, optionally with parameters. A failed body read or an HTML 404 from a gateway remains an error or inconclusive answer, not evidence of a free name. Other errors are reported as errors (rate limiting has its own message).
 
-No record gives the INFO verdict "No registration found" and an empty Findings list, and the line under it says it does not guarantee availability.
+No record gives the INFO verdict "No registration found" and an INFO finding, "No registration record". Both explain that a missing record does not guarantee availability.
 
 ### 3. Reading the record
 
@@ -126,7 +132,7 @@ Being released ("Not available yet", CHECK) comes first; then an expired registr
 
 | Finding | Level | Source | What it means | What to do |
 | --- | --- | --- | --- | --- |
-| No registration found (verdict) | INFO | [RFC 7480 5.3](https://www.rfc-editor.org/rfc/rfc7480#section-5.3) | No record; availability unknown | [Register it](#registering-a-free-name) |
+| No registration record (finding); No registration found (verdict) | INFO | [RFC 7480 5.3](https://www.rfc-editor.org/rfc/rfc7480#section-5.3) | No record; availability unknown | [Register it](#registering-a-free-name) |
 | Expires in N days (more than 30) | PASS | [RFC 9083 4.5](https://www.rfc-editor.org/rfc/rfc9083#section-4.5) | Paid up | |
 | Expires in N days (30 or fewer) | CHECK | | Lapses soon without renewal | [Renew](#an-expiry-close-at-hand) |
 | Expired N days ago | FAIL | | Past the reported expiry; renewal rights depend on policy | Renew now, or wait if you want it |
@@ -204,7 +210,7 @@ Separate absence from failure. A successful response with no applicable record, 
 - Endings whose registry publishes no RDAP service cannot be checked.
 - Drop dates after redemption are estimates.
 - The Break it cases use sample records on the reserved `.example` zone.
-- The page does not persist the input or report.
+- History stays in memory in the open page. Explicit links to another tool may temporarily keep a one-use transfer in browser session storage; transfers expire after one minute and do not put the input in the URL.
 
 ## References
 

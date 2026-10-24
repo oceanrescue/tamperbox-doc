@@ -14,7 +14,7 @@ limitations:
 
 The tool page is [tamperbox.dev/whois-lookup](https://tamperbox.dev/whois-lookup). It opens with a live lookup of `tamperbox.dev` and takes a domain, an IP address, or a saved RDAP record. This page is the long version: how the registry is found, what each part of the record means, every finding, and what to do with what you learn.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> a domain or address is sent to the Tamperbox server, which finds the responsible registry in the IANA bootstrap lists, asks its RDAP service and returns the record unchanged. The record is read in your browser. Pasted RDAP JSON never leaves the browser. The page does not persist the input or report.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> a domain or address is sent to the Tamperbox server, which finds the responsible registry in the IANA bootstrap lists, asks its RDAP service and returns the record unchanged. The record is read in your browser. Pasted RDAP JSON never leaves the browser. History stays in memory in the open page. Explicit links to another tool may temporarily keep a one-use transfer in browser session storage; transfers expire after one minute and do not put the input in the URL.</div>
 
 ## What the tool answers
 
@@ -55,7 +55,7 @@ For a domain: "Registered with *registrar*", with the year of registration and t
 
 ### Findings
 
-The registration checks, worst first, with failure and check counts. For an IP address, the holder and abuse contact appear in Registration; the Findings list is empty. The [finding reference](#finding-reference) lists them all.
+The registration checks appear worst first, with passing checks folded when there are several. The count reports problems and things to check, or "No problems". An IP record adds an INFO finding naming its holder, network and any abuse contact; a missing record adds "No registration record" (INFO). The [finding reference](#finding-reference) lists them all.
 
 ### Registration
 
@@ -69,6 +69,12 @@ Status codes are listed with their plain names, meaning and weight (the table is
 
 The registry's parsed JSON, formatted with indentation, with a Copy button: the source for anything the rows leave out (remarks, notices, links, extensions).
 
+### History and next checks
+
+History appears below the result evidence after Break it or Heal it changes the input. Revert restores the input before the latest recorded change; Reset input returns to the input before the first recorded change. Typing or pasting a new input starts a new history. Restoring a live input runs the lookup again, rather than restoring a saved response.
+
+Take it further offers a domain expiry as a Unix timestamp, a DNSSEC check when the registry reports a signed delegation, or the first returned network CIDR for a BGP lookup. For a longer name with no record, Heal it may suggest the name one label up; that suggestion does not establish the registrable domain.
+
 ## Method
 
 ### 1. Finding the registry
@@ -77,7 +83,7 @@ The server reads the IANA RDAP bootstrap file that matches the input: domain nam
 
 ### 2. Not found
 
-[RFC 7480, section 5.3](https://www.rfc-editor.org/rfc/rfc7480#section-5.3): an empty result is a 404, and the body is optional. A 404 counts as "no record" only with RDAP evidence: an error document with `errorCode` 404, or an empty body served as RDAP or JSON. An HTML 404 is reported as inconclusive. A record whose `objectClassName` is not the one asked for is refused.
+[RFC 7480, section 5.3](https://www.rfc-editor.org/rfc/rfc7480#section-5.3): an empty result is a 404, and the body is optional. A 404 counts as "no record" only with RDAP evidence: an error document with `errorCode` 404, or an empty body served as RDAP or JSON. An empty-body result requires a successful read and a JSON or RDAP JSON media type, optionally with parameters. Failed body reads and HTML 404 responses do not establish that a record is missing. A record whose `objectClassName` is not the one asked for is refused.
 
 ### 3. Reading a domain record
 
@@ -121,8 +127,8 @@ From the IP network object ([RFC 9083, section 5.4](https://www.rfc-editor.org/r
 | No transfer lock | CHECK | [RFC 5731 2.3](https://www.rfc-editor.org/rfc/rfc5731#section-2.3) | Can be moved with its auth code | Turn the lock on |
 | Registry lock | PASS | [RFC 5731 2.3](https://www.rfc-editor.org/rfc/rfc5731#section-2.3) | Server transfer and update restrictions are present; process is registry-specific | |
 | Delegation not signed | INFO | [RFC 9083 5.3](https://www.rfc-editor.org/rfc/rfc9083#section-5.3) | No DS at the registry | See the [DNSSEC Checker](/tools/dnssec-checker/) |
-| No registration found (verdict) | INFO | [RFC 7480 5.3](https://www.rfc-editor.org/rfc/rfc7480#section-5.3) | No record for this exact name | Check the registered name |
-| Registered to *holder* (IP verdict) | INFO | [RFC 9083 5.4](https://www.rfc-editor.org/rfc/rfc9083#section-5.4) | Who holds the block | Report abuse to its contact |
+| No registration record (finding); Not registered (verdict) | INFO | [RFC 7480 5.3](https://www.rfc-editor.org/rfc/rfc7480#section-5.3) | No record for this exact name | Check the registered name |
+| Registered to *holder* (IP finding and verdict) | INFO | [RFC 9083 5.4](https://www.rfc-editor.org/rfc/rfc9083#section-5.4) | Who holds the block | Report abuse to its contact |
 
 ## Guide
 
@@ -157,7 +163,7 @@ Every case is a sample record on the reserved `.example` zone or a documentation
 | An IP address | `198.51.100.24` | An IP network record: TEST-NET-2, reserved for documentation |
 | Not registered | `harborsupply-marine.example` | No registration record |
 | Expired, redeemable | `anchor-chandlery.example` | Expired and on its way out, with no nameservers |
-| Not RDAP JSON | An object without `objectClassName: domain` | The input is refused rather than interpreted as a registration |
+| No transfer lock | `dockside-tools.example` | A registration without a transfer lock |
 
 ## Worked example
 
@@ -190,7 +196,7 @@ Separate absence from failure. A successful response with no applicable record, 
 - Port 43 WHOIS is not queried; endings without RDAP cannot be looked up.
 - An IP record says who holds the block, not who runs the server.
 - The Break it cases use sample records and documentation addresses.
-- The page does not persist the input or report.
+- History stays in memory in the open page. Explicit links to another tool may temporarily keep a one-use transfer in browser session storage; transfers expire after one minute and do not put the input in the URL.
 
 ## References
 
