@@ -4,7 +4,6 @@ const data = entry.data;
 const markdownPath = Astro.url.pathname === '/' ? '/index.md' : `${Astro.url.pathname.replace(/\/$/, '')}.md`;
 const parts = Astro.url.pathname.split('/').filter(Boolean);
 const section = parts[0] ? parts[0].replaceAll('-', ' ') : undefined;
-const updated = data.updated instanceof Date ? data.updated : new Date(data.updated);
 ---
 <nav class="tb-breadcrumbs" aria-label="Breadcrumb">
   <a href="/">Docs</a>
@@ -14,7 +13,6 @@ const updated = data.updated instanceof Date ? data.updated : new Date(data.upda
 {data.description && <p class="tb-page-description">{data.description}</p>}
 <tamperbox-page-tools data-markdown-path={markdownPath}>
   <div class="tb-page-meta">
-    <span>Reviewed <time datetime={updated.toISOString()}>{updated.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}</time></span>
     <a href={markdownPath}>Open Markdown</a>
     <button type="button" data-copy-page><span data-copy-label aria-live="polite">Copy page</span></button>
   </div>

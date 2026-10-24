@@ -1,210 +1,179 @@
 ---
 title: Website Technology Detector
-description: How the detector reads a site's response headers and initial HTML, which signatures it matches, when it warns about announced versions, what each finding means and how to confirm a fix yourself.
-updated: 2026-10-20
+description: How Tamperbox identifies web technologies from bounded HTML and response-header signatures without executing the page.
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
-agentSummary: Method, finding reference and repair guide for the Tamperbox Website Technology Detector, which fetches a site's home page once over HTTPS from the Tamperbox server (or reads pasted HTML and headers in the browser), matches 53 header and HTML signatures plus two script-host rules, and warns when a content system, language, web server or framework announces its exact version.
+agentSummary: Method, finding reference and repair guide for the Tamperbox Website Technology Detector.
 prerequisites:
-  - A domain, or the HTML and response headers of a page to paste
+  - a website hostname or pasted HTML and headers
 outputs:
-  - A verdict naming the lead technology, every detection with the header or HTML line that gave it away, the response and redirect chain, the response headers, and findings with fixes
+  - technology matches, evidence, categories, version exposure, response facts and limitations
 limitations:
-  - Scripts are not run and linked files are not fetched, so tools loaded later are missed; signatures are text patterns that can be faked, hidden or matched by quoted text
+  - Public observations are time-sensitive and do not prove ownership, intent or private configuration
 ---
 
-The tool page is [tamperbox.dev/website-technology](https://tamperbox.dev/website-technology). It opens on `www.harbor-supply.example`, a sample shop on the reserved `.example` zone whose page and headers are a fixture. This page is the long version: what the detector reads, every rule it applies, what each finding means for the people who run the site, and how to fix and confirm each one.
+The tool page is [tamperbox.dev/website-technology](https://tamperbox.dev/website-technology). It opens with a live lookup of `mozilla.org`; replace it to inspect your own target. This guide documents the actual input path, evidence contract, classifications and independent verification steps.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> a domain is sent to the Tamperbox server, which makes one HTTPS GET for the home page, follows up to three redirects, and returns the final response's status, headers and the first 256 KiB of its HTML. Detection then runs in your browser. Pasted HTML and headers never leave the browser. The sample is answered in the browser too. Nothing is stored.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> input cleanup, pasted-data parsing and report rendering happen in the browser. Live checks send only the validated public target to the Tamperbox server and the public services required for the lookup. The page stores no report; History is local to the current browser session.</div>
 
 ## What the tool answers
 
-The detector answers, in order:
+The checker answers which catalogued web technologies are suggested by the initial HTTPS response and the first bounded portion of its HTML. Its conclusion is deliberately narrower than an ownership or security claim. A displayed provider, product, name or passing check means that the listed public evidence matched a documented rule at the observation time.
 
-1. **What is the site built with?** A content system, a shop, a site builder, a static site generator or a JavaScript framework leads the verdict, with up to two companions and the CDN in front of it.
-2. **What else does the page load?** Analytics, advertising, consent tools, payments, support widgets, monitoring, languages, web servers and hosting signals, grouped by what they do.
-3. **What gave each one away?** Every detection lists the header line or the HTML text it matched, with the matched part marked.
-4. **Does the site announce versions an attacker can use?** An exact version of a content system, a language, a web server or a server framework is a finding.
-5. **Was the page the real page?** An error or challenge page, a non-HTML response, a truncated body and a failed TLS lookup are reported, so an empty or odd list is not mistaken for the site's stack.
-
-It does not run the page's scripts, does not fetch stylesheets or script files, and does not test for vulnerabilities.
+Every conclusion is paired with evidence. The opening verdict is a summary for orientation, while Findings contains the actionable interpretation and the later result sections retain the underlying records, addresses, fields or names. If a conclusion matters operationally, verify that evidence through an authoritative account or an independent standards-aware client before changing production.
 
 ## Inputs
 
-### A domain
+### Accepted source
 
-`example.com`, or a full address pasted from the address bar. A pasted `https://www.example.com/about` becomes `www.example.com` in the box, and the hint says so; typing is never rewritten. The lookup runs when you stop typing (about 600 ms) or on Enter. The server only accepts public names on the default HTTPS port: names under `localhost`, `local`, `internal`, `intranet`, `lan`, `home`, `test`, `invalid`, `example`, `onion` and `arpa` are refused, every address the name resolves to must be public, and both A and AAAA lookups must succeed. The `.example` sample never reaches the server.
+Enter a domain for a live HTTPS fetch, or paste HTML, HTTP headers, or headers followed by a blank line and HTML. Pasted content is inspected locally and scripts are never executed. Input beginning with a JSON object or array produces the informational “Not a web page” result. A live response is bounded to 256 KiB of HTML; later signatures can be missed.
 
-### Pasted HTML
+Text files are read in the browser. The resulting input follows the same classification rules as the field; reading a file locally does not make a domain or public-IP lookup offline. Cleanup keeps an already accepted record intact and otherwise tries unwrapping a single-line address. Unusable text remains visible for correction.
 
-Text that starts with `<` is read as HTML. Paste the page source from a browser (View source), or the rendered DOM from the developer tools when you want what scripts added.
+### When work runs
 
-### Pasted headers, or headers and HTML
+Domain input runs after a 600-millisecond typing pause. Enter runs it immediately; pasted records run immediately. Drops and page-wide paste use the same input loader. Leaving the field applies cleanup and reruns only when cleanup changes the text. Each edit aborts the previous request and increments a generation marker. A slower old response therefore cannot replace a newer result, and clearing the source immediately clears copyable output.
 
-Text that starts with an HTTP status line (`HTTP/1.1 200 OK`) or with `name: value` lines is read as response headers; anything after the first blank line is read as the HTML. This is the shape `curl -si https://example.com/` prints. A line that starts with a URL scheme (`https://`) is not mistaken for a header.
-
-### JSON
-
-Text that starts with `{` or `[` is reported as "Not a web page: this looks like JSON." An API response has no page to read.
-
-### Files
-
-Drop an `.html`, `.htm` or `.txt` file anywhere on the page, or use Add a file. Files up to 2 MiB are read in the browser.
+The opening input uses the same parser and processing path as a replacement. The labelled live default sends the same requests as another domain.
 
 ## Reading the result
 
-### Verdict and chips
+### Verdict and privacy
 
-The verdict leads with the first content system, shop, site builder, static site generator or JavaScript framework found, with its version when one was read, then up to two companions from those groups and the CDN: "WordPress 6.4.2 with WooCommerce, behind Cloudflare." When none of the lead groups matched it gives the count instead. Other verdicts: "Website not inspected" (a failed TLS lookup), "HTTP 503 page" (an error or challenge response), "Nothing recognised", and "Not a web page" for JSON. The chips count the technologies, the announced versions, an error status and the redirects; each is a button that scrolls to the section that explains it.
+The verdict states what the available evidence supports and uses pass, check, fail or informational status consistently. Pass means the bounded rule succeeded. Check means a human should confirm context. Fail means a concrete operational rule was violated. Info describes a limitation, absence or neutral fact and must not be promoted into success or failure by an automated reader.
 
-### Findings
+Two privacy lines distinguish browser-only work from live lookup work. The Checked line names the cleaned input and source mode. Copy result is hidden while work is pending, after an error and when input is empty, preventing a stale report from being exported as current.
 
-Everything the detector flags, worst first; two or more passing checks fold into one line. The [finding reference](#finding-reference) lists them all.
+### Findings and evidence
 
-### Take it further
+Findings are ordered with failures first, then checks, informational notes and passes. Repeated passing details can fold into a disclosure so that exceptions remain visible. Each item states the observation and its consequence; any remediation is scoped to the evidence rather than presented as a universal configuration recipe.
 
-Links that carry a value from this result into another tool: the final host after redirects to the [Security Headers Grader](https://tamperbox.dev/security-headers) and the [SSL Certificate Checker](https://tamperbox.dev/ssl-checker), the original address to the [Redirect Checker](https://tamperbox.dev/redirect-checker) when there were redirects, and the host to the [ads.txt checker](https://tamperbox.dev/ads-txt-checker) when Google AdSense was detected. The value travels through a one-use handoff, never in the URL. From the sample, every destination answers its own sample locally.
+Evidence sections follow Findings and precede History. They are the audit trail for the verdict. A provider label derived from a catalog remains an inference, while a literal record or response field remains an observation. This distinction matters when signatures are incomplete, white-labelled or stale.
 
-### History and Heal it
+### History and handoffs
 
-Every Break it case and Heal it repair is logged under the result with what it replaced. Revert undoes the newest change; Reset input returns to what you entered.
+History records intentional input replacements, including Break it examples and their repairs. Revert restores the prior input and runs it again, including live requests when applicable; Reset input returns to the value at the beginning of the recorded sequence. History is not monitoring, persistence or an account log.
 
-### Technologies
+Check the rest carries the current input to other tools in Domains & hosting. Take it further sends the final hostname to the [CDN and Proxy Detector](/tools/cdn-detector/) or [Website Hosting Checker](/tools/website-hosting/). These links appear only when that hostname differs from the input. A receiving tool runs its own check; agreement is not guaranteed.
 
-Grouped by category in a fixed order (content system first, hosting last). Each entry names the technology, its version when a capture group read one, a Check badge when that version is announced, and up to two pieces of evidence; "Found in N places" appears when there were more.
+Explicit tool links transfer the input through temporary browser `sessionStorage` and, when needed, a same-origin browser channel. The URL fragment contains a random transfer token, not the input. Transfers are accepted for less than one minute, consumed once, and bound to the destination path. The destination removes the token from its address. Ordinary documentation links and direct visits do not restore a previous input; if transfer storage is unavailable, the link still opens the tool.
 
-### Response
-
-The final address, the status code, the number of redirects and how much HTML was read, then each redirect with its status. For pasted input it shows only what was pasted.
-
-### Response headers
-
-Every header, with the ones a detection used marked and the technologies they named. Closed by default; Copy result includes it anyway.
 
 ## Method
 
-### 1. Fetching the page
+### Validation and collection
 
-For a domain the server requests `https://<domain>/` with `accept: text/html, application/xhtml+xml;q=0.9` and the user agent `TamperboxInspector/1.0 (+https://tamperbox.dev/)`. Redirects are not followed automatically: a 301, 302, 303, 307 or 308 response with a `Location` field ([RFC 9110 section 15.4](https://www.rfc-editor.org/rfc/rfc9110#section-15.4), [section 10.2.2](https://www.rfc-editor.org/rfc/rfc9110#section-10.2.2)) is followed by hand, at most three times, only to HTTPS on the default port, never twice to the same address, and every new host is resolved and checked again. The body is read only when the `Content-Type` ([RFC 9110 section 8.3](https://www.rfc-editor.org/rfc/rfc9110#section-8.3)) is `text/html` or `application/xhtml+xml`, and only up to 262,144 bytes. The whole lookup has a 15 second budget and is rate limited.
+Before collection, the same domain validation runs in the browser and on the server boundary. Requests are restricted to supported public DNS names and HTTPS roots, redirects are bounded, response sizes are capped and abort signals are propagated. These limits make the observation reproducible and prevent an entered value from becoming an unrestricted network fetch.
 
-Before the response reaches the browser, the server removes `set-cookie` and `set-cookie2` ([RFC 6265 section 4.1](https://www.rfc-editor.org/rfc/rfc6265#section-4.1)), `www-authenticate`, `proxy-authenticate` and `authentication-info`, cuts each header value to 2,048 characters and keeps at most 100 headers. That is why the cookie signature for PHP (`PHPSESSID`) only fires on pasted headers.
+Use the input modes above to determine which requests run. DNS evidence comes from a public recursive view and can reflect cache state. Local classification cannot add observations absent from the supplied evidence. A server lookup is a fresh observation, not confirmation that cached or pasted evidence is still current.
 
-### 2. Responses that are not the page
+### Classification rules
 
-Two statuses mean the HTTPS lookup itself failed: 525 (TLS handshake failed) and 526 (certificate verification failed). They can come from the lookup service or an intermediary, so the detector attributes nothing to the site and reports "Website not inspected" with a single failing finding. Any other status of 400 or more ([RFC 9110 section 15.5](https://www.rfc-editor.org/rfc/rfc9110#section-15.5) and [section 15.6](https://www.rfc-editor.org/rfc/rfc9110#section-15.6)) is read, but the verdict says it is an error page and the finding "HTTP N response" warns that bot checks and error pages often carry the CDN's headers and none of the site's markup. A response that is not HTML is reported as "No HTML inspected", and a body over 256 KiB as "Only the start of the HTML was inspected".
+The server fetches the public HTTPS root with bounded redirects, headers and body size. The detector matches explicit header values, cookie names, generator metadata, script and stylesheet paths, and small HTML signatures. [RFC 9110 section 5](https://www.rfc-editor.org/rfc/rfc9110#section-5) supplies the field parsing model and [RFC 9110 section 15](https://www.rfc-editor.org/rfc/rfc9110#section-15) supplies response status meaning. It does not run JavaScript, crawl assets or infer a product merely from generic words.
 
-### 3. Signatures
+No confidence percentage is invented. When sources disagree, the disagreement is a finding. When a source is unavailable, the affected conclusion becomes informational or inconclusive rather than silently using a previous result. Catalog matches are exact bounded rules; unknown is a valid outcome.
 
-The catalog holds 53 signatures. Each is a set of regular expressions tested against header values or against the raw HTML text, in catalog order. The whole text is searched, including comments, inline scripts and visible text; no DOM is built and no script runs. A match records where it was found and the matched text with about 24 characters of context. A capture group in the matching expression is the version, taken from the first piece of evidence that captures one; the detector remembers which evidence that was.
+### Ordering and export
 
-Some patterns worth knowing: WordPress is read from its generator tag, `/wp-content/` or `/wp-includes/` paths, a `link` header naming `wp-json`, or `x-pingback`. Next.js is read from `__NEXT_DATA__` or `/_next/static/`, and because `__NEXT_DATA__` is also a React signature, Next.js sites list React too. Angular comes from `ng-version`, Vue.js from hashed `data-v-` attributes, SvelteKit from `data-sveltekit-` attributes. Web servers, languages, server frameworks and HSTS come from headers only. Two more rules read real `script src` URLs: `pagead2.googlesyndication.com/pagead/js/adsbygoogle.js` is Google AdSense and `fundingchoicesmessages.google.com/i/` is Google Funding Choices; a lookalike host or a quoted example does not count.
+The renderer calculates all findings from the current observation before updating the verdict, chips, evidence and landing cards. Status priority is fail, check, info, pass. Stable secondary ordering keeps repeated runs readable without changing severity.
 
-### 4. Announced versions
-
-A version read for a technology in the content system, language, web server or framework categories is a warning: "WordPress 6.4.2 is announced". The rule follows [RFC 9110 section 10.2.4](https://www.rfc-editor.org/rfc/rfc9110#section-10.2.4) on the Server field: "An origin server SHOULD NOT generate a Server header field containing needlessly fine-grained detail and SHOULD limit the addition of subproducts by third parties." The same section explains why: detailed values "potentially reveal internal implementation details that might make it (slightly) easier for attackers to find and exploit known security holes". The detector applies the same reasoning to `X-Powered-By`, `X-Generator`, `X-AspNet-Version` and the HTML `generator` meta name, which the [HTML Standard](https://html.spec.whatwg.org/multipage/semantics.html#meta-generator) defines as identifying the software that generated the document. The advice names the place the version was read: the header by name, the generator tag, or version query strings. Versions of JavaScript libraries, UI frameworks and static site generators are shown without a warning; they are in every visitor's browser anyway.
-
-### 5. Header hygiene
-
-"X-Powered-By is sent" (info) appears when that header exists and no version warning already covers it: the header is not defined by any HTTP specification and helps no visitor. "No HSTS header" (info) appears when headers were inspected and none was `strict-transport-security` ([RFC 6797 section 6.1](https://www.rfc-editor.org/rfc/rfc6797#section-6.1)). Neither is a vulnerability; the [Security Headers Grader](https://tamperbox.dev/security-headers) reviews headers properly.
-
-### 6. The verdict
-
-Lead groups, in order: CMS, Ecommerce, Website builder, Static site generator, JavaScript framework. The first match leads, the next two are companions, and the first CDN signature is named as "behind". The verdict is a pass when no version is announced and a check when one is.
+The Markdown mirror and Copy result output preserve input, summary, findings and important evidence in text form. They do not embed secrets, browser state or the expanded educational cards. Agents should cite the observation time and limitation alongside any exported conclusion.
 
 ## Standards and conformance
 
-| Specification | What the tool uses | How | Where it stops |
-| --- | --- | --- | --- |
-| [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110), HTTP Semantics | Status codes ([15](https://www.rfc-editor.org/rfc/rfc9110#section-15)), redirection and `Location` ([15.4](https://www.rfc-editor.org/rfc/rfc9110#section-15.4), [10.2.2](https://www.rfc-editor.org/rfc/rfc9110#section-10.2.2)), `Content-Type` ([8.3](https://www.rfc-editor.org/rfc/rfc9110#section-8.3)), `Server` ([10.2.4](https://www.rfc-editor.org/rfc/rfc9110#section-10.2.4)) | Redirects followed by the server, HTTPS only, at most three; body read only for HTML media types; Server and similar fields judged against 10.2.4 | Stricter than a browser: no HTTP, no custom ports, no cookies, no fourth redirect. 525 and 526 are not RFC 9110 codes; they are treated as lookup failures |
-| [RFC 6797](https://www.rfc-editor.org/rfc/rfc6797), HSTS | Presence of the `Strict-Transport-Security` field ([6.1](https://www.rfc-editor.org/rfc/rfc6797#section-6.1)) | Reported as info when absent | The directives are not parsed or graded here |
-| [RFC 6265](https://www.rfc-editor.org/rfc/rfc6265), Cookies | `Set-Cookie` ([4.1](https://www.rfc-editor.org/rfc/rfc6265#section-4.1)) | Removed from live responses; read only in pasted headers | Cookie attributes are not assessed |
-| [HTML Standard](https://html.spec.whatwg.org/multipage/semantics.html#meta-generator), `generator` | The generator meta name | Matched as text, with the version captured | The document is not parsed; a quoted tag can match |
+### Applied specifications
 
-`X-Powered-By`, `X-Generator`, `X-AspNet-Version` and the vendor headers used as signatures are conventions, not standards; the tool treats them as evidence, never as requirements.
+| Source | Rule used | Boundary |
+| --- | --- | --- |
+| [RFC 9110 section 9.3.1](https://www.rfc-editor.org/rfc/rfc9110#section-9.3.1) | GET retrieves a representation | Only the root representation is requested |
+| [RFC 9110 section 5](https://www.rfc-editor.org/rfc/rfc9110#section-5) | Field names are case-insensitive metadata | Known field signatures are matched after safe parsing |
+| [RFC 9110 section 15](https://www.rfc-editor.org/rfc/rfc9110#section-15) | Status codes describe the response outcome | Error and challenge pages are explicitly warned |
+| [HTML Living Standard, metadata](https://html.spec.whatwg.org/multipage/semantics.html#the-meta-element) | meta elements can carry generator information | Generator content is evidence, not an authenticity guarantee |
+
+These references define the records and message semantics, not the provider catalogs. A catalog is product logic and can lag branding, acquisitions or custom deployments. Where a standard permits several valid configurations, the tool reports the observed form and avoids declaring one commercial pattern universally correct.
+
+### Where conformance stops
+
+The checker is an observer, not an authoritative DNS server, browser, certificate monitor, mail receiver or provider control plane. It does not claim protocol conformance for the target. It applies selected validation and interpretation rules to bounded evidence and exposes the boundary where a fuller protocol operation would begin.
+
+The phrase “public” refers to the server's Internet view. Private split-horizon answers, authenticated dashboards and regional routing can differ. Cached answers can remain until TTL expiry, and HTTP intermediaries can transform what the origin sent.
 
 ## Finding reference
 
-| Finding | Severity | What it means for whoever runs the site | Fix |
+### Emitted findings
+
+| Finding | Severity | Meaning | Repair or next check |
 | --- | --- | --- | --- |
-| HTTPS certificate verification failed (HTTP 526) | FAIL | The lookup could not verify the certificate; nothing about the stack was read | Check the certificate the host serves, then check again |
-| HTTPS handshake failed (HTTP 525) | FAIL | The TLS handshake failed; nothing was read | Check TLS on the host |
-| X N is announced | CHECK | The exact version of a content system, language, web server or framework is public, a shortcut for anyone matching known vulnerabilities ([RFC 9110 section 10.2.4](https://www.rfc-editor.org/rfc/rfc9110#section-10.2.4)) | Remove the version from the named header or the generator tag; keep the software patched |
-| HTTP N response | CHECK | The page read was an error or challenge page; detections may describe that page | Open the site in a browser; paste its real source |
-| X-Powered-By is sent | INFO | The header names the stack and helps no visitor | Turn it off in the language or framework |
-| No HSTS header | INFO | Browsers may try HTTP first on a later visit ([RFC 6797 section 6.1](https://www.rfc-editor.org/rfc/rfc6797#section-6.1)) | Send Strict-Transport-Security once HTTPS works everywhere |
-| Nothing recognised | INFO | No signature matched; not evidence that a technology is absent | None needed; paste the rendered DOM to dig further |
-| Only the start of the HTML was inspected | INFO | The body exceeded 256 KiB; late tags can be missed | Paste the part of the page you care about |
-| No HTML inspected | INFO | The response was not HTML; only headers were read | Check the address serves a page |
+| Technology detected | Pass | A bounded catalog signature matched | Confirm in deployment files or response configuration |
+| Version announced | Check | Public evidence exposes a product version | Remove the version where practical; patching remains primary |
+| HTML truncated | Info | Only the first 256 KiB was inspected | Inspect later markup or assets locally |
+| HTTP error response | Check | Evidence may describe an error or challenge page | Repeat from an authorised path to the normal page |
+| No HTML inspected | Info | Content-Type was not HTML | Interpret header-only matches narrowly |
+| Redirect observed | Info | The final host or route differs | Inspect both source and destination |
+| No known technology | Info | No catalog signature matched | Treat the stack as unknown rather than absent |
+
+Wording can include the observed name, count, provider or status. Automated consumers should use the supplied status and evidence rather than parsing the English title as a permanent identifier. A missing finding is not evidence that the corresponding external condition is absent when its source could not be collected.
+
+### Status handling
+
+| Status | Consumer action | What not to infer |
+| --- | --- | --- |
+| Pass | Preserve the evidence and continue normal review | Permanent correctness, ownership or availability |
+| Check | Confirm intent and inspect the named evidence | Definite compromise or outage |
+| Fail | Prioritise the concrete broken rule and verify independently | That every user sees the same failure |
+| Info | Carry the limitation or neutral fact with the report | Success merely because no failure was emitted |
 
 ## Guide
 
-### Stop announcing versions
+### Verify independently
 
-1. Find where each version comes from: the evidence under the technology names the header or the HTML line.
-2. Remove it at the source. For nginx, `server_tokens off;`. For Apache, `ServerTokens Prod` and `ServerSignature Off`. For PHP, `expose_php = Off` in php.ini. For ASP.NET, remove `X-AspNet-Version` with `<httpRuntime enableVersionHeader="false" />` and strip `X-Powered-By` in the server configuration. For WordPress, remove the generator tag with `remove_action('wp_head', 'wp_generator');` in the theme.
-3. Update the software. The version was public until now.
-4. Confirm independently: `curl -sI https://example.com/ | grep -iE '^(server|x-powered-by|x-generator)'` and `curl -s https://example.com/ | grep -io '<meta name="generator"[^>]*>'`. Then check the domain here again; the finding is gone and the technology is still listed, without its number.
+Start with an authoritative or widely used command-line client. For DNS, use `dig` with the exact record type and compare every returned owner, target and TTL. Add `+trace` only when delegation matters; a trace and a recursive answer solve different questions. For HTTPS, use `curl -I --location https://host/` and retain each hop and response field. For certificates, use an established TLS client and a CT monitor you trust.
 
-Heal it does the same to the source on the page: "Remove the announced versions" drops `X-Powered-By`, strips the number from other headers and from the generator tag, and checks the result here. Nothing is published.
+Repeat from another network when geography or split routing could matter. Save the observation time and the original evidence before editing. After a DNS change, wait at least the prior TTL and then query both the intended authorities and independent recursive resolvers.
 
-### The page is an error or a bot check
+### Repair safely
 
-1. Open the site in a browser. If it loads, a bot check, rate limit or geographic rule answered the server.
-2. Copy the source from the browser and paste it here; it is read locally.
-3. If the site is down for everyone, start with the status code: [RFC 9110 section 15.6](https://www.rfc-editor.org/rfc/rfc9110#section-15.6) for 5xx responses, and the [Website Down Checker](https://tamperbox.dev/website-down-checker) for reachability.
+Do not delete an unfamiliar record or reroute a public name merely because a catalog labels it. First identify the owning service, deployment repository or provider account. Confirm whether the item is current, a migration remnant, a failover path or a delegated responsibility. Make the smallest reversible change, keep the prior value, and have a rollback trigger.
 
-### HTTPS failed
+Re-run this page after propagation, then verify the user-visible service. A clean public lookup cannot prove application health. Conversely, an informational unknown does not require a speculative change.
 
-A 525 or 526 means the lookup could not complete or verify TLS. Check the certificate with the [SSL Certificate Checker](https://tamperbox.dev/ssl-checker) or `openssl s_client -connect example.com:443 -servername example.com`, fix the chain or the names it covers, and check again.
+### Diagnose conflicting evidence
 
-### Nothing recognised
+When two signals disagree, ask whether they describe different layers: apex versus www, resolver cache versus authority, CDN edge versus origin, entered host versus redirected host, or certificate history versus current DNS. Compare literal evidence before comparing labels. The disagreement itself often reveals a migration or intermediary.
 
-Modern single-page applications ship bundles with generic names and render in the browser. Open developer tools, copy the rendered `html` element (Copy outerHTML) and paste it: the scripts' output is then part of the text. Absence of a signature remains absence of evidence.
+If a lookup fails, preserve the error and retry once. Repeated timeouts are not equivalent to empty data. Use the specialist tool linked by the finding for deeper parsing rather than converting an inconclusive aggregate result into a failure.
 
-### Add HSTS
+### Break it and heal it
 
-Once every subdomain answers over HTTPS, send `Strict-Transport-Security: max-age=31536000; includeSubDomains` on HTTPS responses only ([RFC 6797 section 7.2](https://www.rfc-editor.org/rfc/rfc6797#section-7.2)). Confirm with `curl -sI https://example.com/ | grep -i strict-transport`.
+The Break it controls create documented edge cases from the visitor's own input or a reserved fixture. They are teaching states, not scans. Heal it restores a safe derived value when the repair is deterministic. Revert remains available when several changes have been made.
 
-### Break it cases
-
-| Case | What it loads | What it shows |
-| --- | --- | --- |
-| Announced versions | Your headers and HTML with `server: Apache/2.4.49 (Unix)` and `x-powered-by: PHP/7.4.3` | Version warnings and the Heal it repair |
-| Headers only | Your headers without the HTML | How much the headers alone give away |
-| Error page | Your headers on a 503 challenge page | The error-page verdict and warning |
-| Next.js app, Shopify store | Fixed sources | Framework and shop signatures |
-| Nothing to detect | A plain page | "Nothing recognised" |
-| Not a page | A JSON body | "Not a web page" |
-
-The first three are built from what you entered or what the lookup returned; the rest are fixed examples.
+Use these cases to learn how invalid, missing, mixed or stale evidence appears before diagnosing production. The control never edits DNS, hosting, certificates or provider accounts.
 
 ## Worked example
 
-The page opens on `www.harbor-supply.example`, a fixture on the reserved `.example` zone answered in the browser, so it costs nothing and never changes. The sample headers carry `server: cloudflare`, `cf-ray`, `x-powered-by: PHP/8.1.27` and a `link` header to `wp-json`; the HTML carries `<meta name="generator" content="WordPress 6.4.2">`, WooCommerce assets, jQuery, Bootstrap, Google Tag Manager, Google Analytics, Cloudflare Web Analytics, Hotjar, Stripe and OneTrust.
+The live default is `mozilla.org`. It fills several technology categories from inspectable evidence and demonstrates the final-host response facts. The names and versions remain live observations and are not embedded as permanent claims.
 
-**WordPress 6.4.2 with WooCommerce, behind Cloudflare.** Twelve technologies; two versions announced. "WordPress 6.4.2 is announced" tells you to remove the generator tag, because that is where the number was read, even though the `link` header found WordPress first. "PHP 8.1.27 is announced" names the `x-powered-by` header. "No HSTS header" is informational. Heal it offers to remove both versions and to add HSTS; Take it further hands `www.harbor-supply.example` to the headers and certificate checkers, which answer their own samples. Replace the sample with your own domain and every section, card and link is rewritten for it.
+Read the example from verdict to Findings, then compare the literal evidence. Open one Break it case and use Heal it or Revert. Finally, replace the default with a domain you are authorised to assess. This sequence demonstrates both the successful path and the failure contract without implying that the named public domain endorses the tool.
 
 ## For agents
 
-The Tamperbox MCP server has a `website-technology` operation. Search the catalog, read its input schema and call it with the domain. It uses the same fetch limits (HTTPS, three redirects, 256 KiB) but its own server-side signature catalog, so names and counts can differ from the page; it returns warnings for non-HTML, error statuses and truncation. Keep these with any conclusion:
+Agents can discover the `website_technology` operation through Tamperbox MCP. The browser page id `website-technology` is not the operation name. The server operation and browser renderer can expose different fields; inspect the operation schema before supplying arguments. Preserve the result's distinction between observed evidence, catalog inference and limitation. State whether the run was live or pasted, include the cleaned target and observation time, and never turn “not found” into “does not exist” unless the method truly establishes that condition.
 
-- Detection reads response headers and initial HTML only; scripts are not run and assets are not fetched.
-- A signature can be spoofed, hidden or matched by quoted text; absence proves nothing.
-- An announced version is a disclosure, not a confirmed vulnerability.
+Choose a specialist operation when the task is narrow. Use this page's report when its combined view or educational findings add value. Do not pass credentials, private hostnames or customer data into a public lookup. If a repair would change production, present the exact evidence, expected effect, propagation window and rollback before acting.
 
-See [Connect an MCP client](/mcp/connect/) for setup and [Security and privacy](/reference/security/) for where the domain travels.
+Machine readers should branch on status and structured fields where available, not English punctuation. Treat network and parse errors as inconclusive. Re-run after a meaningful interval rather than repeatedly polling a third-party source.
 
 ## Limits
 
-- One HTTPS GET from one place at one moment; geographic rules and bot checks can change what is served.
-- At most three redirects and 256 KiB of HTML; cookies and authentication headers are removed.
-- Pasted source is searched as text; no DOM is built.
-- The catalog covers 53 signatures plus two script-host rules; anything else is not named.
-- Nothing is stored.
+Signature detection has false positives and false negatives. Reverse proxies can add headers, build tools can leave stale metadata, products can remove branding, and client-side code can load after the bounded response. The checker does not execute scripts, authenticate, scan dependencies, test vulnerabilities or establish who operates a detected product.
+
+All outputs are point-in-time observations. Resolver caching, negative caching, anycast, geo steering, redirects and intermittent upstream failures can change a later run. The service does not retain a monitoring history or notify on change. Local History is an interaction aid, not durable evidence.
+
+No result grants permission to probe a target or modify it. Use authorised accounts and owner-approved procedures for deeper checks. Where business, security or legal decisions depend on attribution, obtain confirmation from the responsible provider or domain operator.
 
 ## References
 
-- [RFC 9110, HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110): sections 8.3 (Content-Type), 10.2.2 (Location), 10.2.4 (Server), 15.4 to 15.6 (status codes). Obsoletes [RFC 7231](https://www.rfc-editor.org/rfc/rfc7231).
-- [RFC 6797, HTTP Strict Transport Security](https://www.rfc-editor.org/rfc/rfc6797): sections 6.1 and 7.2.
-- [RFC 6265, HTTP State Management Mechanism](https://www.rfc-editor.org/rfc/rfc6265): section 4.1 (Set-Cookie).
-- [HTML Standard, standard metadata names: generator](https://html.spec.whatwg.org/multipage/semantics.html#meta-generator).
-- [Security Headers Grader](https://tamperbox.dev/security-headers), the next check for the headers this page lists.
+- [RFC 1034](https://www.rfc-editor.org/rfc/rfc1034), Domain Names — Concepts and Facilities, especially [section 4.3.2](https://www.rfc-editor.org/rfc/rfc1034#section-4.3.2) for resolver behavior.
+- [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035), Domain Names — Implementation and Specification, especially [section 3.2.1](https://www.rfc-editor.org/rfc/rfc1035#section-3.2.1) for resource-record types and classes.
+- [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110), HTTP Semantics, especially [section 3.7](https://www.rfc-editor.org/rfc/rfc9110#section-3.7) for intermediaries and [section 15](https://www.rfc-editor.org/rfc/rfc9110#section-15) for status codes when HTTP evidence is collected.
+- [Tamperbox Website Technology Detector](https://tamperbox.dev/website-technology), the interactive tool and current Markdown mirror.

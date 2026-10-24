@@ -1,189 +1,179 @@
 ---
 title: Website Hosting Checker
-description: How the checker follows a site's name through its CNAME chain to its IPv4 and IPv6 addresses, names the network that announces each one, flags private and missing addresses, and compares the bare domain with www.
-updated: 2026-10-20
+description: How Tamperbox follows website DNS, maps public addresses to networks, and compares the apex with www.
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
-agentSummary: Method, finding reference and repair guide for the Tamperbox Website Hosting Checker, which looks up a domain and its www name through public DNS (CNAME chain, A and AAAA records), asks a public IP-to-ASN registry service who announces each address, matches the owner against a catalog of 29 CDN, cloud, hosting and platform networks, and flags missing, private or IPv6-only addresses and a bare domain that bypasses the CDN.
+agentSummary: Method, finding reference and repair guide for the Tamperbox Website Hosting Checker.
 prerequisites:
-  - A domain, or one or more IPv4 or IPv6 addresses
+  - a domain name or pasted A, AAAA and CNAME evidence
 outputs:
-  - A verdict naming who runs the site, one card per name with its alias chain and each address's network, ASN, registry country and reverse DNS, and findings with fixes
+  - the apex and www DNS chains, public addresses, network attribution and routing findings
 limitations:
-  - The network that announces an address runs the machine or the service in front of it, not necessarily the site; registry country is not server location; one answer from one resolver at one moment
+  - Public observations are time-sensitive and do not prove ownership, intent or private configuration
 ---
 
-The tool page is [tamperbox.dev/website-hosting](https://tamperbox.dev/website-hosting). It opens on `harbor-supply.example`, a sample domain on the reserved `.example` zone whose addresses come from the documentation ranges. This page is the long version: every lookup the checker makes, every rule it applies, what each finding means, and how to fix and confirm each one.
+The tool page is [tamperbox.dev/website-hosting](https://tamperbox.dev/website-hosting). It opens with a live lookup of `mozilla.org`; replace it to inspect your own target. This guide documents the actual input path, evidence contract, classifications and independent verification steps.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> a domain or address is sent to the Tamperbox server, which asks a public DNS resolver for the CNAME chain and the A and AAAA records of each name, then asks a public IP-to-ASN service, over DNS, who announces each address and what its reverse DNS name is. Matching owners against the network catalog runs in your browser. Private and documentation addresses are recognised in the browser and never sent. Nothing is stored.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> input cleanup and report rendering happen in the browser. Direct public IP addresses are sent for network-information lookup, even when pasted. Live checks send only the validated public target to the Tamperbox server and the public services required for the lookup. The page stores no report; History is local to the current browser session.</div>
 
 ## What the tool answers
 
-1. **Where does each name point?** The alias chain from the name you typed to the name that holds addresses.
-2. **Which addresses?** Every A and AAAA record at the end of the chain.
-3. **Who runs each address?** The autonomous system that announces it, its registered owner, the registry country and the reverse DNS name, then a label: CDN or proxy, cloud provider, hosting provider, website platform, private network or a network not in the catalog.
-4. **Do the bare domain and www agree?** A domain is always looked up with its www name, because the two are often hosted differently.
-5. **Is anything unreachable?** No address, a private address, or IPv6 only.
+The checker answers which public network appears to serve a website and whether the apex and www names take materially different routes. Its conclusion is deliberately narrower than an ownership or security claim. A displayed provider, product, name or passing check means that the listed public evidence matched a documented rule at the observation time.
 
-It does not connect to the site, does not discover the origin behind a CDN, and does not measure where a server physically stands.
+Every conclusion is paired with evidence. The opening verdict is a summary for orientation, while Findings contains the actionable interpretation and the later result sections retain the underlying records, addresses, fields or names. If a conclusion matters operationally, verify that evidence through an authoritative account or an independent standards-aware client before changing production.
 
 ## Inputs
 
-### A domain
+### Accepted source
 
-`example.com`, or a full address pasted from the address bar, which becomes `example.com` in the box. The lookup runs when you stop typing or on Enter. A name that does not start with `www.` is looked up together with its `www.` name; the www card is shown when it has addresses or an alias.
+Enter a domain or one or more IP addresses separated by whitespace or commas. Domains trigger CNAME, A and AAAA lookups; unless the name already starts with `www.`, the tool also checks its `www` name. Direct public IP input triggers network-information requests. Pasting an IP address is therefore not an offline mode. Special-use addresses are classified locally without a network-information lookup. Invalid IPv4 octets are refused.
 
-### IP addresses
+Text files are read in the browser. The resulting input follows the same classification rules as the field; reading a file locally does not make a domain or public-IP lookup offline. Cleanup keeps an already accepted record intact and otherwise tries unwrapping a single-line address. Unusable text remains visible for correction.
 
-One or more IPv4 or IPv6 addresses separated by spaces, commas or new lines. Each IPv4 part must be 0 to 255; `203.0.113.300` is refused with "203.0.113.300 is not an IPv4 address: each part must be 0 to 255." Addresses are looked up on their own, without names.
+### When work runs
 
-### Files
+Domain input runs after a 600-millisecond typing pause. Enter runs it immediately; pasted records run immediately. Drops and page-wide paste use the same input loader. Leaving the field applies cleanup and reruns only when cleanup changes the text. Each edit aborts the previous request and increments a generation marker. A slower old response therefore cannot replace a newer result, and clearing the source immediately clears copyable output.
 
-A `.txt` file dropped on the page or opened with Add a file is read in the browser and put in the box.
+The opening input uses the same parser and processing path as a replacement. The labelled live default sends the same requests as another domain.
 
 ## Reading the result
 
-### Verdict and chips
+### Verdict and privacy
 
-The verdict names the outcome: "Hosted by Hetzner (AS24940, DE)." for one network, "Served through Cloudflare: the addresses belong to a CDN or proxy network." when the network is a CDN, "Two hosts:" when the bare domain and www resolve to different networks, "Private address:" and "No address:" when the site cannot be reached. The chips list each network found, IPv6 or No IPv6, and "Different networks" when that warning applies.
+The verdict states what the available evidence supports and uses pass, check, fail or informational status consistently. Pass means the bounded rule succeeded. Check means a human should confirm context. Fail means a concrete operational rule was violated. Info describes a limitation, absence or neutral fact and must not be promoted into success or failure by an automated reader.
 
-### Findings, Take it further, History
+Two privacy lines distinguish browser-only work from live lookup work. The Checked line names the cleaned input and source mode. Copy result is hidden while work is pending, after an error and when input is empty, preventing a stale report from being exported as current.
 
-Findings are worst first, with passes folded. Take it further hands the first public address to the [ASN Lookup](https://tamperbox.dev/asn-lookup) and the [Reverse DNS Lookup](https://tamperbox.dev/reverse-dns), the name served through a CDN to the [CDN and Proxy Detector](https://tamperbox.dev/cdn-detector), and, for a real domain, a name that resolved to a public address, with port 443, to [TCP Ping](https://tamperbox.dev/tcp-ping). History logs every Break it case and Heal it repair with Revert and Reset input.
+### Findings and evidence
 
-### Where each name points
+Findings are ordered with failures first, then checks, informational notes and passes. Repeated passing details can fold into a disclosure so that exceptions remain visible. Each item states the observation and its consequence; any remediation is scoped to the evidence rather than presented as a universal configuration recipe.
 
-One card per name. The alias chain is listed first, name then alias, when there is one. The table gives each address with its family, the network label and owner, the ASN, the registry country and the reverse DNS name. On phones the table becomes one labelled block per address.
+Evidence sections follow Findings and precede History. They are the audit trail for the verdict. A provider label derived from a catalog remains an inference, while a literal record or response field remains an observation. This distinction matters when signatures are incomplete, white-labelled or stale.
+
+### History and handoffs
+
+History records intentional input replacements, including Break it examples and their repairs. Revert restores the prior input and runs it again, including live requests when applicable; Reset input returns to the value at the beginning of the recorded sequence. History is not monitoring, persistence or an account log.
+
+Check the rest carries the current input to other tools in Domains & hosting. Take it further sends the derived hostname to the [CDN and Proxy Detector](/tools/cdn-detector/) or [Website Technology Detector](/tools/website-technology/). These links appear only when that hostname differs from the input. A receiving tool runs its own check; agreement is not guaranteed.
+
+Explicit tool links transfer the input through temporary browser `sessionStorage` and, when needed, a same-origin browser channel. The URL fragment contains a random transfer token, not the input. Transfers are accepted for less than one minute, consumed once, and bound to the destination path. The destination removes the token from its address. Ordinary documentation links and direct visits do not restore a previous input; if transfer storage is unavailable, the link still opens the tool.
+
 
 ## Method
 
-### 1. Names
+### Validation and collection
 
-For a domain `d` the names are `d` and `www.d`, unless `d` already starts with `www.`. Both are looked up in parallel.
+Before collection, the same domain validation runs in the browser and on the server boundary. Requests are restricted to supported public DNS names and HTTPS roots, redirects are bounded, response sizes are capped and abort signals are propagated. These limits make the observation reproducible and prevent an entered value from becoming an unrestricted network fetch.
 
-### 2. The alias chain
+Use the input modes above to determine which requests run. DNS evidence comes from a public recursive view and can reflect cache state. Local classification cannot add observations absent from the supplied evidence. A server lookup is a fresh observation, not confirmation that cached or pasted evidence is still current.
 
-For each name the checker asks for its CNAME record, follows the target, and repeats up to eight steps until a name has no CNAME. A CNAME makes the owner name an alias of the target: [RFC 1034 section 3.6.2](https://www.rfc-editor.org/rfc/rfc1034#section-3.6.2) says "If a CNAME RR is present at a node, no other data should be present", which is why the addresses are looked up at the end of the chain, not at the alias. The record format is in [RFC 1035 section 3.3.1](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.1).
+### Classification rules
 
-### 3. Addresses
+The lookup resolves the entered name and its www counterpart, follows bounded CNAME chains, collects A and AAAA addresses and maps public prefixes to a maintained network catalog. [RFC 1034 section 3.6.2](https://www.rfc-editor.org/rfc/rfc1034#section-3.6.2) says an alias must not coexist with other data; contradictory chains are not silently flattened. The comparison is based on public routing evidence, not a contract with the hosting company.
 
-At the end of the chain the checker asks for A records ([RFC 1035 section 3.4.1](https://www.rfc-editor.org/rfc/rfc1035#section-3.4.1)) and AAAA records ([RFC 3596 section 2.1](https://www.rfc-editor.org/rfc/rfc3596#section-2.1)). A name with neither is "has no address". The server's resolver queries go to a public DNS-over-HTTPS resolver with a JSON interface; an answer that is truncated, malformed or has conflicting aliases is refused rather than guessed.
+No confidence percentage is invented. When sources disagree, the disagreement is a finding. When a source is unavailable, the affected conclusion becomes informational or inconclusive rather than silently using a previous result. Catalog matches are exact bounded rules; unknown is a valid outcome.
 
-### 4. Special addresses
+### Ordering and export
 
-Before any registry lookup the browser checks each address against the special-purpose ranges in the [IANA IPv4](https://www.iana.org/assignments/iana-ipv4-special-registry/) and [IPv6](https://www.iana.org/assignments/iana-ipv6-special-registry/) special-purpose registries ([RFC 6890 section 2.2.2](https://www.rfc-editor.org/rfc/rfc6890#section-2.2.2) and [section 2.2.3](https://www.rfc-editor.org/rfc/rfc6890#section-2.2.3)):
+The renderer calculates all findings from the current observation before updating the verdict, chips, evidence and landing cards. Status priority is fail, check, info, pass. Stable secondary ordering keeps repeated runs readable without changing severity.
 
-| Range | Label | Source |
-| --- | --- | --- |
-| `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` | Private address | [RFC 1918 section 3](https://www.rfc-editor.org/rfc/rfc1918#section-3) |
-| `127.0.0.0/8`, `::1` | Loopback | [RFC 1122 section 3.2.1.3](https://www.rfc-editor.org/rfc/rfc1122#section-3.2.1.3), [RFC 4291 section 2.5.3](https://www.rfc-editor.org/rfc/rfc4291#section-2.5.3) |
-| `169.254.0.0/16`, `fe80:` addresses | Link-local | [RFC 3927 section 2.1](https://www.rfc-editor.org/rfc/rfc3927#section-2.1), [RFC 4291 section 2.5.6](https://www.rfc-editor.org/rfc/rfc4291#section-2.5.6) |
-| `100.64.0.0/10` | Carrier-grade NAT | [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598), listed in [RFC 6890 section 2.2.2](https://www.rfc-editor.org/rfc/rfc6890#section-2.2.2) |
-| `fc00::/7` | Unique local IPv6 | [RFC 4193 section 3](https://www.rfc-editor.org/rfc/rfc4193#section-3) |
-| `0.0.0.0`, `::` | Unspecified | [RFC 4291 section 2.5.2](https://www.rfc-editor.org/rfc/rfc4291#section-2.5.2) |
-
-RFC 1918 section 3 is explicit that these addresses have no meaning outside an enterprise: routing information about them "shall not be propagated on inter-enterprise links". A public name that resolves to one is "points at a non-public address". Documentation addresses (`192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24` from [RFC 5737 section 3](https://www.rfc-editor.org/rfc/rfc5737#section-3) and `2001:db8::/32` from [RFC 3849 section 2](https://www.rfc-editor.org/rfc/rfc3849#section-2)) are answered in the browser as "Documentation range" and never sent; the sample uses them to stand in for real networks.
-
-### 5. Who announces each address
-
-For each public address the server asks the [Team Cymru IP to ASN mapping service](https://www.team-cymru.com/ip-asn-mapping) over DNS: a TXT query at the reversed address under `origin.asn.cymru.com` (or `origin6` for IPv6) returns the announcing AS numbers, the prefix and the registry country, and a TXT query at `AS<number>.asn.cymru.com` returns the AS name. At the same time it asks for the PTR record of the address under `in-addr.arpa` ([RFC 1035 section 3.5](https://www.rfc-editor.org/rfc/rfc1035#section-3.5)) or `ip6.arpa` ([RFC 3596 section 2.5](https://www.rfc-editor.org/rfc/rfc3596#section-2.5)). Up to four origin ASNs are kept. If the lookup fails the address shows "Not looked up" and the finding "Some networks were not looked up"; when only one of the two queries fails, the fields it would have filled stay empty.
-
-### 6. Naming the network
-
-The owner name is matched against 29 networks in the catalog, each with a kind: CDN or proxy (Cloudflare, Fastly, Akamai, Amazon CloudFront, Bunny CDN, Imperva, Sucuri, StackPath), cloud provider (Amazon Web Services, Google Cloud, Microsoft Azure, Oracle Cloud, Alibaba Cloud), hosting provider (DigitalOcean, Hetzner, OVHcloud, Vultr, Linode, Scaleway, Hostinger, GoDaddy, IONOS) and website platform (Vercel, Netlify, GitHub, Shopify, Squarespace, Wix, WP Engine). The first pattern that matches the owner name wins, so CDNs are tested before clouds. An owner that matches nothing keeps its registry name and the label "Network".
-
-### 7. Comparing the bare domain with www
-
-When www resolves to a CDN network and the bare domain resolves to addresses outside any CDN, the warning "uses a different network" leads the findings. DNS alone cannot tell whether the bare domain only redirects to www, uses another proxy, or serves the site from the origin, so the warning asks you to check the bare domain's HTTPS response before changing anything.
-
-### 8. Verdict rules, in order
-
-No address anywhere; the main name's addresses are all special; the two names on different networks; otherwise the network of the main name (or www when the main name has none), named as "served through" for a CDN and "hosted by" for anything else, with the ASN and registry country.
+The Markdown mirror and Copy result output preserve input, summary, findings and important evidence in text form. They do not embed secrets, browser state or the expanded educational cards. Agents should cite the observation time and limitation alongside any exported conclusion.
 
 ## Standards and conformance
 
-| Specification | Sections used | How the tool applies them | Where it stops |
-| --- | --- | --- | --- |
-| [RFC 1034](https://www.rfc-editor.org/rfc/rfc1034), [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035), DNS | [1034 3.6.2](https://www.rfc-editor.org/rfc/rfc1034#section-3.6.2) aliases, [1035 3.3.1](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.1) CNAME, [3.4.1](https://www.rfc-editor.org/rfc/rfc1035#section-3.4.1) A, [3.5](https://www.rfc-editor.org/rfc/rfc1035#section-3.5) reverse names | Follows CNAMEs to the canonical name, at most eight steps, then reads A records | Answers come from one recursive resolver; authoritative servers are not queried directly |
-| [RFC 3596](https://www.rfc-editor.org/rfc/rfc3596), IPv6 DNS | [2.1](https://www.rfc-editor.org/rfc/rfc3596#section-2.1) AAAA, [2.5](https://www.rfc-editor.org/rfc/rfc3596#section-2.5) ip6.arpa | Reads AAAA records and IPv6 PTR names | |
-| [RFC 6890](https://www.rfc-editor.org/rfc/rfc6890), special-purpose registries | [2.2.2](https://www.rfc-editor.org/rfc/rfc6890#section-2.2.2), [2.2.3](https://www.rfc-editor.org/rfc/rfc6890#section-2.2.3) | Recognises the private, loopback, link-local, shared, unique-local and unspecified ranges listed above | Not every registry entry is flagged (for example benchmarking or 6to4 ranges); those are looked up like any address |
-| [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918), [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598), [RFC 4193](https://www.rfc-editor.org/rfc/rfc4193) | As in the table above | A public name pointing at these ranges is a failure | |
-| [RFC 5737](https://www.rfc-editor.org/rfc/rfc5737), [RFC 3849](https://www.rfc-editor.org/rfc/rfc3849), documentation ranges | [5737 3](https://www.rfc-editor.org/rfc/rfc5737#section-3), [3849 2](https://www.rfc-editor.org/rfc/rfc3849#section-2) | Answered locally as documentation addresses | |
+### Applied specifications
 
-The IP-to-ASN mapping is a service, not a standard: it reflects what the global routing table and the regional registries said when it was last updated.
+| Source | Rule used | Boundary |
+| --- | --- | --- |
+| [RFC 1034 section 3.6.2](https://www.rfc-editor.org/rfc/rfc1034#section-3.6.2) | A CNAME aliases one owner to another canonical name | At most eight safe hops are followed |
+| [RFC 1035 section 3.4.1](https://www.rfc-editor.org/rfc/rfc1035#section-3.4.1) | A maps a name to an IPv4 address | Addresses are displayed; reachability is not tested |
+| [RFC 3596 section 2.1](https://www.rfc-editor.org/rfc/rfc3596#section-2.1) | AAAA carries an IPv6 address | IPv6 presence is reported, not path quality |
+| [RFC 6890 section 2.2](https://www.rfc-editor.org/rfc/rfc6890#section-2.2) | Special-purpose blocks have defined reachability properties | Non-public destinations are flagged |
+
+These references define the records and message semantics, not the provider catalogs. A catalog is product logic and can lag branding, acquisitions or custom deployments. Where a standard permits several valid configurations, the tool reports the observed form and avoids declaring one commercial pattern universally correct.
+
+### Where conformance stops
+
+The checker is an observer, not an authoritative DNS server, browser, certificate monitor, mail receiver or provider control plane. It does not claim protocol conformance for the target. It applies selected validation and interpretation rules to bounded evidence and exposes the boundary where a fuller protocol operation would begin.
+
+The phrase “public” refers to the server's Internet view. Private split-horizon answers, authenticated dashboards and regional routing can differ. Cached answers can remain until TTL expiry, and HTTP intermediaries can transform what the origin sent.
 
 ## Finding reference
 
-| Finding | Severity | What it means | Fix |
+### Emitted findings
+
+| Finding | Severity | Meaning | Repair or next check |
 | --- | --- | --- | --- |
-| X has no address | FAIL | No A or AAAA record at the end of the chain; browsers cannot connect | Publish A and AAAA records, or a CNAME to the platform host |
-| X points at a non-public address | FAIL | The name resolves to a private, loopback, link-local, shared or unique-local address ([RFC 1918 section 3](https://www.rfc-editor.org/rfc/rfc1918#section-3)) | Publish the public address, or keep the name in internal DNS only |
-| X uses a different network | CHECK | www goes through a CDN, the bare domain does not; it may bypass the CDN | Check the bare domain's HTTPS response; route it through the CDN or redirect it |
-| X has IPv6 only | INFO | Visitors without IPv6 cannot connect | Add an A record unless it is deliberate |
-| No IPv6 for X | INFO | IPv6-only networks need a translation hop | Add AAAA records |
-| X is served through Y | INFO | A CDN answers; the origin is not visible in DNS | Nothing; check the origin is locked to the CDN |
-| Some networks were not looked up | INFO | A registry lookup failed; the network is unknown | Check again |
+| Has no address | Fail | The chain ends without A or AAAA | Repair the target or remove the broken alias |
+| Points at a non-public address | Fail | Public DNS exposes a special-use destination | Publish a public address or keep the name private |
+| Uses a different network | Check | Apex and www map to different networks | Verify redirects and intended split before editing DNS |
+| IPv6 only | Info | No IPv4 destination was found | Add A unless IPv6-only service is deliberate |
+| No IPv6 | Info | Only IPv4 was observed | Consider AAAA after the origin and CDN support it |
+| Served through a CDN | Info | The visible network is an edge | Use CDN Detector to inspect response clues |
+| Network not looked up | Info | Attribution failed for an address | Retry and inspect the address independently |
+
+Wording can include the observed name, count, provider or status. Automated consumers should use the supplied status and evidence rather than parsing the English title as a permanent identifier. A missing finding is not evidence that the corresponding external condition is absent when its source could not be collected.
+
+### Status handling
+
+| Status | Consumer action | What not to infer |
+| --- | --- | --- |
+| Pass | Preserve the evidence and continue normal review | Permanent correctness, ownership or availability |
+| Check | Confirm intent and inspect the named evidence | Definite compromise or outage |
+| Fail | Prioritise the concrete broken rule and verify independently | That every user sees the same failure |
+| Info | Carry the limitation or neutral fact with the report | Success merely because no failure was emitted |
 
 ## Guide
 
-### The bare domain bypasses the CDN
+### Verify independently
 
-1. Check what the bare domain answers: `curl -sI https://example.com/`. A 301 or 308 to `https://www.example.com/` is fine.
-2. If it serves the site, point it at the CDN too. Most DNS providers offer an ALIAS, ANAME or flattened CNAME at the apex, or the CDN gives apex addresses.
-3. Lock the origin to the CDN's published address ranges, so it cannot be reached around it.
-4. Confirm with `dig +short example.com A` and `dig +short www.example.com A`, then check here again: both cards should show the same network.
+Start with an authoritative or widely used command-line client. For DNS, use `dig` with the exact record type and compare every returned owner, target and TTL. Add `+trace` only when delegation matters; a trace and a recursive answer solve different questions. For HTTPS, use `curl -I --location https://host/` and retain each hop and response field. For certificates, use an established TLS client and a CT monitor you trust.
 
-### A name points at a private address
+Repeat from another network when geography or split routing could matter. Save the observation time and the original evidence before editing. After a DNS change, wait at least the prior TTL and then query both the intended authorities and independent recursive resolvers.
 
-Remove the record from public DNS and serve it from an internal resolver (split-horizon DNS), or publish the public address if the service is meant to be reachable. Confirm with `dig +short name.example.com @1.1.1.1`.
+### Repair safely
 
-### No address
+Do not delete an unfamiliar record or reroute a public name merely because a catalog labels it. First identify the owning service, deployment repository or provider account. Confirm whether the item is current, a migration remnant, a failover path or a delegated responsibility. Make the smallest reversible change, keep the prior value, and have a rollback trigger.
 
-Add the records the hosting platform documents, usually an A record (and AAAA) or a CNAME to a platform host name. Wait for the old TTL, then check again. Heal it offers "Look up www.example.com instead" when only the www name has addresses.
+Re-run this page after propagation, then verify the user-visible service. A clean public lookup cannot prove application health. Conversely, an informational unknown does not require a speculative change.
 
-### Confirm the network yourself
+### Diagnose conflicting evidence
 
-`dig +short TXT 80.113.0.203.origin.asn.cymru.com` returns the announcing AS for `203.0.113.80` (reverse the octets), and `dig +short -x 203.0.113.80` returns its reverse DNS name.
+When two signals disagree, ask whether they describe different layers: apex versus www, resolver cache versus authority, CDN edge versus origin, entered host versus redirected host, or certificate history versus current DNS. Compare literal evidence before comparing labels. The disagreement itself often reveals a migration or intermediary.
 
-### Break it cases
+If a lookup fails, preserve the error and retry once. Repeated timeouts are not equivalent to empty data. Use the specialist tool linked by the finding for deeper parsing rather than converting an inconclusive aggregate result into a failure.
 
-| Case | What it loads | What it shows |
-| --- | --- | --- |
-| Behind a CDN | A sample name served through a CDN | The CDN verdict |
-| IPv6 only | A sample name with AAAA records only | The IPv6-only finding |
-| Private address | A sample name pointing at `10.20.4.17` | The non-public address failure |
-| An IP address | The first address your domain resolved to | An address looked up on its own |
-| No address | `nohost.` plus your domain | The no-address failure |
-| Not an address | Your first IPv4 address with its last part set to 300 | The refusal message |
+### Break it and heal it
+
+The Break it controls create documented edge cases from the visitor's own input or a reserved fixture. They are teaching states, not scans. Heal it restores a safe derived value when the repair is deterministic. Revert remains available when several changes have been made.
+
+Use these cases to learn how invalid, missing, mixed or stale evidence appears before diagnosing production. The control never edits DNS, hosting, certificates or provider accounts.
 
 ## Worked example
 
-The page opens on `harbor-supply.example`, answered in the browser with documentation addresses standing in for real networks. The bare domain resolves to `203.0.113.80`, labelled Amazon Web Services; `www.harbor-supply.example` is an alias of a CDN host whose addresses are labelled Cloudflare, with IPv6.
+The live default is `mozilla.org`. Its apex and www names exercise different route evidence and produce a useful comparison instead of a single provider badge. That observation is time-sensitive; the reason for the default is the shape of the result.
 
-**Two hosts: www is served through Cloudflare; the bare domain goes to Amazon Web Services.** The warning "harbor-supply.example uses a different network" leads the findings, because the bare domain may reach the origin without the CDN. Take it further offers the network and reverse DNS for `203.0.113.80` and the CDN check for `www.harbor-supply.example`, each answered from the sample data of the tool it opens. Replace the sample with your own domain and every section, card and link is rewritten for it.
+Read the example from verdict to Findings, then compare the literal evidence. Open one Break it case and use Heal it or Revert. Finally, replace the default with a domain you are authorised to assess. This sequence demonstrates both the successful path and the failure contract without implying that the named public domain endorses the tool.
 
 ## For agents
 
-The Tamperbox MCP server has a `website-hosting` operation. Call it with the domain; it resolves that one name (not www as well), enriches up to eight addresses with ASN, owner, country and reverse DNS, and returns CDN signals and warnings for partial lookups. Keep these with any conclusion:
+Agents can discover the `website_hosting` operation through Tamperbox MCP. The browser page id `website-hosting` is not the operation name. The server operation and browser renderer can expose different fields; inspect the operation schema before supplying arguments. Preserve the result's distinction between observed evidence, catalog inference and limitation. State whether the run was live or pasted, include the cleaned target and observation time, and never turn “not found” into “does not exist” unless the method truly establishes that condition.
 
-- ASN and owner identify the network that announces the address, not a hosting contract or the site's owner.
-- A CDN or proxy hides the origin; no origin discovery is attempted.
-- Registry country is not server location.
+Choose a specialist operation when the task is narrow. Use this page's report when its combined view or educational findings add value. Do not pass credentials, private hostnames or customer data into a public lookup. If a repair would change production, present the exact evidence, expected effect, propagation window and rollback before acting.
 
-See [Connect an MCP client](/mcp/connect/) and [Security and privacy](/reference/security/).
+Machine readers should branch on status and structured fields where available, not English punctuation. Treat network and parse errors as inconclusive. Re-run after a meaningful interval rather than repeatedly polling a third-party source.
 
 ## Limits
 
-- One resolver, one moment; geographic DNS and anycast can give other answers elsewhere.
-- Alias chains are followed for at most eight steps.
-- Registry data can lag behind routing changes.
-- Documentation and private addresses are recognised locally and never looked up.
-- Nothing is stored.
+IP ownership does not equal hosting responsibility. Anycast, resellers, cloud tenants, reverse proxies and bring-your-own-IP arrangements can obscure the operator. DNS cannot reveal an origin hidden behind a CDN, and two names on one network are not necessarily the same application.
+
+All outputs are point-in-time observations. Resolver caching, negative caching, anycast, geo steering, redirects and intermittent upstream failures can change a later run. The service does not retain a monitoring history or notify on change. Local History is an interaction aid, not durable evidence.
+
+No result grants permission to probe a target or modify it. Use authorised accounts and owner-approved procedures for deeper checks. Where business, security or legal decisions depend on attribution, obtain confirmation from the responsible provider or domain operator.
 
 ## References
 
-- [RFC 1034](https://www.rfc-editor.org/rfc/rfc1034) and [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035), Domain Names: sections 3.6.2 (aliases), 3.3.1 (CNAME), 3.4.1 (A), 3.5 (in-addr.arpa).
-- [RFC 3596, DNS Extensions to Support IPv6](https://www.rfc-editor.org/rfc/rfc3596): sections 2.1 and 2.5.
-- [RFC 6890, Special-Purpose IP Address Registries](https://www.rfc-editor.org/rfc/rfc6890): sections 2.2.2 and 2.2.3, updated by [RFC 8190](https://www.rfc-editor.org/rfc/rfc8190); the live tables are the [IANA IPv4](https://www.iana.org/assignments/iana-ipv4-special-registry/) and [IPv6](https://www.iana.org/assignments/iana-ipv6-special-registry/) registries.
-- [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918), [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598), [RFC 4193](https://www.rfc-editor.org/rfc/rfc4193), [RFC 3927](https://www.rfc-editor.org/rfc/rfc3927), [RFC 4291](https://www.rfc-editor.org/rfc/rfc4291), [RFC 1122](https://www.rfc-editor.org/rfc/rfc1122): the ranges in the special-address table.
-- [RFC 5737](https://www.rfc-editor.org/rfc/rfc5737) and [RFC 3849](https://www.rfc-editor.org/rfc/rfc3849): documentation addresses.
-- [Team Cymru IP to ASN mapping](https://www.team-cymru.com/ip-asn-mapping), the registry service behind the network column.
+- [RFC 1034](https://www.rfc-editor.org/rfc/rfc1034), Domain Names — Concepts and Facilities, especially [section 4.3.2](https://www.rfc-editor.org/rfc/rfc1034#section-4.3.2) for resolver behavior.
+- [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035), Domain Names — Implementation and Specification, especially [section 3.2.1](https://www.rfc-editor.org/rfc/rfc1035#section-3.2.1) for resource-record types and classes.
+- [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110), HTTP Semantics, especially [section 3.7](https://www.rfc-editor.org/rfc/rfc9110#section-3.7) for intermediaries and [section 15](https://www.rfc-editor.org/rfc/rfc9110#section-15) for status codes when HTTP evidence is collected.
+- [Tamperbox Website Hosting Checker](https://tamperbox.dev/website-hosting), the interactive tool and current Markdown mirror.

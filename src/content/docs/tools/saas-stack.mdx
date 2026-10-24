@@ -1,186 +1,176 @@
 ---
-title: SaaS Stack Finder
-description: How the finder reads a domain's TXT records, recognises the verification tokens services ask domain owners to publish and the mail senders an SPF record includes, flags duplicate and unexplained tokens, and what each finding means for whoever manages the domain.
-updated: 2026-10-20
+title: SaaS Stack Detector
+description: How Tamperbox reads public TXT records for service-verification tokens and SPF senders without claiming that an account is active.
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
-agentSummary: Method, finding reference and repair guide for the Tamperbox SaaS Stack Finder, which asks a public resolver for the TXT records at a domain (or reads pasted records in the browser), matches 35 service verification prefixes and 18 SPF include patterns, groups the services by purpose, and flags duplicate tokens for one service, tokens for services not in the catalog, and the fact that every token is public.
+agentSummary: Method, finding reference and repair guide for the Tamperbox SaaS Stack Detector.
 prerequisites:
-  - A domain, or TXT records to paste
+  - a domain name or pasted DNS TXT records
 outputs:
-  - A verdict naming the services, the services grouped by purpose with their tokens, the mail senders from SPF, the records that look like unknown tokens, every TXT record explained, and findings with fixes
+  - recognised services, possible duplicate tokens, SPF sender domains, unknown verification-shaped records and the original TXT evidence
 limitations:
-  - A token proves someone with DNS access connected the domain to an account once, not that the account is in use; services that verify with a CNAME or a subdomain record are not seen
+  - Public observations are time-sensitive and do not prove ownership, intent or private configuration
 ---
 
-The tool page is [tamperbox.dev/saas-stack](https://tamperbox.dev/saas-stack). It opens on `harbor-supply.example`, a sample domain on the reserved `.example` zone whose TXT records hold tokens for six services, Google twice, and one token the catalog does not know. This page is the long version: what the finder reads, every rule it applies, what each finding means and how to act on it safely.
+The tool page is [tamperbox.dev/saas-stack](https://tamperbox.dev/saas-stack). It opens with a live lookup of `mozilla.org`; replace it to inspect your own target. This guide documents the actual input path, evidence contract, classifications and independent verification steps.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> a domain is sent to the Tamperbox server, which asks a public DNS resolver for the TXT records at that name. Matching the records against the catalog runs in your browser. Pasted records never leave the browser. The sample is answered in the browser. Nothing is stored.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> input cleanup, pasted-data parsing and report rendering happen in the browser. Live checks send only the validated public target to the Tamperbox server and the public services required for the lookup. The page stores no report; History is local to the current browser session.</div>
 
 ## What the tool answers
 
-1. **Which services has this domain been connected to?** Every TXT record that starts with a service's verification prefix.
-2. **What are they for?** Each service grouped by purpose: identity and productivity, engineering, communication, payments, sales and legal, marketing, email, security, privacy, certificates.
-3. **Who sends mail as the domain?** The services named by the includes of its SPF record.
-4. **Is anything unexplained?** Two tokens for one service, and records that look like tokens for services not in the catalog.
+The checker answers which catalogued services are suggested by public TXT verification records and which mail senders an SPF record names. Its conclusion is deliberately narrower than an ownership or security claim. A displayed provider, product, name or passing check means that the listed public evidence matched a documented rule at the observation time.
 
-It does not log in anywhere, does not check whether an account exists, and does not read records on subdomains.
+Every conclusion is paired with evidence. The opening verdict is a summary for orientation, while Findings contains the actionable interpretation and the later result sections retain the underlying records, addresses, fields or names. If a conclusion matters operationally, verify that evidence through an authoritative account or an independent standards-aware client before changing production.
 
 ## Inputs
 
-### A domain
+### Accepted source
 
-`example.com`, or a full address or an email address pasted into the box, which becomes the domain. The lookup runs when you stop typing or on Enter. Only the name you enter is read: `_github-challenge-example.example.com` style records on underscored names are not seen unless you enter that name.
+Enter a domain for a public TXT lookup, or paste TXT records for local analysis. Text containing a verification-token separator, quotes or multiple lines is interpreted as record material. The parser separates service verification patterns from SPF sender clues. Neither kind proves an active account or contractual relationship.
 
-### Pasted records
+Text files are read in the browser. The resulting input follows the same classification rules as the field; reading a file locally does not make a domain or public-IP lookup offline. Cleanup keeps an already accepted record intact and otherwise tries unwrapping a single-line address. Unusable text remains visible for correction.
 
-Paste values as they are (`google-site-verification=…`), quoted TXT strings, or answer lines from `dig` or `nslookup` (`example.com. 300 IN TXT "MS=ms12345678"`, `example.com text = "…"`). A value split into several quoted strings is joined, as resolvers do. Text with `=`, `:`, quotes or more than one line is read as records; a bare name is looked up.
+### When work runs
 
-### Files
+Domain input runs after a 600-millisecond typing pause. Enter runs it immediately; pasted records run immediately. Drops and page-wide paste use the same input loader. Leaving the field applies cleanup and reruns only when cleanup changes the text. Each edit aborts the previous request and increments a generation marker. A slower old response therefore cannot replace a newer result, and clearing the source immediately clears copyable output.
 
-A `.txt` file dropped on the page or opened with Add a file is read in the browser.
+The opening input uses the same parser and processing path as a replacement. The labelled live default sends the same requests as another domain.
 
 ## Reading the result
 
-### Verdict and chips
+### Verdict and privacy
 
-"6 services suggested on example.com: Google, Microsoft 365, Atlassian, Stripe and 2 more." The verdict is a check when a service has more than one token. Other verdicts: "No TXT records", "No verification tokens. The SPF record names N mail senders.", and "No known services". Chips count the services, the duplicates, the mail senders and the records not in the catalog.
+The verdict states what the available evidence supports and uses pass, check, fail or informational status consistently. Pass means the bounded rule succeeded. Check means a human should confirm context. Fail means a concrete operational rule was violated. Info describes a limitation, absence or neutral fact and must not be promoted into success or failure by an automated reader.
 
-### Findings, Take it further, History
+Two privacy lines distinguish browser-only work from live lookup work. The Checked line names the cleaned input and source mode. Copy result is hidden while work is pending, after an error and when input is empty, preventing a stale report from being exported as current.
 
-Findings worst first, passes folded. Take it further hands the SPF record itself to the [SPF Checker](https://tamperbox.dev/spf-checker), which counts its lookups, and, when the record names senders, the domain to the [DMARC Checker](https://tamperbox.dev/dmarc-checker) and the [DKIM Record Checker](https://tamperbox.dev/dkim-checker). History logs every Break it case with Revert and Reset input.
+### Findings and evidence
 
-### Services
+Findings are ordered with failures first, then checks, informational notes and passes. Repeated passing details can fold into a disclosure so that exceptions remain visible. Each item states the observation and its consequence; any remediation is scoped to the evidence rather than presented as a universal configuration recipe.
 
-Grouped by purpose, each with what the token proves ("Search Console or Workspace ownership") and the token, with the variable part marked. A service with two or more tokens carries a Check badge.
+Evidence sections follow Findings and precede History. They are the audit trail for the verdict. A provider label derived from a catalog remains an inference, while a literal record or response field remains an observation. This distinction matters when signatures are incomplete, white-labelled or stale.
 
-### Sends mail through
+### History and handoffs
 
-Each SPF include, named when it matches a known sender, otherwise shown as not in the catalog.
+History records intentional input replacements, including Break it examples and their repairs. Revert restores the prior input and runs it again, including live requests when applicable; Reset input returns to the value at the beginning of the recorded sequence. History is not monitoring, persistence or an account log.
 
-### Not in the catalog
+Check the rest carries the current input to other tools in Domains & hosting. Take it further is hidden because this page has no derived-value destinations. A receiving tool runs its own check; agreement is not guaranteed.
 
-Records that look like verification tokens for unknown services.
+Explicit tool links transfer the input through temporary browser `sessionStorage` and, when needed, a same-origin browser channel. The URL fragment contains a random transfer token, not the input. Transfers are accepted for less than one minute, consumed once, and bound to the destination path. The destination removes the token from its address. Ordinary documentation links and direct visits do not restore a previous input; if transfer storage is unavailable, the link still opens the tool.
 
-### Every TXT record
-
-Every record with its kind (Token, SPF, Unknown, Other) and what it means. Closed by default; Copy result includes it.
 
 ## Method
 
-### 1. Reading TXT records
+### Validation and collection
 
-TXT records ([RFC 1035 section 3.3.14](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.14)) hold one or more character strings; the finder joins them into one value per record. A domain's TXT records live at its own name. Services that verify with a record on an underscored name use the scoping convention of [RFC 8552 section 1.1](https://www.rfc-editor.org/rfc/rfc8552#section-1.1), which keeps those records out of the apex; the finder does not guess those names.
+Before collection, the same domain validation runs in the browser and on the server boundary. Requests are restricted to supported public DNS names and HTTPS roots, redirects are bounded, response sizes are capped and abort signals are propagated. These limits make the observation reproducible and prevent an entered value from becoming an unrestricted network fetch.
 
-### 2. Verification tokens
+Use the input modes above to determine which requests run. DNS evidence comes from a public recursive view and can reflect cache state. Local classification cannot add observations absent from the supplied evidence. A server lookup is a fresh observation, not confirmation that cached or pasted evidence is still current.
 
-A record is a token when it starts, ignoring case, with one of 35 known prefixes: `google-site-verification=`, `MS=ms`, `atlassian-domain-verification=`, `stripe-verification=`, `docusign=`, `adobe-sign-verification=`, `adobe-idp-site-verification=`, `facebook-domain-verification=`, `apple-domain-verification=`, `ZOOM_verify_`, `dropbox-domain-verification=`, `slack-domain-verification=`, `webexdomainverification.`, `cisco-ci-domain-verification=`, `hubspot-developer-verification=`, `pardot`, two GlobalSign forms, `onetrust-domain-verification=`, `have-i-been-pwned-verification=`, `citrix-verification-code=`, `smartsheet-site-validation=`, `miro-verification=`, `canva-site-verification=`, `twilio-domain-verification=`, `postman-domain-verification=`, `openai-domain-verification=`, `zoho-verification=`, `protonmail-verification=`, `yandex-verification:`, `keybase-site-verification=`, `wrike-verification=`, `logmein-verification-code=`, `amazonses:` and `mailru-verification:`. Tokens are grouped by service, so two Google tokens are one service with two tokens.
+### Classification rules
 
-The practice these prefixes follow, publishing a random value that only the account holder knows at the domain, is described in the IETF [Domain Control Validation using DNS](https://datatracker.ietf.org/doc/draft-ietf-dnsop-domain-verification-techniques/) draft, an Internet-Draft in the DNSOP working group and not an RFC when this page was written. Its recommendations (scoped names, time-bound tokens, removing the record after validation) are the background for the fixes below; the finder does not grade tokens against it.
+TXT values are split without inventing record boundaries. The detector compares prefixes case-insensitively with a bounded catalog, groups matches by service, extracts SPF include and redirect domains, and keeps unrecognised token-shaped values separate. It never treats arbitrary prose as a service. [RFC 1035 section 3.2.1](https://www.rfc-editor.org/rfc/rfc1035#section-3.2.1) defines TXT as one or more character strings; joining and display preserve the evidence rather than interpreting it as authority.
 
-### 3. SPF senders
+No confidence percentage is invented. When sources disagree, the disagreement is a finding. When a source is unavailable, the affected conclusion becomes informational or inconclusive rather than silently using a previous result. Catalog matches are exact bounded rules; unknown is a valid outcome.
 
-A record that starts with `v=spf1` is the SPF record ([RFC 7208 section 3](https://www.rfc-editor.org/rfc/rfc7208#section-3)). Each `include:` term ([RFC 7208 section 5.2](https://www.rfc-editor.org/rfc/rfc7208#section-5.2)) names another domain whose SPF record is consulted; the finder matches it, as the domain or a name under it, against 18 known senders: Google Workspace, Microsoft 365, SendGrid, Mailgun, Amazon SES, Mailchimp, Mailchimp Transactional, Salesforce, Zendesk, Postmark, MailerSend, Brevo, HubSpot, Help Scout, Intercom, Fastmail, Zoho Mail and Proton Mail. It does not evaluate the record or count lookups; the [SPF Checker](https://tamperbox.dev/spf-checker) does, against the limit in [RFC 7208 section 4.6.4](https://www.rfc-editor.org/rfc/rfc7208#section-4.6.4).
+### Ordering and export
 
-### 4. Unknown tokens
+The renderer calculates all findings from the current observation before updating the verdict, chips, evidence and landing cards. Status priority is fail, check, info, pass. Stable secondary ordering keeps repeated runs readable without changing severity.
 
-A record that is neither a known token nor SPF, but contains `verif`, `validation`, `site-verify`, `domain-key` or `challenge` followed by `=` or `:`, or looks like `name=value` with a value of 16 or more token characters, is listed as a likely token for a service not in the catalog. Everything else is "Other".
-
-### 5. Findings
-
-- Two or more tokens for one service: "N X tokens" (check). Several can be legitimate (two accounts, a re-verification), so the advice is to account for each, not to delete.
-- Records that look like unknown tokens: "N unrecognised tokens" (info).
-- Any known token: "Verification records are public" (info): anyone can read the list, which helps phishing that impersonates your vendors.
-- No tokens and no SPF senders: "No services found" (info).
+The Markdown mirror and Copy result output preserve input, summary, findings and important evidence in text form. They do not embed secrets, browser state or the expanded educational cards. Agents should cite the observation time and limitation alongside any exported conclusion.
 
 ## Standards and conformance
 
-| Specification | Sections used | How the tool applies them | Where it stops |
-| --- | --- | --- | --- |
-| [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035) | [3.3.14](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.14) TXT | Character strings joined into one value per record | Records at other names are not read |
-| [RFC 7208](https://www.rfc-editor.org/rfc/rfc7208), SPF | [3](https://www.rfc-editor.org/rfc/rfc7208#section-3) records, [5.2](https://www.rfc-editor.org/rfc/rfc7208#section-5.2) include | `v=spf1` recognised; include targets named | Not evaluated: lookup counts, multiple-record errors ([3.2](https://www.rfc-editor.org/rfc/rfc7208#section-3.2)) and syntax are the SPF Checker's job |
-| [RFC 8552](https://www.rfc-editor.org/rfc/rfc8552), underscored names | [1.1](https://www.rfc-editor.org/rfc/rfc8552#section-1.1) | Explains why scoped verification records are not seen at the apex | No underscored names are probed |
-| [Domain Control Validation using DNS](https://datatracker.ietf.org/doc/draft-ietf-dnsop-domain-verification-techniques/) (Internet-Draft) | Whole document | Background for the advice | Not a standard; tokens are not graded against it |
+### Applied specifications
 
-Each service's token format is that vendor's own convention.
+| Source | Rule used | Boundary |
+| --- | --- | --- |
+| [RFC 1035 section 3.2.1](https://www.rfc-editor.org/rfc/rfc1035#section-3.2.1) | TXT carries one or more character strings | The resolver supplies joined values; pasted lines are treated as observations |
+| [RFC 7208 section 4.6.4](https://www.rfc-editor.org/rfc/rfc7208#section-4.6.4) | SPF include and redirect cause DNS evaluation | The tool lists sender domains but does not evaluate authorization |
+| [RFC 1034 section 4.3.2](https://www.rfc-editor.org/rfc/rfc1034#section-4.3.2) | Resolver answers can be cached and recursive | Results describe one public lookup, not every resolver |
+
+These references define the records and message semantics, not the provider catalogs. A catalog is product logic and can lag branding, acquisitions or custom deployments. Where a standard permits several valid configurations, the tool reports the observed form and avoids declaring one commercial pattern universally correct.
+
+### Where conformance stops
+
+The checker is an observer, not an authoritative DNS server, browser, certificate monitor, mail receiver or provider control plane. It does not claim protocol conformance for the target. It applies selected validation and interpretation rules to bounded evidence and exposes the boundary where a fuller protocol operation would begin.
+
+The phrase “public” refers to the server's Internet view. Private split-horizon answers, authenticated dashboards and regional routing can differ. Cached answers can remain until TTL expiry, and HTTP intermediaries can transform what the origin sent.
 
 ## Finding reference
 
-| Finding | Severity | What it means | Fix |
+### Emitted findings
+
+| Finding | Severity | Meaning | Repair or next check |
 | --- | --- | --- | --- |
-| N X tokens | CHECK | More than one claim on the domain by one service; one may belong to an account you no longer control | Match each token to an account; remove the ones nobody can account for |
-| N unrecognised tokens | INFO | Claims by services not in the catalog | Ask who added them before removing anything |
-| Verification records are public | INFO | Anyone can list your vendors | Remove tokens once a service no longer needs them, if it allows |
-| No services found | INFO | No known tokens and no SPF senders at this name | None; check CNAME or subdomain verification if you expected one |
+| Recognised service | Pass | A public token matches the catalog | Confirm the token in that vendor's admin console |
+| Multiple tokens for one service | Check | Migration or stale verification may have left duplicates | Verify ownership, then remove only a vendor-confirmed obsolete token |
+| Mail sender | Info | SPF names a domain that may send mail | Use SPF Checker before changing authorization |
+| Not in the catalog | Info | The value resembles verification but has no known signature | Search the exact prefix in trusted vendor documentation |
+| No known services | Info | No catalog signature matched | Check CNAME and subdomain verification separately |
+
+Wording can include the observed name, count, provider or status. Automated consumers should use the supplied status and evidence rather than parsing the English title as a permanent identifier. A missing finding is not evidence that the corresponding external condition is absent when its source could not be collected.
+
+### Status handling
+
+| Status | Consumer action | What not to infer |
+| --- | --- | --- |
+| Pass | Preserve the evidence and continue normal review | Permanent correctness, ownership or availability |
+| Check | Confirm intent and inspect the named evidence | Definite compromise or outage |
+| Fail | Prioritise the concrete broken rule and verify independently | That every user sees the same failure |
+| Info | Carry the limitation or neutral fact with the report | Success merely because no failure was emitted |
 
 ## Guide
 
-### Account for every token
+### Verify independently
 
-1. List the verified domains in each service's admin console (Google Search Console and Workspace, Microsoft 365 admin center, Atlassian admin, and so on).
-2. Match each token value to an account. The value is usually shown next to the domain in the console.
-3. For a token nobody can account for, ask who manages DNS changes; agencies and former employees are the usual source.
-4. Remove the record only when the account is confirmed unneeded. Some services re-check periodically and drop the verification when the record goes.
-5. Confirm with `dig +short TXT example.com`, then check here again.
+Start with an authoritative or widely used command-line client. For DNS, use `dig` with the exact record type and compare every returned owner, target and TTL. Add `+trace` only when delegation matters; a trace and a recursive answer solve different questions. For HTTPS, use `curl -I --location https://host/` and retain each hop and response field. For certificates, use an established TLS client and a CT monitor you trust.
 
-### Remove tokens after verification
+Repeat from another network when geography or split routing could matter. Save the observation time and the original evidence before editing. After a DNS change, wait at least the prior TTL and then query both the intended authorities and independent recursive resolvers.
 
-Some services only need the record during verification; others keep checking. Their documentation says which. Removing the ones that allow it shortens the public vendor list.
+### Repair safely
 
-### Review mail senders
+Do not delete an unfamiliar record or reroute a public name merely because a catalog labels it. First identify the owning service, deployment repository or provider account. Confirm whether the item is current, a migration remnant, a failover path or a delegated responsibility. Make the smallest reversible change, keep the prior value, and have a rollback trigger.
 
-Each SPF include lets that service send as the domain. When a service stops sending, remove its include; the [SPF Checker](https://tamperbox.dev/spf-checker) shows the lookup count and the include tree, and Take it further opens it with this record.
+Re-run this page after propagation, then verify the user-visible service. A clean public lookup cannot prove application health. Conversely, an informational unknown does not require a speculative change.
 
-### Break it cases
+### Diagnose conflicting evidence
 
-| Case | What it loads | What it shows |
-| --- | --- | --- |
-| A second token | Your records, without SPF, with a second token for your first service | The duplicate-token check |
-| DNS records | Three `dig` answer lines | Pasted record parsing |
-| Unknown tokens only | Two tokens for unknown services | The unrecognised-token reading |
-| Only SPF | Your SPF record alone | Senders without tokens |
-| No TXT records | `nodata.` plus your domain | The empty result |
+When two signals disagree, ask whether they describe different layers: apex versus www, resolver cache versus authority, CDN edge versus origin, entered host versus redirected host, or certificate history versus current DNS. Compare literal evidence before comparing labels. The disagreement itself often reveals a migration or intermediary.
+
+If a lookup fails, preserve the error and retry once. Repeated timeouts are not equivalent to empty data. Use the specialist tool linked by the finding for deeper parsing rather than converting an inconclusive aggregate result into a failure.
+
+### Break it and heal it
+
+The Break it controls create documented edge cases from the visitor's own input or a reserved fixture. They are teaching states, not scans. Heal it restores a safe derived value when the repair is deterministic. Revert remains available when several changes have been made.
+
+Use these cases to learn how invalid, missing, mixed or stale evidence appears before diagnosing production. The control never edits DNS, hosting, certificates or provider accounts.
 
 ## Worked example
 
-The page opens on `harbor-supply.example`, answered in the browser. Its records hold `google-site-verification=` twice (one of them `0ld-ag3ncy-t0k3n-2019`), `MS=ms48213705`, and tokens for Atlassian, Stripe, DocuSign and Meta, an `acmesso-verify=` token the catalog does not know, and an SPF record with four includes.
+The live default is `mozilla.org`. At the comparison point it populated recognised services, SPF senders and unknown-token evidence, making the whole report inspectable. The records can change; the example is selected for structural coverage, not as an enduring claim about Mozilla.
 
-Read record by record, the way the "Every TXT record" table shows them:
-
-| Record | Kind | What the finder makes of it |
-| --- | --- | --- |
-| `v=spf1 include:_spf.inboxcloud.example include:send.bulkpost.example include:mail.ticketdesk.example include:spf.officesuite.example ip4:198.51.100.24 ~all` | SPF | Four includes, none a known sender, so four senders not in the catalog |
-| `google-site-verification=h4rb0r-5upp1y-v3r1f1c4t10n` | Token | Google: Search Console or Workspace ownership |
-| `google-site-verification=0ld-ag3ncy-t0k3n-2019` | Token | A second Google token: the duplicate check |
-| `MS=ms48213705` | Token | Microsoft 365 or Entra ID domain |
-| `atlassian-domain-verification=…` | Token | Atlassian: Jira, Confluence or Atlassian Access |
-| `stripe-verification=…` | Token | Stripe account domain |
-| `docusign=…` | Token | DocuSign account domain |
-| `facebook-domain-verification=…` | Token | Meta Business Manager domain |
-| `acmesso-verify=…` | Unknown | Looks like a token for a service not in the catalog |
-
-**6 services suggested on harbor-supply.example.** "2 Google tokens" is the check: the second looks like an agency's token from 2019. "1 unrecognised token" and "Verification records are public" are informational. Take it further hands the SPF record to the SPF Checker, which answers its sample includes locally. Replace the sample with your own domain and every section, card and link is rewritten for it.
+Read the example from verdict to Findings, then compare the literal evidence. Open one Break it case and use Heal it or Revert. Finally, replace the default with a domain you are authorised to assess. This sequence demonstrates both the successful path and the failure contract without implying that the named public domain endorses the tool.
 
 ## For agents
 
-The Tamperbox MCP server has a `saas-stack` operation. Call it with the domain; it reads the TXT records at that name and its CNAME chain with its own server-side rules, returns services with token values redacted, and counts matched and unmatched records. Keep these with any conclusion:
+Agents can discover the `saas_stack` operation through Tamperbox MCP. The browser page id `saas-stack` is not the operation name. The server operation and browser renderer can expose different fields; inspect the operation schema before supplying arguments. Preserve the result's distinction between observed evidence, catalog inference and limitation. State whether the run was live or pasted, include the cleaned target and observation time, and never turn “not found” into “does not exist” unless the method truly establishes that condition.
 
-- Verification records are service signals, not proof of current use, a subscription or a complete inventory.
-- Google and Microsoft tokens do not identify a specific product.
-- Never ask an agent to delete a token without confirming who owns it.
+Choose a specialist operation when the task is narrow. Use this page's report when its combined view or educational findings add value. Do not pass credentials, private hostnames or customer data into a public lookup. If a repair would change production, present the exact evidence, expected effect, propagation window and rollback before acting.
 
-See [Connect an MCP client](/mcp/connect/) and [Security and privacy](/reference/security/).
+Machine readers should branch on status and structured fields where available, not English punctuation. Treat network and parse errors as inconclusive. Re-run after a meaningful interval rather than repeatedly polling a third-party source.
 
 ## Limits
 
-- One TXT lookup at one name, from one resolver at one moment.
-- 35 token prefixes and 18 SPF senders; others appear as unknown or other.
-- A token can be stale, copied or published by someone else with DNS access.
-- Nothing is stored.
+The catalog is intentionally finite. Services may verify with CNAME, files, meta tags, delegated subdomains or private account state, none of which a bare-domain TXT lookup sees. Tokens can remain after cancellation or be copied, so a match is a clue rather than proof of ownership, billing, activity or compromise.
+
+All outputs are point-in-time observations. Resolver caching, negative caching, anycast, geo steering, redirects and intermittent upstream failures can change a later run. The service does not retain a monitoring history or notify on change. Local History is an interaction aid, not durable evidence.
+
+No result grants permission to probe a target or modify it. Use authorised accounts and owner-approved procedures for deeper checks. Where business, security or legal decisions depend on attribution, obtain confirmation from the responsible provider or domain operator.
 
 ## References
 
-- [RFC 1035, Domain Names: Implementation and Specification](https://www.rfc-editor.org/rfc/rfc1035): section 3.3.14 (TXT).
-- [RFC 7208, Sender Policy Framework](https://www.rfc-editor.org/rfc/rfc7208): sections 3, 3.2, 4.6.4 and 5.2.
-- [RFC 8552, Scoped Interpretation of DNS Resource Records through Underscored Naming](https://www.rfc-editor.org/rfc/rfc8552): section 1.1.
-- [Domain Control Validation using DNS](https://datatracker.ietf.org/doc/draft-ietf-dnsop-domain-verification-techniques/), IETF DNSOP Internet-Draft.
-- [SPF Checker](https://tamperbox.dev/spf-checker), for the record this page only reads.
+- [RFC 1034](https://www.rfc-editor.org/rfc/rfc1034), Domain Names — Concepts and Facilities, especially [section 4.3.2](https://www.rfc-editor.org/rfc/rfc1034#section-4.3.2) for resolver behavior.
+- [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035), Domain Names — Implementation and Specification, especially [section 3.2.1](https://www.rfc-editor.org/rfc/rfc1035#section-3.2.1) for resource-record types and classes.
+- [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110), HTTP Semantics, especially [section 3.7](https://www.rfc-editor.org/rfc/rfc9110#section-3.7) for intermediaries and [section 15](https://www.rfc-editor.org/rfc/rfc9110#section-15) for status codes when HTTP evidence is collected.
+- [Tamperbox SaaS Stack Detector](https://tamperbox.dev/saas-stack), the interactive tool and current Markdown mirror.

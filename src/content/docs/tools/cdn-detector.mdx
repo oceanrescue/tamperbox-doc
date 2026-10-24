@@ -1,198 +1,179 @@
 ---
-title: CDN and Proxy Detector
-description: How the detector checks a site three independent ways, through its CNAME chain, the network that owns its addresses and its response headers, when it calls a CDN certain, probable or absent, and what the headers it lets through reveal about the origin.
-updated: 2026-10-20
+title: CDN Detector
+description: How Tamperbox combines DNS, network and HTTPS response clues to identify a likely content delivery network.
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
-agentSummary: Method, finding reference and repair guide for the Tamperbox CDN and Proxy Detector, which follows a name's CNAME chain through public DNS, asks a public IP-to-ASN service who announces each address, fetches one HTTPS response, and compares the three lanes against signatures for 11 CDNs and proxies, plus the cache status and origin headers the edge passes through. Pasted headers are read in the browser.
+agentSummary: Method, finding reference and repair guide for the Tamperbox CDN Detector.
 prerequisites:
-  - A domain, or the response headers of a page to paste
+  - a website hostname or pasted response evidence
 outputs:
-  - A verdict (behind a CDN, probably, two CDNs or none), three evidence lanes, the cache status and origin hints, the response headers with the ones that matched marked, and findings with fixes
+  - CNAME, address-network and header signals, their agreement, redirects and possible origin leakage
 limitations:
-  - A proxy can hide every trace and a name can use a CDN's addresses without a CNAME; absence of a signature is not proof; one view from one place at one moment
+  - Public observations are time-sensitive and do not prove ownership, intent or private configuration
 ---
 
-The tool page is [tamperbox.dev/cdn-detector](https://tamperbox.dev/cdn-detector). It opens on `www.harbor-supply.example`, a sample name on the reserved `.example` zone that runs through a CDN, with documentation addresses standing in for real networks. This page is the long version: the three kinds of evidence the detector reads, how it weighs them, what each finding means and how to confirm it yourself.
+The tool page is [tamperbox.dev/cdn-detector](https://tamperbox.dev/cdn-detector). It opens with a live lookup of `mozilla.org`; replace it to inspect your own target. This guide documents the actual input path, evidence contract, classifications and independent verification steps.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> a domain is sent to the Tamperbox server, which follows its CNAME chain and looks up its A and AAAA records through a public DNS resolver, asks a public IP-to-ASN service who announces each address, and makes one HTTPS GET for the home page. The signatures are matched in your browser. Pasted headers never leave the browser. The sample is answered in the browser. Nothing is stored.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> input cleanup, pasted-data parsing and report rendering happen in the browser. Live checks send only the validated public target to the Tamperbox server and the public services required for the lookup. The page stores no report; History is local to the current browser session.</div>
 
 ## What the tool answers
 
-1. **Does the name point at a CDN?** The CNAME chain, read against each CDN's host-name patterns.
-2. **Do its addresses belong to a CDN?** The network that announces each address.
-3. **Do its responses carry a CDN's headers?** Request ids, cache headers and server names each CDN adds.
-4. **Do the three agree?** Agreement is what makes a verdict firm.
-5. **What shows through?** The cache status of the response, and headers the edge passes on from the server behind it.
+The checker answers whether several independent public signals suggest a CDN and whether those signals agree about the provider. Its conclusion is deliberately narrower than an ownership or security claim. A displayed provider, product, name or passing check means that the listed public evidence matched a documented rule at the observation time.
 
-It does not attempt to find the origin's address and does not test whether the origin can be reached around the CDN.
+Every conclusion is paired with evidence. The opening verdict is a summary for orientation, while Findings contains the actionable interpretation and the later result sections retain the underlying records, addresses, fields or names. If a conclusion matters operationally, verify that evidence through an authoritative account or an independent standards-aware client before changing production.
 
 ## Inputs
 
-### A domain
+### Accepted source
 
-`www.example.com`, or a full address pasted from the address bar, which becomes the host name in the box. The three lookups run when you stop typing or on Enter. The name you enter is the name checked; when it redirects, the headers are those of its own first response, and Heal it offers to check the destination instead.
+Enter a domain for live DNS, network-owner and HTTPS checks, or paste HTTP response headers for local classification. Pasted headers provide only HTTP evidence; they cannot establish a CNAME chain or address owner. The parser retains response status and header fields. A live HTTPS failure leaves the DNS and network evidence available with a limitation.
 
-### Pasted response headers
+Text files are read in the browser. The resulting input follows the same classification rules as the field; reading a file locally does not make a domain or public-IP lookup offline. Cleanup keeps an already accepted record intact and otherwise tries unwrapping a single-line address. Unusable text remains visible for correction.
 
-Text with an HTTP status line, or with `name: value` lines, is read as headers in the browser; only the headers lane is filled. This is the output of `curl -sI https://example.com/` or a copy from the browser's network panel. A later status line (after a redirect) starts the list again, so the last response wins. A line starting with a URL scheme is not mistaken for a header. "No headers found" is the error when nothing parses.
+### When work runs
 
-### Files
+Domain input runs after a 600-millisecond typing pause. Enter runs it immediately; pasted records run immediately. Drops and page-wide paste use the same input loader. Leaving the field applies cleanup and reruns only when cleanup changes the text. Each edit aborts the previous request and increments a generation marker. A slower old response therefore cannot replace a newer result, and clearing the source immediately clears copyable output.
 
-A `.txt` file dropped on the page or opened with Add a file is read in the browser.
+The opening input uses the same parser and processing path as a replacement. The labelled live default sends the same requests as another domain.
 
 ## Reading the result
 
-### Verdict and chips
+### Verdict and privacy
 
-"Behind Cloudflare: DNS, the network and the headers agree." when every available lane points at the same CDN; "Probably Fastly:" when only some do; "Two CDNs in the path:" when a second CDN has two or more signals; "No CDN found." otherwise. One chip per lane says which CDN it points to, or "no CDN".
+The verdict states what the available evidence supports and uses pass, check, fail or informational status consistently. Pass means the bounded rule succeeded. Check means a human should confirm context. Fail means a concrete operational rule was violated. Info describes a limitation, absence or neutral fact and must not be promoted into success or failure by an automated reader.
 
-### Findings, Take it further, History
+Two privacy lines distinguish browser-only work from live lookup work. The Checked line names the cleaned input and source mode. Copy result is hidden while work is pending, after an error and when input is empty, preventing a stale report from being exported as current.
 
-Findings are worst first, passes folded. Take it further hands the first address to the [ASN Lookup](https://tamperbox.dev/asn-lookup), and, when a CDN was found, the host to the [SSL Certificate Checker](https://tamperbox.dev/ssl-checker) (the certificate the edge serves), the [HTTP/3 Checker](https://tamperbox.dev/http3-checker) and the [Security Headers Grader](https://tamperbox.dev/security-headers). History logs every Break it case and Heal it repair, with Revert and Reset input.
+### Findings and evidence
 
-### Evidence
+Findings are ordered with failures first, then checks, informational notes and passes. Repeated passing details can fold into a disclosure so that exceptions remain visible. Each item states the observation and its consequence; any remediation is scoped to the evidence rather than presented as a universal configuration recipe.
 
-Three lanes side by side: DNS (the CNAME chain), Network (who owns the addresses) and Response headers (what the server added). Each lists what it observed, with an arrow to the CDN it points to, and a badge: pass when it agrees with the verdict, check when it points elsewhere, info when it shows nothing. A lane that was not checked (pasted headers, a failed fetch) says why.
+Evidence sections follow Findings and precede History. They are the audit trail for the verdict. A provider label derived from a catalog remains an inference, while a literal record or response field remains an observation. This distinction matters when signatures are incomplete, white-labelled or stale.
 
-### Behind the CDN
+### History and handoffs
 
-The cache status, the age in cache, and each origin hint: a header the server behind the CDN set and the edge passed on. With no CDN, the plain `Server` value is shown.
+History records intentional input replacements, including Break it examples and their repairs. Revert restores the prior input and runs it again, including live requests when applicable; Reset input returns to the value at the beginning of the recorded sequence. History is not monitoring, persistence or an account log.
 
-### Response headers
+Check the rest carries the current input to other tools in Domains & hosting. Take it further sends the redirect hostname to the [Website Hosting Checker](/tools/website-hosting/) or [Website Technology Detector](/tools/website-technology/). These links appear only when that hostname differs from the input. A receiving tool runs its own check; agreement is not guaranteed.
 
-Every header, with the ones that matched a signature or an origin hint marked.
+Explicit tool links transfer the input through temporary browser `sessionStorage` and, when needed, a same-origin browser channel. The URL fragment contains a random transfer token, not the input. Transfers are accepted for less than one minute, consumed once, and bound to the destination path. The destination removes the token from its address. Ordinary documentation links and direct visits do not restore a previous input; if transfer storage is unavailable, the link still opens the tool.
+
 
 ## Method
 
-### 1. The DNS lane
+### Validation and collection
 
-The name's CNAME records are followed up to eight steps ([RFC 1034 section 3.6.2](https://www.rfc-editor.org/rfc/rfc1034#section-3.6.2), [RFC 1035 section 3.3.1](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.1)). Each target is tested against the CDN host-name patterns: `.cdn.cloudflare.net`, `.fastly.net` and `.fastlylb.net`, `.akamaiedge.net`, `.edgekey.net`, `.edgesuite.net` and `.akamaized.net`, `.cloudfront.net`, `.b-cdn.net`, `.azurefd.net` and `.azureedge.net`, `.vercel-dns.com`, `.netlify.app` and `.incapdns.net`. Pointing a name at a CDN's host name with a CNAME is how most CDNs are configured; a name at the zone apex usually cannot have a CNAME, so its DNS lane is often empty even when it is behind a CDN.
+Before collection, the same domain validation runs in the browser and on the server boundary. Requests are restricted to supported public DNS names and HTTPS roots, redirects are bounded, response sizes are capped and abort signals are propagated. These limits make the observation reproducible and prevent an entered value from becoming an unrestricted network fetch.
 
-### 2. The network lane
+Use the input modes above to determine which requests run. DNS evidence comes from a public recursive view and can reflect cache state. Local classification cannot add observations absent from the supplied evidence. A server lookup is a fresh observation, not confirmation that cached or pasted evidence is still current.
 
-The A and AAAA records at the end of the chain are looked up, and each address's announcing network is read from the [Team Cymru IP to ASN mapping service](https://www.team-cymru.com/ip-asn-mapping). An owner that matches a CDN in the network catalog (Cloudflare, Fastly, Akamai, Amazon CloudFront, Bunny CDN, Imperva, Sucuri, StackPath) is a signal for that CDN. CloudFront addresses are announced by Amazon's general network, so they usually show as Amazon Web Services and add no network signal.
+### Classification rules
 
-### 3. The headers lane
+The checker resolves the host, maps returned addresses, fetches the HTTPS root and scores catalogued signatures in CNAME suffixes, network ownership and response fields. It keeps each signal visible. [RFC 9110 section 3.7](https://www.rfc-editor.org/rfc/rfc9110#section-3.7) distinguishes origins, proxies and gateways, so a header alone is never treated as conclusive. A redirect is reported because the entered host and final host can have different delivery paths.
 
-One HTTPS GET for the home page, without following redirects for this lane. Each CDN has header signatures, a header name and optionally a value pattern:
+No confidence percentage is invented. When sources disagree, the disagreement is a finding. When a source is unavailable, the affected conclusion becomes informational or inconclusive rather than silently using a previous result. Catalog matches are exact bounded rules; unknown is a valid outcome.
 
-| CDN | Header signatures |
-| --- | --- |
-| Cloudflare | `cf-ray`, `server: cloudflare`, `cf-cache-status` |
-| Fastly | `x-served-by` with `cache-`, `x-fastly-request-id`, `fastly-debug-digest`, `via` with `varnish` |
-| Akamai | `x-akamai-transformed`, `akamai-grn`, `server: AkamaiGHost`, `x-akamai-request-id` |
-| Amazon CloudFront | `x-amz-cf-id`, `x-amz-cf-pop`, `via` or `x-cache` naming CloudFront |
-| Bunny CDN | `server: BunnyCDN`, `cdn-requestid` |
-| Azure Front Door | `x-azure-ref`, `x-fd-healthprobe` |
-| Google Cloud CDN | `via` naming Google |
-| Vercel | `x-vercel-id`, `server: Vercel` |
-| Netlify | `x-nf-request-id`, `server: Netlify` |
-| Sucuri | `x-sucuri-id`, `server` naming Sucuri |
-| Imperva | `x-iinfo`, `x-cdn` naming Imperva or Incapsula |
+### Ordering and export
 
-`Via` is the standard header for intermediaries: [RFC 9110 section 7.6.3](https://www.rfc-editor.org/rfc/rfc9110#section-7.6.3) says "A proxy MUST send an appropriate Via header field" in each message it forwards. Many CDNs do not, or replace it, which is why vendor headers carry most of the evidence. `Server` is defined in [RFC 9110 section 10.2.4](https://www.rfc-editor.org/rfc/rfc9110#section-10.2.4); an edge often rewrites it with its own name.
+The renderer calculates all findings from the current observation before updating the verdict, chips, evidence and landing cards. Status priority is fail, check, info, pass. Stable secondary ordering keeps repeated runs readable without changing severity.
 
-### 4. Weighing the lanes
-
-Signals are tallied per CDN and ranked by how many lanes agree, then by how many signals there are. The top CDN is the verdict. The available lanes are the ones that could be checked: headers only for pasted input; DNS (when there is an alias), network and headers (unless the fetch failed) for a domain.
-
-- Every available lane points at the top CDN: "Behind X" (pass).
-- Some do: "Probably X" (check), with the finding "The signals disagree". A stripped header or an apex name without a CNAME are the usual innocent causes.
-- A second CDN has two or more signals: "Two CDNs in the path", with "Signals for Y too". One normally sits in front of the other.
-- Nothing matched: "No CDN found." A proxy can remove every trace, so this is the absence of evidence.
-
-### 5. Cache status and age
-
-The cache status is read from `cf-cache-status`, then `x-cache`, then `x-vercel-cache`; a value containing "hit" means the response came from the cache. `Age` ([RFC 9111 section 5.1](https://www.rfc-editor.org/rfc/rfc9111#section-5.1)) is the edge's estimate, in seconds, of how long ago the response was generated at the origin.
-
-### 6. Origin hints
-
-Some headers are set by the server behind the CDN and passed through: `x-amz-request-id` and `x-amz-id-2` (Amazon S3), `x-goog-generation` (Google Cloud Storage), `x-ms-request-id` (Azure Storage), `x-github-request-id` (GitHub Pages), `x-shopid` (Shopify), `x-wix-request-id` (Wix), `x-pantheon-styx-hostname` (Pantheon), `x-kinsta-cache` (Kinsta) and the value of `x-powered-by`. Behind a CDN the first one becomes "The origin shows through", with the advice to strip origin headers at the edge.
+The Markdown mirror and Copy result output preserve input, summary, findings and important evidence in text form. They do not embed secrets, browser state or the expanded educational cards. Agents should cite the observation time and limitation alongside any exported conclusion.
 
 ## Standards and conformance
 
-| Specification | Sections used | How the tool applies them | Where it stops |
-| --- | --- | --- | --- |
-| [RFC 1034](https://www.rfc-editor.org/rfc/rfc1034), [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035) | [1034 3.6.2](https://www.rfc-editor.org/rfc/rfc1034#section-3.6.2), [1035 3.3.1](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.1) | CNAME chain followed to the canonical name, eight steps at most | One recursive resolver; geographic answers elsewhere differ |
-| [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110), HTTP Semantics | [7.6.3](https://www.rfc-editor.org/rfc/rfc9110#section-7.6.3) Via, [10.2.4](https://www.rfc-editor.org/rfc/rfc9110#section-10.2.4) Server | Via and Server values tested against CDN patterns | A missing Via is not reported as a violation; many CDNs omit it |
-| [RFC 9111](https://www.rfc-editor.org/rfc/rfc9111), HTTP Caching | [5.1](https://www.rfc-editor.org/rfc/rfc9111#section-5.1) Age | Shown as the age in cache | Freshness is not computed |
-| [RFC 9211](https://www.rfc-editor.org/rfc/rfc9211), Cache-Status | [2](https://www.rfc-editor.org/rfc/rfc9211#section-2) | Not read: the tool reads the vendor cache headers most CDNs still send | A CDN that only sends `Cache-Status` shows no cache status here |
+### Applied specifications
 
-The vendor headers in the signature table are each CDN's own documented or observed behaviour, not standards.
+| Source | Rule used | Boundary |
+| --- | --- | --- |
+| [RFC 1034 section 3.6.2](https://www.rfc-editor.org/rfc/rfc1034#section-3.6.2) | DNS aliases expose a canonical chain | The chain is evidence, not proof of traffic handling |
+| [RFC 9110 section 5](https://www.rfc-editor.org/rfc/rfc9110#section-5) | HTTP fields carry extensible metadata | Known response signatures are matched case-insensitively |
+| [RFC 9110 section 7.6.3](https://www.rfc-editor.org/rfc/rfc9110#section-7.6.3) | Via identifies intermediaries in a forwarding chain | Absence of Via does not mean absence of a CDN |
+| [RFC 9111 section 1](https://www.rfc-editor.org/rfc/rfc9111#section-1) | HTTP caching may be performed by intermediaries | Cache behavior itself is not benchmarked |
+
+These references define the records and message semantics, not the provider catalogs. A catalog is product logic and can lag branding, acquisitions or custom deployments. Where a standard permits several valid configurations, the tool reports the observed form and avoids declaring one commercial pattern universally correct.
+
+### Where conformance stops
+
+The checker is an observer, not an authoritative DNS server, browser, certificate monitor, mail receiver or provider control plane. It does not claim protocol conformance for the target. It applies selected validation and interpretation rules to bounded evidence and exposes the boundary where a fuller protocol operation would begin.
+
+The phrase “public” refers to the server's Internet view. Private split-horizon answers, authenticated dashboards and regional routing can differ. Cached answers can remain until TTL expiry, and HTTP intermediaries can transform what the origin sent.
 
 ## Finding reference
 
-| Finding | Severity | What it means | Fix |
+### Emitted findings
+
+| Finding | Severity | Meaning | Repair or next check |
 | --- | --- | --- | --- |
-| The signals disagree | CHECK | Only some lanes point at the CDN; the name may resolve around it, or headers were stripped | Check the DNS record is proxied; lock the origin to the CDN |
-| The origin shows through: X | INFO | A header names the server behind the CDN | Strip origin headers at the edge |
-| Signals for X too | INFO | A second CDN leaves two or more signals; one is layered in front of the other | Remove a leftover CDN configuration if it is not deliberate |
-| X redirects to Y | INFO | The signals are for the name you entered; the page visitors land on may be served differently | Heal it: check Y instead |
-| The site was not fetched | INFO | The headers lane is empty; the verdict rests on DNS and the network | Paste the headers, or fix HTTPS on the host |
-| No CDN signature | INFO | No lane matched a CDN | None needed; consider a CDN if visitors are far away |
+| Signals agree | Pass | Available CNAME, network and header clues name one CDN | Confirm in the provider account for operational decisions |
+| Signals disagree | Check | At least one available clue names another path | Inspect redirects, multi-CDN routing and stale DNS |
+| Origin shows through | Info | A response field names software behind the edge | Strip unnecessary origin-identifying fields at the CDN |
+| Signals for another CDN | Info | A second provider has multiple clues | Check layered or migrating delivery |
+| Site was not fetched | Info | DNS evidence exists but HTTPS failed | Retry and test the response directly |
+| No CDN signature | Info | The bounded catalog found no match | Treat as unknown, not proof of direct hosting |
+| Redirects to another host | Info | Visitors finish on a different name | Inspect the destination separately |
+
+Wording can include the observed name, count, provider or status. Automated consumers should use the supplied status and evidence rather than parsing the English title as a permanent identifier. A missing finding is not evidence that the corresponding external condition is absent when its source could not be collected.
+
+### Status handling
+
+| Status | Consumer action | What not to infer |
+| --- | --- | --- |
+| Pass | Preserve the evidence and continue normal review | Permanent correctness, ownership or availability |
+| Check | Confirm intent and inspect the named evidence | Definite compromise or outage |
+| Fail | Prioritise the concrete broken rule and verify independently | That every user sees the same failure |
+| Info | Carry the limitation or neutral fact with the report | Success merely because no failure was emitted |
 
 ## Guide
 
-### Confirm a CDN yourself
+### Verify independently
 
-1. DNS: `dig +short www.example.com CNAME` shows the alias.
-2. Network: `dig +short www.example.com A`, then `dig +short TXT <reversed address>.origin.asn.cymru.com` for the announcing AS.
-3. Headers: `curl -sI https://www.example.com/` shows the edge's headers; repeat it to watch the cache status turn from MISS to HIT.
+Start with an authoritative or widely used command-line client. For DNS, use `dig` with the exact record type and compare every returned owner, target and TTL. Add `+trace` only when delegation matters; a trace and a recursive answer solve different questions. For HTTPS, use `curl -I --location https://host/` and retain each hop and response field. For certificates, use an established TLS client and a CT monitor you trust.
 
-### The signals disagree
+Repeat from another network when geography or split routing could matter. Save the observation time and the original evidence before editing. After a DNS change, wait at least the prior TTL and then query both the intended authorities and independent recursive resolvers.
 
-1. Read which lane is missing. A missing DNS lane on the bare domain is usually harmless: apex names use flattened records.
-2. A missing network lane means the name resolves to addresses outside the CDN. In the CDN's dashboard, check the record is proxied rather than DNS only.
-3. A missing headers lane means the edge strips its own headers, or the fetch reached the origin.
-4. Check again; all available lanes should agree.
+### Repair safely
 
-### The origin shows through
+Do not delete an unfamiliar record or reroute a public name merely because a catalog labels it. First identify the owning service, deployment repository or provider account. Confirm whether the item is current, a migration remnant, a failover path or a delegated responsibility. Make the smallest reversible change, keep the prior value, and have a rollback trigger.
 
-Add a response header rule at the edge that removes the origin's headers (for Amazon S3, `x-amz-request-id` and `x-amz-id-2`), and restrict the origin: an origin access policy for storage, signed requests, or an allow list of the CDN's ranges. Confirm with `curl -sI` that the headers are gone.
+Re-run this page after propagation, then verify the user-visible service. A clean public lookup cannot prove application health. Conversely, an informational unknown does not require a speculative change.
 
-### Two CDNs
+### Diagnose conflicting evidence
 
-Find which one visitors reach: the DNS lane's CNAME names the outer one. If the inner one is left over from a migration, remove its configuration.
+When two signals disagree, ask whether they describe different layers: apex versus www, resolver cache versus authority, CDN edge versus origin, entered host versus redirected host, or certificate history versus current DNS. Compare literal evidence before comparing labels. The disagreement itself often reveals a migration or intermediary.
 
-### Break it cases
+If a lookup fails, preserve the error and retry once. Repeated timeouts are not equivalent to empty data. Use the specialist tool linked by the finding for deeper parsing rather than converting an inconclusive aggregate result into a failure.
 
-| Case | What it loads | What it shows |
-| --- | --- | --- |
-| Fastly, Akamai, CloudFront headers | Fixed header sets | Each CDN's header signatures |
-| Two CDNs | Cloudflare and CloudFront headers together | The two-CDN verdict |
-| No CDN | Plain nginx headers | No CDN found |
-| The bare domain | Your name without `www.` | A name that is often served without the CDN |
-| CDN headers stripped | Your headers with every CDN signature removed | What a proxy that hides itself looks like |
+### Break it and heal it
+
+The Break it controls create documented edge cases from the visitor's own input or a reserved fixture. They are teaching states, not scans. Heal it restores a safe derived value when the repair is deterministic. Revert remains available when several changes have been made.
+
+Use these cases to learn how invalid, missing, mixed or stale evidence appears before diagnosing production. The control never edits DNS, hosting, certificates or provider accounts.
 
 ## Worked example
 
-The page opens on `www.harbor-supply.example`, answered in the browser. Its CNAME points at `www.harbor-supply.example.cdn.cloudflare.net`, its addresses are labelled Cloudflare, and its headers carry `server: cloudflare`, `cf-ray` and `cf-cache-status: HIT` with `age: 1834`, plus `x-amz-request-id` from the storage behind it.
+The live default is `mozilla.org`. Its response and network evidence demonstrate why the tool exposes disagreement rather than forcing a confident provider label. Live routing may change, so the documentation records the method rather than freezing the result.
 
-**Behind Cloudflare: DNS, the network and the headers agree.** The response came from the cache. "The origin shows through: Amazon S3" is the one thing to tidy. The Break it case "The bare domain" loads `harbor-supply.example`, which shows no CDN and redirects to www; Heal it checks www instead. Replace the sample with your own domain and every section, card and link is rewritten for it.
+Read the example from verdict to Findings, then compare the literal evidence. Open one Break it case and use Heal it or Revert. Finally, replace the default with a domain you are authorised to assess. This sequence demonstrates both the successful path and the failure contract without implying that the named public domain endorses the tool.
 
 ## For agents
 
-The Tamperbox MCP server has a `cdn-detector` operation. Call it with the domain; it compares DNS aliases, network ownership and the headers of a HEAD request on the submitted host, with its own server-side signatures, and reports `detected: true` or `null`, never `false`. Keep these with any conclusion:
+Agents can discover the `cdn_detector` operation through Tamperbox MCP. The browser page id `cdn-detector` is not the operation name. The server operation and browser renderer can expose different fields; inspect the operation schema before supplying arguments. Preserve the result's distinction between observed evidence, catalog inference and limitation. State whether the run was live or pasted, include the cleaned target and observation time, and never turn “not found” into “does not exist” unless the method truly establishes that condition.
 
-- Every signal can be hidden or spoofed; no match means unknown, not "no CDN".
-- Headers are inspected on the submitted host without following its redirects.
-- DNS hosting alone is not a proxy signal.
+Choose a specialist operation when the task is narrow. Use this page's report when its combined view or educational findings add value. Do not pass credentials, private hostnames or customer data into a public lookup. If a repair would change production, present the exact evidence, expected effect, propagation window and rollback before acting.
 
-See [Connect an MCP client](/mcp/connect/) and [Security and privacy](/reference/security/).
+Machine readers should branch on status and structured fields where available, not English punctuation. Treat network and parse errors as inconclusive. Re-run after a meaningful interval rather than repeatedly polling a third-party source.
 
 ## Limits
 
-- Signatures cover the 11 CDNs in the catalog; others show as no CDN.
-- One resolver and one fetch, from one place at one moment; anycast and geographic DNS differ elsewhere.
-- No attempt is made to find or reach the origin.
-- Pasted headers fill only the headers lane.
-- Nothing is stored.
+A CDN can hide or rewrite every catalogued clue, while an origin can imitate a familiar header. Geo steering and split DNS can return different providers elsewhere. The HTTPS request is one server-side vantage point and does not measure cache hits, latency, shielding, WAF behavior or contractual ownership.
+
+All outputs are point-in-time observations. Resolver caching, negative caching, anycast, geo steering, redirects and intermittent upstream failures can change a later run. The service does not retain a monitoring history or notify on change. Local History is an interaction aid, not durable evidence.
+
+No result grants permission to probe a target or modify it. Use authorised accounts and owner-approved procedures for deeper checks. Where business, security or legal decisions depend on attribution, obtain confirmation from the responsible provider or domain operator.
 
 ## References
 
-- [RFC 1034](https://www.rfc-editor.org/rfc/rfc1034) and [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035): section 3.6.2 and section 3.3.1 (CNAME).
-- [RFC 9110, HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110): sections 7.6.3 (Via) and 10.2.4 (Server).
-- [RFC 9111, HTTP Caching](https://www.rfc-editor.org/rfc/rfc9111): section 5.1 (Age).
-- [RFC 9211, The Cache-Status HTTP Response Header Field](https://www.rfc-editor.org/rfc/rfc9211): section 2, the standard successor to vendor cache headers.
-- [Team Cymru IP to ASN mapping](https://www.team-cymru.com/ip-asn-mapping).
-- [Website Hosting Checker](https://tamperbox.dev/website-hosting), which compares the bare domain and www.
+- [RFC 1034](https://www.rfc-editor.org/rfc/rfc1034), Domain Names — Concepts and Facilities, especially [section 4.3.2](https://www.rfc-editor.org/rfc/rfc1034#section-4.3.2) for resolver behavior.
+- [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035), Domain Names — Implementation and Specification, especially [section 3.2.1](https://www.rfc-editor.org/rfc/rfc1035#section-3.2.1) for resource-record types and classes.
+- [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110), HTTP Semantics, especially [section 3.7](https://www.rfc-editor.org/rfc/rfc9110#section-3.7) for intermediaries and [section 15](https://www.rfc-editor.org/rfc/rfc9110#section-15) for status codes when HTTP evidence is collected.
+- [Tamperbox CDN Detector](https://tamperbox.dev/cdn-detector), the interactive tool and current Markdown mirror.
