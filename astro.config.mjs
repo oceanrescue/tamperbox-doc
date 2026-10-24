@@ -35,6 +35,15 @@ export default defineConfig({
         ] },
         { label: 'Tools', items: [
           { label: 'All tool pages', link: '/tools/' },
+          { label: 'Network', collapsed: false, items: [
+            { label: 'ASN Lookup', link: '/tools/asn-lookup/' },
+            { label: 'BGP Route Lookup', link: '/tools/bgp-lookup/' },
+            { label: 'TCP Ping', link: '/tools/tcp-ping/' },
+            { label: 'Minecraft Server Status Checker', link: '/tools/minecraft-server-status/' },
+            { label: 'Open Port Checker', link: '/tools/open-port-checker/' },
+            { label: 'What Is My IP Address?', link: '/tools/what-is-my-ip/' },
+            { label: 'My Connection Info', link: '/tools/connection-info/' },
+          ] },
           { label: 'DNS records', collapsed: false, items: [
             { label: 'DNSSEC Checker', link: '/tools/dnssec-checker/' },
             { label: 'Reverse DNS Lookup', link: '/tools/reverse-dns/' },

@@ -1,0 +1,236 @@
+---
+title: ASN Lookup
+description: How the ASN Lookup finds the network that announces an address and the organisation its block is registered to, every rule behind its verdict and findings, and how to act on each one.
+updated: 2026-10-24
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and guide for the Tamperbox ASN Lookup, which asks RIPEstat (RIPE RIS route collectors) for the routed prefix and origin networks of a public address or the overview of an AS number, and asks the address registry over RDAP who holds the block.
+prerequisites:
+  - A public IPv4 or IPv6 address, an AS number from 1 to 4294967295, or a domain that resolves to an address
+outputs:
+  - A verdict naming the origin network or networks, the routed prefix, the registered holder of the block, and findings that explain multiple origins, missing announcements and holder differences
+limitations:
+  - Route collector data is a sample of the internet and lags real changes; the registry names the holder of a block, never the person using an address; a domain is checked through its first address only
+---
+
+The tool page is [tamperbox.dev/asn-lookup](https://tamperbox.dev/asn-lookup). It opens on a live lookup of `tamperbox.dev`, answers in one sentence which network announces the address, and shows the evidence under it: the origin networks, the registration of the block and the findings. This page is the long version: what the lookup asks, every rule it applies, what each finding means for someone holding a log line or a firewall rule, and how to confirm the answer without Tamperbox.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> the input is read in your browser first. Private, loopback, link-local, shared (carrier-grade NAT) and unique local addresses are explained there and never sent. The documentation ranges that Break it uses are answered from sample data in the browser. Any other address or AS number is sent to the Tamperbox server, which asks RIPEstat and the address registry and returns the observation. A domain starts A and AAAA queries on the same server first, and the first returned address is selected.</div>
+
+## What the tool answers
+
+Three questions, in the order an operator asks them about an unfamiliar address:
+
+1. **Is the address routed at all?** Does any network announce a prefix that covers it, as seen by the RIPE RIS route collectors?
+2. **Which network announces it?** The origin autonomous system of that prefix, or several of them, with each network's name and whether it is announcing.
+3. **Who holds the block?** The registration record from the regional internet registry: the registered name, handle, address range, country and contacts.
+
+For an AS number the questions shrink to two: who holds the number, and is it announcing anything. The verdict sentence answers the first open question; the chips repeat the origin and the registration so the two can be compared at a glance.
+
+## Inputs
+
+### A public IP address
+
+`1.1.1.1` or `2606:4700:4700::1111`. The lookup runs about 600 ms after typing pauses, or at once on Enter. The address is normalised (an IPv6 address is compressed) before it is sent. Only global unicast addresses are sent; the special-purpose ranges in [RFC 6890](https://www.rfc-editor.org/rfc/rfc6890#section-2.2.2) are explained instead:
+
+| Range | Explained as | Why it is not looked up |
+| --- | --- | --- |
+| `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` | Private address | [RFC 1918, section 3](https://www.rfc-editor.org/rfc/rfc1918#section-3): not routed on the internet |
+| `100.64.0.0/10` | Shared address used by carrier-grade NAT | [RFC 6598, section 4](https://www.rfc-editor.org/rfc/rfc6598#section-4) |
+| `127.0.0.0/8`, `::1` | Loopback address | Never leaves the machine |
+| `169.254.0.0/16`, `fe80::/10` | Link-local address | Never routed |
+| `fc00::/7` | Unique local address | [RFC 4193, section 3](https://www.rfc-editor.org/rfc/rfc4193#section-3) |
+| `192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`, `2001:db8::/32` | Documentation address | Answered from sample data ([RFC 5737, section 3](https://www.rfc-editor.org/rfc/rfc5737#section-3), [RFC 3849, section 2](https://www.rfc-editor.org/rfc/rfc3849#section-2)) |
+
+### An AS number
+
+`AS13335` or `13335`, from 1 to 4294967295, the four-octet range of [RFC 6793](https://www.rfc-editor.org/rfc/rfc6793#section-3). AS 0 and numbers outside the range are refused with a message. The documentation numbers 64496 to 64511 and 65536 to 65551 ([RFC 5398, section 2](https://www.rfc-editor.org/rfc/rfc5398#section-2)) are answered from sample data.
+
+### A domain
+
+`example.org` is resolved through our server's DNS endpoint: an A record first, and an AAAA record only when there is no A record. The first address returned is looked up, and the verdict says so ("example.org resolves to …"). A name behind a CDN or a load balancer therefore shows the provider that announces that one address, not necessarily the origin server, and the other addresses are not checked.
+
+### Near misses and pasted text
+
+Pasting is forgiving. A full link keeps its host (`https://example.org/path` becomes `example.org`); quotes, brackets and trailing punctuation are dropped. Text that fits nothing stays exactly as pasted, and the tool's own message explains why. Some near misses get a one-click repair in Heal it instead of a lookup:
+
+- `AS 13335`, with a space, offers `AS13335`.
+- A URL typed by hand offers its host.
+- A prefix such as `198.51.100.24/24` offers the address, because this tool looks up one address; [BGP Route Lookup](/tools/bgp-lookup/) takes prefixes.
+- An IPv4 address with a port (`192.0.2.1:443`) offers the address without it.
+
+A file dropped on the field or opened with Add a file is read in the browser; its first line becomes the input.
+
+## Reading the result
+
+### Verdict and chips
+
+One of three sentences for an address: "AS… announces [address] in [prefix]", "N networks announce [prefix]" (a warning), or "[address] is not announced" (a warning). For an AS number: "is announcing routes", "is not announcing any routes" (a warning) or "is not in use" (a warning). The chips name the origin (or the count of origins) and the registration; each one scrolls to its section.
+
+### Findings
+
+Directly under the verdict, worst first. Every finding is listed in the [Finding reference](#finding-reference). The count on the right is the number of findings to check, never the informational ones.
+
+### Announced by
+
+One row per origin network: the organisation name, its registry handle, the AS number and an Announcing or Not announcing badge. If the name lookup for an origin fails, the row says "Name unavailable right now" instead of dropping the network. The line on the right gives the source and the age of the routing data, for example "data from 4 hours ago".
+
+### Registered to
+
+The registration of the address block: name, handle, address range, country and up to ten contacts with their roles (registrant, abuse, technical, administrative). The section is hidden for an AS number.
+
+## Method
+
+### 1. Reading the input
+
+The input is parsed in the browser by `parseAsnInput` in the order above: a spaced AS number, a URL, an AS number, a prefix, an IPv4 address with a port, an address, a dotted quad with an octet over 255, then a host name. The first rule that matches decides; anything else is refused as "not an IP address, AS number or domain".
+
+### 2. Routed prefix and origin networks
+
+For an address, the server asks RIPEstat's `network-info` data call for the most specific prefix that RIPE RIS collectors see covering the address and the AS numbers originating it. The origin of a route is the AS that put it into BGP: the rightmost AS in the final `AS_SEQUENCE` of the route's `AS_PATH` ([RFC 4271, section 5.1.2](https://www.rfc-editor.org/rfc/rfc4271#section-5.1.2); the definition of "Route Origin ASN" in [RFC 6811, section 2](https://www.rfc-editor.org/rfc/rfc6811#section-2)). Duplicate origins are removed. An answer with more than 32 origins is refused as incomplete rather than shown partially. Names come from RIPEstat's `as-overview` for at most eight origins; beyond eight a finding lists every number.
+
+The verdict follows the number of origins. One origin is the expected state. Several origins are a warning because, in the words of [RFC 1930, section 7](https://www.rfc-editor.org/rfc/rfc1930#section-7), "Generally, a prefix can should belong to only one AS", and the exceptions (anycast, a customer announced by two providers, aggregation) are deliberate choices the tool cannot see. No observed origin produces a warning verdict. Collector absence does not prove that every network lacks a usable route.
+
+### 3. Registration over RDAP
+
+In parallel, the server finds the registration through the Registration Data Access Protocol. It reads IANA's bootstrap file for IPv4 or IPv6 and picks the service by longest prefix match, as [RFC 9224, section 5](https://www.rfc-editor.org/rfc/rfc9224#section-5) specifies ("found by doing a longest match of the target address"). It uses only HTTPS base URLs, builds the `ip/<address>` query of [RFC 9082, section 3.1.1](https://www.rfc-editor.org/rfc/rfc9082#section-3.1.1), and follows at most three redirects, which covers address space transferred between registries. The answer must be an IP network object ([RFC 9083, section 5.4](https://www.rfc-editor.org/rfc/rfc9083#section-5.4)); the name, handle, start and end address, country and up to ten entities with their roles are kept.
+
+"No registration" appears only for a real RDAP not-found answer (an error document with `errorCode` 404, [RFC 9083, section 6](https://www.rfc-editor.org/rfc/rfc9083#section-6)). Any other failure, including a registry that rate-limits the request, reads "Registry unavailable", and the routing evidence stays on the page.
+
+### 4. Comparing holder and announcer
+
+The page takes the first word of the registered name (split at a hyphen or a space) and looks for it in the name of the first origin network. If it is not there, an informational finding says the two differ. It is a plain text comparison: an organisation that uses unrelated names in the registry and in its AS record triggers it too, so read both names before drawing a conclusion.
+
+### 5. AS numbers
+
+For an AS number the server asks RIPEstat's `as-overview` for the holder and whether the network announces any prefix. No RDAP query is made. A holder string such as `CLOUDFLARENET - Cloudflare, Inc.` is split so the organisation reads first and the handle is quieter. No holder and no announcement reads "is not in use"; a holder without an announcement reads "is not announcing any routes".
+
+### Limits of the lookup itself
+
+| Limit | Value |
+| --- | --- |
+| Origins accepted from RIPEstat | 32 |
+| Origins named | 8 |
+| Registry contacts kept | 10 |
+| RDAP redirects followed | 3 |
+| Server time limit | 20 seconds |
+| Input length | 300 characters |
+
+<span id="standards"></span>
+
+## Standards and conformance
+
+| Specification | Sections used | How the tool applies them | Where it stops |
+| --- | --- | --- | --- |
+| [RFC 4271](https://www.rfc-editor.org/rfc/rfc4271) BGP-4 | [5.1.2](https://www.rfc-editor.org/rfc/rfc4271#section-5.1.2) AS_PATH | The origin is read from collector data, not from a session of our own | No BGP session; no path, communities or local preference shown. Updated by RFC 6793 and later RFCs |
+| [RFC 6811](https://www.rfc-editor.org/rfc/rfc6811) origin validation | [2](https://www.rfc-editor.org/rfc/rfc6811#section-2) definitions | Origin AS as defined there | The tool does not compute Valid, Invalid or NotFound against RPKI; a second origin is flagged, not judged |
+| [RFC 1930](https://www.rfc-editor.org/rfc/rfc1930) BCP 6 | [7](https://www.rfc-editor.org/rfc/rfc1930#section-7) one prefix, one origin | More than one origin is a warning to check | It cannot tell intent; anycast and multi-homing are named as normal causes |
+| [RFC 6793](https://www.rfc-editor.org/rfc/rfc6793) four-octet ASNs | [3](https://www.rfc-editor.org/rfc/rfc6793#section-3) | Accepts 1 to 4294967295 | Does not flag private-use ([RFC 6996](https://www.rfc-editor.org/rfc/rfc6996#section-3)) numbers; the registry answer shows them as unheld |
+| [RFC 9224](https://www.rfc-editor.org/rfc/rfc9224) RDAP bootstrap | [5](https://www.rfc-editor.org/rfc/rfc9224#section-5) | Longest match in the IANA IPv4 or IPv6 file, HTTPS only | Obsoletes [RFC 7484](https://www.rfc-editor.org/rfc/rfc7484) |
+| [RFC 9082](https://www.rfc-editor.org/rfc/rfc9082) RDAP query | [3.1.1](https://www.rfc-editor.org/rfc/rfc9082#section-3.1.1) | `ip/<address>` | No AS-number RDAP query ([3.1.2](https://www.rfc-editor.org/rfc/rfc9082#section-3.1.2)); RIPEstat answers for AS numbers. Obsoletes [RFC 7482](https://www.rfc-editor.org/rfc/rfc7482) |
+| [RFC 9083](https://www.rfc-editor.org/rfc/rfc9083) RDAP response | [5.4](https://www.rfc-editor.org/rfc/rfc9083#section-5.4), [6](https://www.rfc-editor.org/rfc/rfc9083#section-6) | Reads the IP network object; only an error document with 404 means absent | Remarks, events and nested entities are not shown. Obsoletes [RFC 7483](https://www.rfc-editor.org/rfc/rfc7483) |
+| [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918#section-3), [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598#section-4), [RFC 4193](https://www.rfc-editor.org/rfc/rfc4193#section-3), [RFC 6890](https://www.rfc-editor.org/rfc/rfc6890#section-2.2.2) | as listed | Special-purpose ranges are explained in the browser and never sent | |
+| [RFC 5737](https://www.rfc-editor.org/rfc/rfc5737#section-3), [RFC 3849](https://www.rfc-editor.org/rfc/rfc3849#section-2), [RFC 5398](https://www.rfc-editor.org/rfc/rfc5398#section-2) | as listed | Documentation addresses and numbers are answered from labelled sample data | |
+
+## Finding reference
+
+| Finding | Severity | What it means for whoever holds the address | Fix |
+| --- | --- | --- | --- |
+| No origin (verdict) | CHECK | The selected collectors report no covering route; other observations may differ | The holder announces the covering prefix, with a route object and an RPKI ROA |
+| N origin networks for one prefix | CHECK | Several networks originate the prefix: anycast or multi-homing on purpose, or a misconfiguration or hijack | Compare origins in BGP Route Lookup; ask the holder which it authorised |
+| No routes seen from this network | CHECK | The AS is registered but announces nothing collectors see | Its operator checks sessions and exports |
+| No holder and no routes (verdict) | CHECK | No holder or announcement was reported; this does not independently establish allocation status | Check for a typo; investigate where it appeared |
+| Registered holder and announcing network differ | INFO | Another network routes the block: a provider for a customer, leased space, mitigation | Report abuse to the announcing network first |
+| Names shown for the first eight networks | INFO | More than eight origins; all numbers are listed | Look the remaining numbers up one by one |
+| No registration (registration panel) | INFO | The registry has no record: unallocated or reserved space | |
+| Registry unavailable (registration panel) | INFO | The holder is unknown for now; routing evidence is unaffected | Check again later |
+| This names a network, not a person | INFO | Both names are organisations; neither is a customer or a location | |
+| Its prefixes and visibility | INFO | BGP Route Lookup holds the per-prefix evidence for an AS | |
+
+## Guide
+
+### You found an address in a log or a firewall alert
+
+1. Enter the address. Read the verdict: the origin network is the organisation operating the address.
+2. Open Registered to and find the contact with the role `abuse`. If the announcing network differs from the holder, write to the announcing network's abuse contact first; it runs the machines.
+3. Include the address, timestamps with their time zone, and the log lines. Never include more of your own data than the report needs.
+
+Confirm the origin without Tamperbox with the RIPEstat data call the server uses:
+
+```sh
+curl -s 'https://stat.ripe.net/data/network-info/data.json?resource=1.1.1.1'
+```
+
+and the registration with the RDAP service of the registry (or any RDAP client):
+
+```sh
+curl -s https://rdap.apnic.net/ip/1.1.1.1
+whois -h whois.radb.net -- '-i origin AS13335'
+```
+
+### The address has two or more origins
+
+Open [BGP Route Lookup](/tools/bgp-lookup/) for the prefix by entering the prefix there. Compare each origin's route object, first-seen date and visibility. An origin with no route object and a recent first-seen date is the one to ask about. If you hold the prefix, publish an RPKI ROA naming the origins you authorise, so validating networks can evaluate origin authorization; filtering remains their own policy.
+
+### The address is not announced
+
+If it should be reachable, the holder announces the covering prefix from its border routers and registers a route object and a ROA. If it should not be reachable (a withdrawn block, internal space), the result is the expected one.
+
+### A domain points at a CDN
+
+The first address of a CDN-hosted name belongs to the CDN. To find the origin server you need its own address, which the CDN hides by design; this tool cannot reveal it.
+
+### Break it cases
+
+| Case | What it loads | What it shows |
+| --- | --- | --- |
+| Two origin networks | `203.0.113.10` | A sample prefix originated by two networks, with the MOAS warning |
+| Not announced | `192.0.2.1` | A sample address no network announces |
+| A network with no routes | `AS64510` | A documentation AS that is registered but announces nothing, with the "No routes seen from this network" warning |
+| A prefix, not an address | your address with `/24` (or `/48`) | The refusal and the Heal it repair back to the address |
+| Private address | `10.20.4.17` | The private-range explanation; nothing is sent |
+| Not an address | your IPv4 address with the last octet set to 300 | The octet range error |
+
+## Worked example
+
+The page resolves `tamperbox.dev` live and looks up the first address returned. Read the resolved address before interpreting the route: a CDN or multi-address hostname can select different endpoints over time. Compare the observed prefix and origins with the registration panel. A holder/announcer difference is a string-based prompt to investigate, not evidence of abuse or an unauthorized route.
+
+For an independent comparison, enter the selected address directly, then check the prefix in BGP Route Lookup. Record the observation time and source alongside the result. Neither the current origin count nor the registered holder of this live default is fixed by this guide.
+
+## For agents
+
+The Tamperbox MCP server runs the same lookup. Search its catalog for the `asn_lookup` operation, inspect the input schema, and call it with one public address or AS number (resolve a domain first). Keep these warnings with any conclusion:
+
+- The origin and the registration are organisations; neither identifies a person or a location.
+- Collector data lags by hours and covers the collectors' peers, not every network.
+- Several origins are not a hijack by themselves; neither is a single origin proof that the announcement is authorised.
+
+See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for the calling pattern, and [Security and privacy](/reference/security/) for where the input travels.
+
+### Transfers to another tool
+
+Explicit sibling-tool controls can carry the current input or observed address to another page. The shared navigation stores that value temporarily in tab-scoped `sessionStorage` and puts a random transfer token in the URL fragment. The receiving page consumes the transfer and applies its own input rules; tools with a manual Run button still require that action for live checks. This is not a saved result, and the destination can send the value to the services it needs. Ordinary edits and lookups do not create a durable report archive.
+
+## Limits
+
+- One lookup from the RIPE RIS view of the internet at one moment; routes that only some networks see may be missing.
+- The tool does not validate origins against RPKI and does not show AS paths.
+- A domain is checked through its first address only.
+- The registry country describes the record, not where the address is used.
+- Sample answers for documentation ranges are made up and labelled as sample data.
+- The page keeps results in memory. Explicit transfers to another tool use temporary session storage.
+
+## References
+
+- [RFC 4271](https://www.rfc-editor.org/rfc/rfc4271), A Border Gateway Protocol 4: section 5.1.2. Updated by RFC 6793 and later RFCs.
+- [RFC 6811](https://www.rfc-editor.org/rfc/rfc6811), BGP Prefix Origin Validation: section 2.
+- [RFC 1930](https://www.rfc-editor.org/rfc/rfc1930), Guidelines for creation, selection, and registration of an Autonomous System (BCP 6): section 7.
+- [RFC 6793](https://www.rfc-editor.org/rfc/rfc6793), BGP Support for Four-Octet AS Number Space: section 3. Obsoletes [RFC 4893](https://www.rfc-editor.org/rfc/rfc4893).
+- [RFC 6996](https://www.rfc-editor.org/rfc/rfc6996), Autonomous System Reservation for Private Use: section 3.
+- [RFC 9224](https://www.rfc-editor.org/rfc/rfc9224), Finding the Authoritative RDAP Service: section 5. Obsoletes [RFC 7484](https://www.rfc-editor.org/rfc/rfc7484).
+- [RFC 9082](https://www.rfc-editor.org/rfc/rfc9082), RDAP Query Format: sections 3.1.1 and 3.1.2. Obsoletes [RFC 7482](https://www.rfc-editor.org/rfc/rfc7482).
+- [RFC 9083](https://www.rfc-editor.org/rfc/rfc9083), JSON Responses for RDAP: sections 5.4 and 6. Obsoletes [RFC 7483](https://www.rfc-editor.org/rfc/rfc7483).
+- [RFC 6890](https://www.rfc-editor.org/rfc/rfc6890), Special-Purpose IP Address Registries: section 2.2.2.
+- [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918#section-3), [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598#section-4), [RFC 4193](https://www.rfc-editor.org/rfc/rfc4193#section-3): private, shared and unique local address space.
+- [RFC 5737](https://www.rfc-editor.org/rfc/rfc5737#section-3), [RFC 3849](https://www.rfc-editor.org/rfc/rfc3849#section-2), [RFC 5398](https://www.rfc-editor.org/rfc/rfc5398#section-2): documentation addresses and AS numbers.
+- [IANA Autonomous System Numbers registry](https://www.iana.org/assignments/as-numbers/as-numbers.xhtml) and [IANA RDAP bootstrap files](https://data.iana.org/rdap/).
+- [RIPEstat Data API](https://stat.ripe.net/docs/data-api/ripestat-data-api), the source of the routing data.
