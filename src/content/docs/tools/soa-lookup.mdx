@@ -1,7 +1,7 @@
 ---
 title: SOA Lookup
 description: How the SOA Lookup reads a zone's Start of Authority record field by field, decodes a date-shaped serial, checks the refresh, retry, expire and negative-caching timers against common ranges, and how to fix and confirm each one.
-updated: 2026-10-20
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and guide for the Tamperbox SOA Lookup, which asks Cloudflare for a name's SOA record over DNS over HTTPS (using the zone's SOA from the authority section for a name inside a zone) or reads a pasted SOA in the browser, explains its seven fields, reads a YYYYMMDDnn serial as a date, and checks refresh (20 minutes to 1 day), retry (2 minutes to 2 hours, shorter than refresh), expire (1 to 4 weeks) and negative caching (5 minutes to 1 day).
 prerequisites:
@@ -14,7 +14,7 @@ limitations:
 
 The tool page is [tamperbox.dev/soa-lookup](https://tamperbox.dev/soa-lookup). It opens on `harbor-supply.example`, a sample zone on the reserved `.example` zone with a date-shaped serial and timers in the usual ranges. This page is the long version: what each field of the SOA means, which timers matter to whom, the ranges the tool checks, and how to read a serial.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> a name is sent to the Tamperbox server, which asks Cloudflare for its SOA record over DNS over HTTPS. A pasted SOA is read in your browser and never uploaded. Sample names under <code>.example</code> are answered in the browser. Nothing is stored.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> a name is sent to the Tamperbox server, which asks Cloudflare for its SOA record over DNS over HTTPS. A pasted SOA is read in your browser and never uploaded. Sample names under <code>.example</code> are answered in the browser. Ordinary lookup results are not persisted by this page. An explicit handoff temporarily stores its value in session storage for one-use transfer.</div>
 
 ## What the tool answers
 
@@ -35,7 +35,7 @@ It does not ask each nameserver for its serial, so it cannot tell you whether ev
 
 ### A pasted SOA
 
-Anything with a space is read as records, in the browser: a dig answer, a zone file line, or the bare seven fields. A record with fewer than seven fields, or a serial or timer that is not a whole number of seconds, is refused with the reason ("An SOA record has seven fields…", "Serial and timers must be whole numbers of seconds."). Parentheses from multi-line zone file records are ignored.
+Anything with a space is read as records, in the browser: a dig answer, a zone file line, or the bare seven fields. A record with fewer than seven fields, or a serial or timer that is negative or non-finite, is refused with the reason ("An SOA record has seven fields…", "Serial and timers must be whole numbers of seconds."). Parentheses from multi-line zone file records are ignored. Despite the diagnostic saying “whole numbers,” the current parser accepts non-negative fractional values and does not enforce the unsigned 32-bit range. Treat this as an inspection tool, not a zone-file validator.
 
 ### Files
 
@@ -55,14 +55,6 @@ A pasted SOA stays in the browser; a name means one SOA query from our server.
 
 The timer and serial findings; passes fold into one line.
 
-### Take it further
-
-The serial's date as a Unix timestamp (a new tab of the timestamp tool), the primary nameserver to the DNS Lookup for its addresses, the contact's domain to the email domain check, and the zone to the DNSSEC Checker.
-
-### History and Heal it
-
-History logs every Break it and Heal it change. For a pasted SOA with a timer out of range, Heal it rewrites the out-of-range timers to common values (refresh 2 hours, retry 15 minutes, expire 2 weeks, negative TTL 1 hour) and keeps the rest.
-
 ### SOA records
 
 The seven fields, each with its value and its meaning in words: primary nameserver, contact (with the first dot read as the @), serial, refresh, retry, expire, negative TTL.
@@ -70,6 +62,14 @@ The seven fields, each with its value and its meaning in words: primary nameserv
 ### DNS response
 
 The answer as dig-style text, with a copy button.
+
+### History and Heal it
+
+History logs every Break it and Heal it change. For a pasted SOA with a timer out of range, Heal it rewrites the out-of-range timers to common values (refresh 2 hours, retry 15 minutes, expire 2 weeks, negative TTL 1 hour) and keeps the rest.
+
+### Take it further
+
+The serial's date as a Unix timestamp (a new tab of the timestamp tool), the primary nameserver to the DNS Lookup for its addresses, the contact's domain to the email domain check, and the zone to the DNSSEC Checker.
 
 ## Method
 
@@ -93,7 +93,7 @@ The MINIMUM field changed meaning. [RFC 2308 section 4](https://www.rfc-editor.o
 
 ### 3. The serial
 
-A serial is read as a date only when it has ten digits, YYYYMMDDnn, with a month from 01 to 12 and a day from 01 to 31: "Changed on 2026-10-13, change 1 of that day." That is a convention ([RFC 1912 section 2.2](https://www.rfc-editor.org/rfc/rfc1912#section-2.2) recommends it), not a rule. Any serial that is not date-shaped and below one billion gives an info finding, "Serial is a counter": the number only says the zone changed, not when. Large counters such as Unix-time serials, common at hosted providers, give no finding. Serials are compared by secondaries with sequence-space arithmetic ([RFC 1982](https://www.rfc-editor.org/rfc/rfc1982#section-3)), so a serial that goes down looks older, not newer.
+A serial is read as a date only when it has ten digits, YYYYMMDDnn, with a month from 01 to 12 and a day from 01 to 31: "Changed on 2026-10-13, change 1 of that day." That is a convention ([RFC 1912 section 2.2](https://www.rfc-editor.org/rfc/rfc1912#section-2.2) recommends it), not a rule. Any serial that is not date-shaped and below one billion gives an info finding, "Serial is a counter": the number only says the zone changed, not when. Large counters such as Unix-time serials, common at hosted providers, give no finding. Serials are compared by secondaries with sequence-space arithmetic ([RFC 1982](https://www.rfc-editor.org/rfc/rfc1982#section-3)), so ordinary numeric comparison is insufficient around wraparound; this page does not compare two zone versions.
 
 ### 4. The timer ranges
 
@@ -165,13 +165,15 @@ Many hosted providers manage the SOA themselves and replicate without zone trans
 
 ## For agents
 
-The Tamperbox MCP server exposes `soa-lookup` with a `name`, returning the question, status, flags, answer and authority. Keep these warnings with any conclusion:
+The Tamperbox MCP server exposes `soa_lookup` with a `name`, returning an `evidence` object with the question, status, flags, answer and authority, plus `records` for the requested type. Keep these warnings with any conclusion:
 
 - Timer assessments are operational guidance, not proof of zone correctness.
 - One resolver's answer; individual nameservers can hold different serials while a change spreads.
 - A date-shaped serial is a convention, not a guarantee of the change date.
 
 See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/).
+
+The operation adds parsed SOA fields and timer checks for records in the answer. Unlike the page, it does not substitute an authority-section SOA when the answer has none.
 
 ## Limits
 

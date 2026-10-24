@@ -1,7 +1,7 @@
 ---
 title: DNS Propagation Checker
 description: How the DNS Propagation Checker asks twelve public resolvers and the zone's own nameserver the same question, compares every answer with the authoritative one, what a different answer, an error or a SERVFAIL means, and how to make the next change reach everyone faster.
-updated: 2026-10-20
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and guide for the Tamperbox DNS Propagation Checker, which sends one question (A, AAAA, CNAME, MX, TXT or NS) to twelve public resolvers over DNS over HTTPS and to the zone's authoritative nameserver over TCP port 53, compares each public answer with the authoritative one, and reports resolvers holding a different answer with the largest TTL they still hold, resolvers that error, and the all-SERVFAIL pattern of a broken DNSSEC chain.
 prerequisites:
@@ -14,7 +14,7 @@ limitations:
 
 The tool page is [tamperbox.dev/dns-propagation](https://tamperbox.dev/dns-propagation). It opens on `harbor-supply.example`, a sample domain on the reserved `.example` zone whose address changed forty minutes ago while three resolvers still hold the old one. This page is the long version: what "propagation" really is, how the answers are compared, the findings, and how to plan a change that reaches everyone quickly.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> a name is sent to the Tamperbox server, which asks twelve public resolvers over DNS over HTTPS and the zone's own nameserver over TCP port 53 the same question, at the same time, and returns every answer. The comparison is drawn in your browser. Sample names under <code>.example</code> are answered in the browser. Nothing is stored.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> a name is sent to the Tamperbox server, which asks twelve public resolvers over DNS over HTTPS and the zone's own nameserver over TCP port 53 the same question, at the same time, and returns every answer. The comparison is drawn in your browser. Sample names under <code>.example</code> are answered in the browser. Ordinary lookup results are not persisted by this page. An explicit handoff temporarily stores its value in session storage for one-use transfer.</div>
 
 ## What the tool answers
 
@@ -22,7 +22,7 @@ DNS changes do not travel anywhere. The zone's nameservers answer with the new d
 
 1. **What does the zone publish now?** The authoritative answer, the source of truth.
 2. **Which public resolvers already return it?** Each one compared with the source.
-3. **Which still differ, and for how long?** The answer each one holds and the TTL left on it.
+3. **Which differ, and what TTLs do they report?** The answer each one holds and the TTL left on it.
 4. **Is something worse than caching going on?** Errors, different statuses, or every resolver failing at once.
 
 It cannot clear a cache, and it does not ask the resolver at a visitor's own internet provider.
@@ -41,19 +41,11 @@ It cannot clear a cache, and it does not ask the resolver at a visitor's own int
 
 ### Where your input goes
 
-The comparison is drawn in the browser; a name means thirteen DNS queries from our server.
+The comparison is drawn in the browser; a name starts twelve public-resolver observations and one authoritative observation. Finding the authoritative zone and a reachable server can require additional SOA, NS and address queries, so thirteen observations are not a thirteen-packet limit.
 
 ### Findings
 
 Failures and checks first, then the different answers, then the pass counting the matching resolvers.
-
-### Take it further
-
-The authoritative address to the ASN Lookup and to Reverse DNS, and, when every resolver fails, the name to the DNSSEC Checker.
-
-### History and Heal it
-
-History logs every Break it change; Revert and Reset input bring the input back.
 
 ### Agreement
 
@@ -62,6 +54,14 @@ One bar split by answer: solid for the resolvers that match the zone, hatched fo
 ### Every resolver
 
 One row per server, the zone's own first: its name, address and where it answers from; its answer (and error, if any); "Cached for", the largest TTL among the compared records; a status badge (Source, Matches, Differs, the DNS status, Lookup failed, or Not compared); and its response time.
+
+### History and Heal it
+
+History logs Break it and Heal it replacements. Revert restores the previous input; Reset input restores the first input in that sequence. Restoring a live name runs a fresh lookup. Typing starts a new history, and the log is not a monitoring record.
+
+### Take it further
+
+The authoritative address to the ASN Lookup and to Reverse DNS, and, when every public resolver returns SERVFAIL while the source answers, the name to the DNSSEC Checker.
 
 ## Method
 
@@ -92,7 +92,7 @@ For each server the page builds one value: the records of the type asked, sorted
 
 A public answer matches when neither it nor the source failed, its status equals the source's and its value equals the source's. Every non-match is either:
 
-- **a different answer**: status NOERROR, no error, a different value. Usually a cache from before the change;
+- **a different answer**: status NOERROR, no error, a different value. Caching, geo-routing and provider filtering are possible causes;
 - **a failure**: an error, or a different status (SERVFAIL, NXDOMAIN while the zone says NOERROR, and so on).
 
 ### 4. Findings and verdict
@@ -105,7 +105,7 @@ A public answer matches when neither it nor the source failed, its status equals
 | Some resolvers fail, not all | N resolvers returned an error or a different DNS status | check | N of M resolvers (check) |
 | Resolvers match the zone | N of M resolvers match the authoritative answer | pass | Propagated, or "STATUS everywhere" |
 
-A different answer is information, not a failure: it is what caching looks like, and it ends on its own. The largest TTL among the differing resolvers is the most any of them should keep its answer, under [RFC 1035 section 3.2.1](https://www.rfc-editor.org/rfc/rfc1035#section-3.2.1). Two things can stretch it: [RFC 8767 section 4](https://www.rfc-editor.org/rfc/rfc8767#section-4) lets a resolver keep using an expired record "as though it is unexpired" when it cannot refresh it, and authoritative servers that tailor answers to the resolver's location ([RFC 7871 section 1](https://www.rfc-editor.org/rfc/rfc7871#section-1)) give different answers that never converge.
+A different answer is informational evidence of disagreement, not proof of an old cache. The largest observed TTL describes the returned records; it is not a convergence deadline. Ordinary cache expiry is defined by [RFC 1035 section 3.2.1](https://www.rfc-editor.org/rfc/rfc1035#section-3.2.1). Two things can stretch it: [RFC 8767 section 4](https://www.rfc-editor.org/rfc/rfc8767#section-4) lets a resolver keep using an expired record "as though it is unexpired" when it cannot refresh it, and authoritative servers that tailor answers to the resolver's location ([RFC 7871 section 1](https://www.rfc-editor.org/rfc/rfc7871#section-1)) give different answers that never converge.
 
 ### 5. Negative answers are cached too
 
@@ -115,7 +115,7 @@ When the name did not exist before the change, resolvers that asked earlier cach
 
 | Specification | Sections used | How the tool applies it | Where it stops |
 | --- | --- | --- | --- |
-| [RFC 1034](https://www.rfc-editor.org/rfc/rfc1034) | [3.6](https://www.rfc-editor.org/rfc/rfc1034#section-3.6) | Differences are read as caches with a TTL | |
+| [RFC 1034](https://www.rfc-editor.org/rfc/rfc1034) | [3.6](https://www.rfc-editor.org/rfc/rfc1034#section-3.6) | Differences retain their observed TTL; their cause is not inferred | |
 | [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035) | [3.2.1](https://www.rfc-editor.org/rfc/rfc1035#section-3.2.1), [4.2.2](https://www.rfc-editor.org/rfc/rfc1035#section-4.2.2) | The TTL each resolver reports; the authoritative query over TCP | TTL definition amended by RFC 8767 |
 | [RFC 2181](https://www.rfc-editor.org/rfc/rfc2181) | [8](https://www.rfc-editor.org/rfc/rfc2181#section-8) | TTLs are read as unsigned seconds | |
 | [RFC 2308](https://www.rfc-editor.org/rfc/rfc2308) | [5](https://www.rfc-editor.org/rfc/rfc2308#section-5) | A cached NXDOMAIN is explained in the guide | Negative TTLs are not computed per resolver |
@@ -127,9 +127,9 @@ When the name did not exist before the change, resolvers that asked earlier cach
 | Finding | Severity | Source | What it means | Fix |
 | --- | --- | --- | --- | --- |
 | N of M resolvers match the authoritative answer | pass | [RFC 1034 3.6](https://www.rfc-editor.org/rfc/rfc1034#section-3.6) | Those caches hold the current answer | None |
-| N resolvers returned a different answer | info | [RFC 1035 3.2.1](https://www.rfc-editor.org/rfc/rfc1035#section-3.2.1) | Visitors behind them see the old answer until the TTL runs out | Wait; lower the TTL before the next change |
+| N resolvers returned a different answer | info | [RFC 1035 3.2.1](https://www.rfc-editor.org/rfc/rfc1035#section-3.2.1) | Those resolvers returned different data; caching, routing or filtering may explain it | Wait; lower the TTL before the next change |
 | N resolvers returned an error or a different DNS status | check | | Those resolvers cannot answer, or disagree on whether the name exists | Check again; persistent failure suggests filtering or an unreachable zone |
-| Every public resolver returns SERVFAIL | fail | [RFC 4035 3.2.3](https://www.rfc-editor.org/rfc/rfc4035#section-3.2.3) | Validating resolvers reject the zone's answer; visitors cannot reach the name | Fix the DNSSEC chain |
+| Every public resolver returns SERVFAIL | fail | [RFC 4035 3.2.3](https://www.rfc-editor.org/rfc/rfc4035#section-3.2.3) | Public resolution failed while the authoritative observation succeeded | Investigate DNSSEC and authoritative reachability |
 | Authoritative answer unavailable | check | [RFC 1035 4.2.2](https://www.rfc-editor.org/rfc/rfc1035#section-4.2.2) | Public answers could not be compared with the source | Check again; make the nameservers answer over TCP |
 
 ## Guide
@@ -138,17 +138,17 @@ When the name did not exist before the change, resolvers that asked earlier cach
 
 1. A day before (or at least one old TTL before), lower the TTL of the records you will change to 300 seconds.
 2. Make the change.
-3. Check here until every resolver matches; with a 300-second TTL that is minutes.
+3. Repeat the comparison after the intended TTL interval. Investigate persistent differences rather than assuming every resolver must converge on the same answer.
 4. Keep the old server running until the longest original TTL has passed, for caches that do not honour the lowered value.
 5. Raise the TTL again.
 
 ### Some resolvers still show the old answer
 
-Read "Cached for" on the differing rows: that is the most each should hold it. Wait that long and Check again. A resolver that keeps a different answer long after is likely geo-routing or filtering rather than caching; compare with `dig @<resolver address> www.example.com A`.
+Read "Cached for" as the TTL observed in that response. Wait a reasonable interval and Check again; stale serving or intentional routing can outlast that TTL. A resolver that keeps a different answer long after is likely geo-routing or filtering rather than caching; compare with `dig @<resolver address> www.example.com A`.
 
 ### Every resolver returns SERVFAIL
 
-The zone answers, but validating resolvers reject it: almost always a broken DNSSEC chain, such as a DS record at the registrar left from a previous DNS provider. Open the name in the [DNSSEC Checker](https://tamperbox.dev/dnssec-checker). `dig +cd @1.1.1.1 example.com A` (checking disabled) returns the answer validation rejects.
+The authoritative observation succeeds while the public resolvers return SERVFAIL. A broken DNSSEC chain, such as a stale DS record, is one possible cause; this pattern alone does not diagnose it. Open the name in the [DNSSEC Checker](https://tamperbox.dev/dnssec-checker). `dig +cd @1.1.1.1 example.com A` (checking disabled) can help distinguish validation failure from other resolver errors; compare it with a normal query.
 
 ### Source unavailable
 
@@ -164,11 +164,11 @@ The zone's own nameservers did not answer over TCP port 53 within the deadline. 
 
 ## Worked example
 
-`harbor-supply.example`, type A. The zone's own nameserver answers `203.0.113.80`, the new address. Nine public resolvers return it too. OpenDNS, AliDNS and Yandex DNS still return `192.0.2.10`, the address before the change, with 21, 37 and 50 minutes left on their caches. The verdict reads "9 of 12 resolvers return 203.0.113.80." with "Largest observed TTL: 50 minutes 20 seconds." Findings reports the three different answers as information and folds the nine matches. The cards say what the numbers mean: within an hour every cache asked here will hold the new address, and next time a lowered TTL would make it minutes. Press "Broken DNSSEC" to see the all-SERVFAIL pattern, which no amount of waiting fixes.
+`harbor-supply.example`, type A. The zone's own nameserver answers `203.0.113.80`, the new address. Nine public resolvers return it too. OpenDNS, AliDNS and Yandex DNS still return `192.0.2.10`, the address before the change, with 21, 37 and 50 minutes left on their caches. The verdict reads "9 of 12 resolvers return 203.0.113.80." with "Largest observed TTL: 50 minutes 20 seconds." Findings reports the three different answers as information and folds the nine matches. The example illustrates disagreement after a change. Its largest TTL is an observation, not a promise that every real resolver will converge within an hour. Press "Broken DNSSEC" to see the all-SERVFAIL pattern, which no amount of waiting fixes.
 
 ## For agents
 
-The Tamperbox MCP server exposes `dns-propagation` with a `name` and a `type` (any type the DNS Lookup supports, not only the six chips here). It returns every resolver's raw result; the comparison described on this page is the agent's to make. Keep these warnings with any conclusion:
+The Tamperbox MCP server exposes `dns_propagation` with a `name` and a `type` (any type the DNS Lookup supports, not only the six chips here). It returns every resolver's raw result; the comparison described on this page is the agent's to make. Keep these warnings with any conclusion:
 
 - A sample across supported resolvers, not proof that every cache worldwide has updated.
 - Anycast resolvers answer from the site nearest to our server.

@@ -1,0 +1,219 @@
+---
+title: YAML to JSON Converter
+description: How Tamperbox converts JSON-compatible YAML to JSON live in the browser, exposes presentation loss, and refuses ambiguous aliases, keys and numbers.
+updated: 2026-10-24
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Convert YAML fixtures to JSON locally, disclose presentation loss, reject ambiguous constructs, and verify the resolved data rather than the source spelling.
+prerequisites:
+  - A YAML value pasted, typed, dropped or opened as a local file
+outputs:
+  - Pretty-printed JSON representing the resolved JSON-compatible YAML values
+  - Findings for validity, presentation loss and interoperability boundaries
+limitations:
+  - Comments, custom tags, anchor names, aliases, scalar spelling and formatting are not preserved
+  - The converter accepts the JSON-compatible YAML schema, not every YAML 1.1 or application-specific feature
+  - Input is limited to 1,000,000 characters, 80 levels, 100 aliases and 100,000 values
+---
+
+The tool page is [tamperbox.dev/yaml-to-json](https://tamperbox.dev/yaml-to-json). It opens with a synthetic QA test suite, resolves it under a deliberately narrow YAML schema and rewrites JSON as the source changes. This guide defines which YAML is accepted, which presentation is lost, every refusal and how to prove that the resulting JSON still carries the intended test data.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> the YAML is sent only to a Web Worker in the current browser tab. Conversion does not upload the source or evaluate it as code. Explicit reverse-conversion navigation temporarily stores the output in tab-scoped session storage for the handoff; ordinary conversion does not persist it. Custom YAML tags are rejected rather than constructed.</div>
+
+## What the tool answers
+
+The page answers whether the source is valid JSON-compatible YAML, whether its resolved representation fits the JSON data model, what presentation cannot cross that boundary and what hostile cases should be tested before the output is trusted. It counts values and containers after aliases resolve, not source lines.
+
+A successful conversion is evidence about the resolved graph. It is not evidence that comments survived, that anchor identity survived or that an application schema accepts the JSON. “Valid YAML” is intentionally scoped: another YAML implementation can support custom tags or YAML 1.1 implicit values that this tool refuses or reads as strings.
+
+## Inputs
+
+### Typed or pasted YAML
+
+Any document accepted by the YAML 1.2 JSON-compatible schema can be the root: mapping, sequence, string, finite number, boolean or null. The input event clears old JSON immediately and starts a 120 millisecond debounce. Conversion then runs in a worker. Each request and response carries a revision. Responses from older requests are ignored after the next request is dispatched; the debounce interval has the timing limitation described below.
+
+Paste replaces the source when performed in the field or on the surrounding page. YAML punctuation and whitespace are not cleaned. Clear moves to a neutral empty state and removes output, Copy result, findings tied to the old source and reverse-conversion actions.
+
+### Files
+
+The shared drop zone accepts `.yaml`, `.yml`, `application/yaml`, `text/yaml` and plain text. A file over 1,000,000 bytes is refused before parsing. File text stays in the tab. File names are UI hints only and do not affect schema selection.
+
+### Anchors and aliases
+
+Acyclic aliases are resolved. JSON has no pointer identity, anchors or aliases, so an aliased mapping appears as an ordinary repeated JSON value. Anchor names never appear in output. At most 100 aliases are accepted by the loader. A cycle such as an object containing an alias to itself is refused because JSON cannot represent a cyclic graph.
+
+### Reverse handoff
+
+Take it further sends the valid JSON result to the JSON to YAML page using the one-use same-origin handoff. The document stays out of the URL, but a random one-use transfer token is temporarily placed in its fragment. The payload is stored in session storage and can also be passed through BroadcastChannel, with a 60-second validity window. The destination consumes the transfer and strips the random token from the address. If browser storage and tab communication are unavailable, ordinary navigation still works but does not carry private data.
+
+### Limits
+
+### Timing and handoff boundaries
+
+Revision checks begin at dispatch, not at each edit. An earlier worker response can arrive during the 120-millisecond debounce or after Clear and repaint an earlier result. Do not rely on this version for a strict no-stale-output guarantee; wait for the current conversion and compare the output with the source before using it. Reverse handoff temporarily uses session storage and a random URL fragment, with expiry and one-use consumption.
+
+### Format boundaries
+
+| Boundary | Limit | Refusal prevents |
+| --- | ---: | --- |
+| Source | 1,000,000 characters | Unbounded parsing and worker messages |
+| YAML aliases | 100 | Alias expansion abuse |
+| Resolved depth | 80 levels | Hostile nesting |
+| Resolved tree | 100,000 values and containers | Excessive traversal and output |
+| Integers | JavaScript safe-integer range | Silent rounding in JSON consumers |
+| Tags | JSON-compatible schema only | Construction of application-specific objects |
+
+## Reading the result
+
+### Verdict and checks
+
+“Converted valid YAML to JSON” means parsing and the bounded tree walk completed. The checks name valid YAML and JSON-model preservation; a chip and validity detail report the resolved node count. A source-text heuristic detects full-line comments and some anchor or alias syntax, adding an Info finding that YAML presentation details were removed. It is not a complete YAML presentation audit: an inline comment can disappear without that note. That note is not a parsing failure; it is a warning against comparing text or expecting a round trip to recreate the original authoring surface.
+
+### Findings
+
+Passes establish syntax and JSON-model compatibility. The presentation note names comments, anchors and aliases together because all live above the JSON value model. A failure clears the output and gives a safe explanation, with line and column when the YAML parser supplies them. Parser excerpts are not echoed because source text can contain secrets.
+
+### JSON output
+
+The output is pretty-printed with two spaces and a final newline. JavaScript serialization writes negative zero as `0`, so a consumer that distinguishes `-0` needs an explicit representation outside this conversion. Mapping keys become JSON object member names, sequences become arrays, and compatible scalars become their JSON equivalents. The output window wraps long lines so it does not widen the page. Copy result is available only while the current source has a completed result.
+
+### History and next step
+
+Break it and Heal it replacements enter History. Revert removes the newest automated change; Reset returns to the first source in the log. Typing starts a new log. The reverse conversion link carries the JSON result into the other page for a semantic round-trip check.
+
+## Method
+
+### Parse with a narrow schema
+
+The worker uses the YAML 1.2 JSON-compatible schema. The schema accepts null, booleans, integer and floating-point numbers, strings, sequences and mappings. It does not construct custom tags such as `!include`, JavaScript objects or language-specific values. This is both a security boundary and an interoperability choice: a converter should not execute or instantiate a value merely because a tag names it.
+
+The loader also refuses duplicate mapping keys. Choosing the first or last entry would conceal an environment-dependent behavior that QA is supposed to expose. A file that looks reasonable can therefore be rejected when two merged snippets repeat `role`, `image`, `timeout` or another decisive key.
+
+### Scalar and document boundaries
+
+The loader accepts one document. Multiple `---` documents are refused rather than combined into an array. Complex mapping keys such as a sequence used as a key are refused. Plain `yes`, a date such as `2026-10-24`, hexadecimal-looking `0x10` and `.inf` remain strings under this schema; they do not become a boolean, date object, hexadecimal integer or infinity. Explicit unsupported tags fail. Test these cases with the consuming loader when migrating from a different schema.
+
+### Resolve then bound the graph
+
+After parsing, the tool walks the resolved value iteratively. It keeps an ancestor set to detect cycles, carries depth on the stack and counts primitive values as well as containers. Shared acyclic aliases can be visited in separate branches; an alias to an active ancestor is a cycle and fails.
+
+The distinction matters. YAML's [representation graph](https://yaml.org/spec/1.2.2/#chapter-3-processes-and-models) may contain shared nodes, whereas JSON text describes a tree. Repeating an aliased value preserves equality but not object identity. If an application depends on reference identity, JSON is not an equivalent target.
+
+### Check numbers
+
+Every number must be finite. Integers must be safely representable because [RFC 8259 section 6](https://www.rfc-editor.org/rfc/rfc8259#section-6) identifies the binary64 exact integer range as the interoperable range. An ID beyond that range is refused instead of rounded. Quote it in YAML only when its application type is a string; update the schema and tests at the same time.
+
+### Serialize JSON
+
+The checked value is passed to `JSON.stringify` with two-space indentation. The serializer cannot include comments, directives, tag spelling, anchor names, alias tokens, block-versus-flow choices or quoted-versus-plain scalar style. Key order normally follows enumeration order but is not an application contract. A sequence must carry order when order is semantic.
+
+### Keep the UI truthful during edits
+
+Input changes clear the visible output and schedule conversion. The revision advances when conversion is dispatched. The worker returns output, node count and root kind or a safe error, and the page renders only a matching revision. An earlier response can still arrive before the debounce dispatch or after input is cleared, because those actions do not immediately advance the revision. Allow conversion to settle before copying or opening the reverse conversion.
+
+## Standards and conformance
+
+### YAML 1.2.2
+
+| Specification area | Applied here | Where the tool stops |
+| --- | --- | --- |
+| [Representation model](https://yaml.org/spec/1.2.2/#chapter-3-processes-and-models) | Parses nodes, mappings, sequences and aliases | Does not preserve presentation events |
+| [JSON schema](https://yaml.org/spec/1.2.2/#102-json-schema) | Resolves JSON-compatible scalar types | Does not use YAML 1.1 implicit typing |
+| [Node anchors](https://yaml.org/spec/1.2.2/#3222-anchors-and-aliases) | Resolves bounded acyclic aliases | Does not preserve anchor names or identity |
+| [Tags](https://yaml.org/spec/1.2.2/#3212-tags) | Accepts tags known to the JSON schema | Refuses application and language-specific tags |
+
+The specification says anchors identify nodes in a serialization, while alias events refer to the most recent node with that anchor. JSON offers no equivalent syntax. Flattening an acyclic alias is therefore disclosed rather than described as lossless presentation.
+
+### RFC 8259
+
+The output follows the JSON value grammar in [section 3](https://www.rfc-editor.org/rfc/rfc8259#section-3), object model in [section 4](https://www.rfc-editor.org/rfc/rfc8259#section-4), array order in [section 5](https://www.rfc-editor.org/rfc/rfc8259#section-5) and numeric interoperability boundary in [section 6](https://www.rfc-editor.org/rfc/rfc8259#section-6). The tool does not claim canonical JSON and does not normalize Unicode.
+
+## Finding reference
+
+### Failures
+
+| Finding | Meaning | QA consequence | Fix |
+| --- | --- | --- | --- |
+| Invalid YAML | Syntax, duplicate key or unsupported tag was found | Different loaders could disagree or refuse it | Correct the named line and column |
+| Unsafe integer | JSON consumers can round the value | IDs can point to the wrong record | Quote intentionally and require a string |
+| Circular YAML aliases | The resolved graph is cyclic | JSON cannot encode the structure | Replace the cycle with an explicit identifier |
+| Too many aliases | Expansion budget was exceeded | Small source may create excessive work | Remove reuse or split the file |
+| Document too complex | Depth or resolved node budget was exceeded | Conversion can consume excessive resources | Flatten or split the document |
+
+### Successful and informational findings
+
+| Finding | Status | Proves | Does not prove |
+| --- | --- | --- | --- |
+| Valid YAML | Pass | The narrow parser accepted the whole source | Every YAML loader accepts it |
+| JSON data model preserved | Pass | Checked values were serialized as JSON | Presentation or every numeric distinction survives |
+| Presentation details removed | Info | Comments or alias syntax were detected | Their intent was unimportant |
+
+## Guide
+
+### Audit a legitimate-looking fixture
+
+1. Paste the YAML and wait for the completed verdict.
+2. Read presentation notes before copying. A comment may contain an operator instruction that JSON cannot carry.
+3. Choose Break it → Duplicate key. Verify the page refuses the file rather than silently choosing the apparent safe or dangerous value.
+4. Choose Break it → Unsafe integer. Check whether the field is a quantity or an identifier. Identifiers often belong in strings.
+5. Test a self-alias: the expected outcome is a cycle refusal, not a frozen tab.
+6. Open the reverse converter and compare parsed values after converting back.
+7. Validate the JSON with the consuming application's schema and run its tests.
+
+### Check independently
+
+Use the exact YAML library and schema the application deploys. A Node.js project with a locked `js-yaml` dependency can compare resolved values:
+
+```js
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { load, JSON_SCHEMA } from 'js-yaml';
+
+const yaml = load(readFileSync('fixture.yaml', 'utf8'), { schema: JSON_SCHEMA });
+const json = JSON.parse(readFileSync('fixture.json', 'utf8'));
+assert.deepEqual(json, yaml);
+```
+
+This confirms the chosen parser's value model. It does not test comments or anchor identity because the JSON target cannot hold them. Run the comparison in CI beside the application's schema validation.
+
+### Break it and manual edge cases
+
+| Case | Source | Expected behavior |
+| --- | --- | --- |
+| Duplicate key | `role` appears twice | Refused without selecting either value |
+| Unsafe integer | `9007199254740993` | Refused before JSON serialization |
+| Malformed flow value | Unclosed `[` | Refused and stale JSON cleared |
+| Circular alias | A node aliases itself | Refused during the bounded graph walk |
+| Comment and alias | Valid acyclic YAML | Converted with a presentation note |
+
+### Preserve intent that JSON cannot carry
+
+Move operational comments into documentation or a companion README. Replace anchors used only for convenience with repeated values or generate the files from a typed source. Replace genuine graph identity with explicit IDs and references, then teach the consumer to resolve them. Replace custom tags with ordinary tagged objects only when the application contract defines that shape, for example `{ "kind": "include", "path": "fixture.json" }`; the converter will not invent such a mapping.
+
+## Worked example
+
+The opening YAML maps `suite` to `checkout`, `cases` to a two-item sequence and `enabled` to a boolean. Each case mapping holds a name and expected status. The JSON output keeps the sequence order and scalar kinds. It does not include YAML indentation because indentation is presentation, not a value.
+
+Add a comment above `enabled`. The JSON remains semantically equal and the page adds a presentation note. Add an anchor to the first case and alias it as another field. The value resolves and is repeated in JSON, while the note explains that alias identity disappeared. Make the alias point to an ancestor and conversion stops. This progression distinguishes safe presentation loss from a structure JSON cannot represent.
+
+For a completed invalid conversion, the output is cleared. Rapid edits during an outstanding worker request need the additional timing caution below.
+
+## For agents
+
+Remote automation may call `yaml_to_json` with an `application/yaml` text artifact and indentation from 0 through 8. Remote use transmits the source to Tamperbox infrastructure, unlike the browser page. An agent must retain provenance and limitations, report presentation loss, and never describe a resolved alias as proof that object identity was preserved.
+
+When diagnosing a production/configuration issue, ask which YAML library, YAML version and schema the consumer uses. Run duplicate-key, numeric-boundary, tag and alias tests with that implementation. Do not “fix” a rejected duplicate by selecting the value that seems legitimate; that is exactly the ambiguity an adversarial QA case should surface.
+
+## Limits
+
+### Timing and handoff boundaries
+
+Revision checks begin at dispatch, not at each edit. An earlier worker response can arrive during the 120-millisecond debounce or after Clear and repaint an earlier result. Do not rely on this version for a strict no-stale-output guarantee; wait for the current conversion and compare the output with the source before using it. Reverse handoff temporarily uses session storage and a random URL fragment, with expiry and one-use consumption.
+
+### Format boundaries
+
+The tool is not a general YAML editor, linter or canonicalizer. It does not preserve comments, directives, custom tags, anchor names, alias identity, flow style, block scalar chomping, quotes or numeric spelling. It does not validate Kubernetes, CI, Compose or another product schema. Its line and column are parser diagnostics, not a guarantee that every loader reports the same position. Browser-local processing ends if the user chooses the remote API or MCP operation.
+
+## References
+
+- [YAML 1.2.2](https://yaml.org/spec/1.2.2/), including [processes and models](https://yaml.org/spec/1.2.2/#chapter-3-processes-and-models), [anchors and aliases](https://yaml.org/spec/1.2.2/#3222-anchors-and-aliases), [tags](https://yaml.org/spec/1.2.2/#3212-tags) and the [JSON schema](https://yaml.org/spec/1.2.2/#102-json-schema).
+- [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259), especially [values](https://www.rfc-editor.org/rfc/rfc8259#section-3), [objects](https://www.rfc-editor.org/rfc/rfc8259#section-4), [arrays](https://www.rfc-editor.org/rfc/rfc8259#section-5) and [numbers](https://www.rfc-editor.org/rfc/rfc8259#section-6). Internet Standard.

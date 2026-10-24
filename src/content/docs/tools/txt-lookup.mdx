@@ -1,7 +1,7 @@
 ---
 title: TXT Record Lookup
 description: How the TXT Record Lookup reads every TXT record at a name, names what each one is for, measures the strings it is split into, flags duplicate SPF records and over-long strings, and how to fix and confirm each one.
-updated: 2026-10-20
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and guide for the Tamperbox TXT Record Lookup, which asks Cloudflare for the TXT records at a name over DNS over HTTPS or reads pasted records in the browser, names each record by its prefix (SPF, DMARC, DKIM key, MTA-STS, TLS reporting, BIMI or one of 35 verification tokens), and flags more than one SPF record and character-strings over 255 characters.
 prerequisites:
@@ -14,7 +14,7 @@ limitations:
 
 The tool page is [tamperbox.dev/txt-lookup](https://tamperbox.dev/txt-lookup). It opens on `harbor-supply.example`, a sample domain on the reserved `.example` zone, answered in the browser: an SPF record, seven verification tokens and one value the tool does not recognise. This page is the long version: how records are read and named, the two rules the tool enforces, and how to publish a TXT record that receivers read the way you wrote it.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> a name is sent to the Tamperbox server, which asks Cloudflare for its TXT records over DNS over HTTPS and returns them. Pasted records are parsed in your browser and never uploaded. Sample names under <code>.example</code> are answered in the browser. Nothing is stored.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> a name is sent to the Tamperbox server, which asks Cloudflare for its TXT records over DNS over HTTPS and returns them. Pasted records are parsed in your browser and never uploaded. Sample names under <code>.example</code> are answered in the browser. Ordinary lookup results are not persisted by this page. An explicit handoff temporarily stores its value in session storage for one-use transfer.</div>
 
 ## What the tool answers
 
@@ -61,14 +61,6 @@ Pasted records stay in the browser; a name means one TXT query from our server. 
 
 The failures, worst first, or one pass saying how many records were read.
 
-### Take it further
-
-Each recognised record is handed to the tool that evaluates it: an SPF record to the SPF Checker, a DMARC record (or a domain that publishes SPF) to the DMARC Checker, a DKIM key at its full name to the DKIM Checker, an MTA-STS record to the MTA-STS Checker, a BIMI record to the BIMI Checker. Each opens the other tool with the value in its box; nothing is put in the URL.
-
-### History and Heal it
-
-History logs every Break it and Heal it change. For pasted records with an over-long string, Heal it splits every value into quoted strings of 255 characters or fewer.
-
 ### TXT records
 
 One row per record: its kind as a tag, its length in characters, how many strings it is stored in, and the joined value. A row with an over-long string is marked as failing.
@@ -76,6 +68,14 @@ One row per record: its kind as a tag, its length in characters, how many string
 ### DNS response
 
 The answer as dig-style text, with a copy button.
+
+### History and Heal it
+
+History logs every Break it and Heal it change. For pasted records with an over-long string, Heal it splits every value into quoted strings of 255 characters or fewer.
+
+### Take it further
+
+The owner name of each recognised record is handed to the specialist for a fresh lookup: the SPF owner to the SPF Checker, a DMARC record (or a domain that publishes SPF) to the DMARC Checker, a DKIM key at its full name to the DKIM Checker, an MTA-STS record to the MTA-STS Checker, a BIMI record to the BIMI Checker. Each opens the other tool with the value in its box; the input stays out of the URL; a temporary random fragment identifies a one-use transfer held in session storage.
 
 ## Method
 
@@ -168,13 +168,13 @@ A DMARC record is at `_dmarc.example.com`, a DKIM key at `selector1._domainkey.e
 
 ## Worked example
 
-`harbor-supply.example` publishes nine TXT records: one SPF record that includes four sending services and one address, seven verification tokens for services the catalogue knows (two for Google, then Microsoft 365, Atlassian, Stripe, DocuSign and Meta), and one token for a service it does not, shown as Other. The verdict reads "9 TXT records at harbor-supply.example: SPF, 7 verification tokens, 1 other." with "The sample zone answered." under it, since no resolver was asked. There is nothing to fix; Take it further offers the SPF record to the SPF Checker and the domain to the DMARC Checker, both of which answer the sample in the browser too.
+`harbor-supply.example` publishes nine TXT records: one SPF record that includes four sending services and one address, seven verification tokens for services the catalogue knows (two for Google, then Microsoft 365, Atlassian, Stripe, DocuSign and Meta), and one token for a service it does not, shown as Other. The verdict reads "9 TXT records at harbor-supply.example: SPF, 7 verification tokens, 1 other." with "The sample zone answered." under it, since no resolver was asked. There is nothing to fix; Take it further offers the SPF owner name to the SPF Checker and the domain to the DMARC Checker, both of which answer the sample in the browser too.
 
 Press "Two SPF records" and the page loads the same nine records plus a second SPF record, as pasted text: the verdict turns to "2 SPF records:" and the cards explain permerror. Press "One string too long" and the SPF record comes back as one string of more than 255 characters; Heal it splits it, and Revert brings the break back.
 
 ## For agents
 
-The Tamperbox MCP server exposes `txt-lookup` with a `name`. It returns the question, status, flags, answer and authority, with each record's text as the resolver returned it. Keep these warnings with any conclusion:
+The Tamperbox MCP server exposes `txt_lookup` with a `name`. It returns an `evidence` object containing the question, status, flags, answer and authority, plus `records` for the requested type, with each record's text as the resolver returned it. Keep these warnings with any conclusion:
 
 - A verification string does not prove a current service account.
 - The record's kind comes from its prefix; SPF and DMARC content is not evaluated (use the SPF and DMARC operations).
@@ -183,6 +183,8 @@ The Tamperbox MCP server exposes `txt-lookup` with a `name`. It returns the ques
 See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/).
 
 ## Limits
+
+The DNS wire limit is 255 octets per character-string. The current page measures JavaScript string length and splits pasted text into 255-character pieces; for non-ASCII text or escape sequences this is not a wire-byte validator. Confirm the encoded record with your DNS provider.
 
 - Kinds come from prefixes and a catalogue of 35 token formats; an unknown token shows as Other.
 - No policy evaluation: an SPF record that would fail evaluation still passes here.

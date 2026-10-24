@@ -1,7 +1,7 @@
 ---
 title: SRV Lookup
 description: How the SRV Lookup reads a service's SRV records, groups targets by priority, shows each target's share of connections from its weight, recognises a service that is deliberately not offered, and how to fix and confirm each case.
-updated: 2026-10-20
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and guide for the Tamperbox SRV Lookup, which asks Cloudflare for the SRV records at a _service._protocol name over DNS over HTTPS (offering common services for a bare domain) or reads pasted SRV records in the browser, groups targets by priority, computes each target's share from the weights inside its priority, recognises the "." target, and reports port 0 and all-zero weights.
 prerequisites:
@@ -14,7 +14,7 @@ limitations:
 
 The tool page is [tamperbox.dev/srv-lookup](https://tamperbox.dev/srv-lookup). It opens on `_sip._tcp.harbor-supply.example`, a sample calling service on the reserved `.example` zone with two servers sharing the load and one backup. This page is the long version: how SRV records name a service's servers, how clients choose among them, the rules the tool applies, and how to publish a service correctly.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> a service name is sent to the Tamperbox server, which asks Cloudflare for its SRV records over DNS over HTTPS. A bare domain sends nothing until you pick a service. Pasted records are read in your browser and never uploaded. Sample names under <code>.example</code> are answered in the browser. Nothing is stored.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> a service name is sent to the Tamperbox server, which asks Cloudflare for its SRV records over DNS over HTTPS. A bare domain sends nothing until you pick a service. Pasted records are read in your browser and never uploaded. Sample names under <code>.example</code> are answered in the browser. Ordinary lookup results are not persisted by this page. An explicit handoff temporarily stores its value in session storage for one-use transfer.</div>
 
 ## What the tool answers
 
@@ -59,14 +59,6 @@ Pasted records stay in the browser; a service name means one SRV query from our 
 
 Checks and notes first, then the pass naming the targets and priority levels.
 
-### Take it further
-
-The first target and its port to the TCP Ping (connection time), to the Minecraft Server Status for a `_minecraft._tcp` record, and, for a live name, to the Open Port Checker; the first target to the DNS Lookup for its addresses.
-
-### History and Heal it
-
-History logs every Break it change, and a service picked for a bare domain; Revert and Reset input bring the input back.
-
 ### SRV records
 
 One block per priority, lowest first: "Priority 10, Tried first", then "Priority 20, Only when every priority 10 target fails". Each target shows `host:port`, a bar for its share, the share as a percentage (or "All" when it is alone in its priority) and its weight.
@@ -74,6 +66,14 @@ One block per priority, lowest first: "Priority 10, Tried first", then "Priority
 ### DNS response
 
 The answer as dig-style text, with a copy button.
+
+### History and Heal it
+
+History logs every Break it change, and a service picked for a bare domain; Revert and Reset input bring the input back.
+
+### Take it further
+
+The first target and its port to the TCP Ping (connection time), to the Minecraft Server Status for a `_minecraft._tcp` record, and, for a live name, to the Open Port Checker; the first target to the DNS Lookup for its addresses.
 
 ## Method
 
@@ -91,7 +91,7 @@ Targets are grouped by priority, lowest first. [RFC 2782](https://www.rfc-editor
 
 ### 4. Weight and share
 
-Inside one priority, each target's share is its weight divided by the sum of the weights. RFC 2782, Weight field: "Larger weights SHOULD be given a proportionately higher probability of being selected." When every weight in a priority is 0, each target gets an equal share and an info finding says "Weights of 0": clients pick at random. A share is the chance a new connection starts at that target, not a share of traffic.
+Inside one priority, each target's share is its weight divided by the sum of the weights. RFC 2782, Weight field: "Larger weights SHOULD be given a proportionately higher probability of being selected." When every weight in a priority is 0, each target gets an equal share and an info finding says "Weights of 0": clients pick at random. The displayed share is a weight ratio, not a simulation of RFC 2782’s selection algorithm or a measured traffic share. In particular, mixed zero and nonzero weights are simplified; see the conformance boundary below.
 
 ### 5. Check: port 0
 
@@ -107,7 +107,7 @@ A real target with port 0: check, "Port 0". The port is the one the service list
 | --- | --- | --- | --- |
 | [RFC 2782](https://www.rfc-editor.org/rfc/rfc2782) | The format of the SRV RR: Priority, Weight, Port, Target | Priorities order the tiers; weights give shares; "." means not offered; field ranges 0 to 65535 | The target "MUST NOT be an alias" and must have address records: neither is checked. With mixed weights, a weight-0 target is shown at 0%, where the RFC asks for "a very small chance". Updated by RFC 6335 and [RFC 8553](https://www.rfc-editor.org/rfc/rfc8553) |
 | [RFC 8552](https://www.rfc-editor.org/rfc/rfc8552) | [2](https://www.rfc-editor.org/rfc/rfc8552#section-2) | Underscored service and protocol labels are accepted in names | The registry is not consulted; unknown services are shown by name |
-| [RFC 6335](https://www.rfc-editor.org/rfc/rfc6335) | [5](https://www.rfc-editor.org/rfc/rfc6335#section-5) | Service names follow the IANA registry | |
+| [RFC 6335](https://www.rfc-editor.org/rfc/rfc6335) | [5](https://www.rfc-editor.org/rfc/rfc6335#section-5) | The page offers a fixed service-name catalog | |
 
 RFC 2782 has no numbered sections; its rules sit under the field names of "The format of the SRV RR", which is how they are cited here.
 
@@ -154,17 +154,19 @@ Publish `0 0 0 .` at the service name. Mail clients probing a domain then stop l
 
 ## Worked example
 
-`_sip._tcp.harbor-supply.example` lists three servers. At priority 10, `sip1.harbor-supply.example` has weight 60 and `sip2.harbor-supply.example` weight 40, so new calls start at sip1 six times in ten; at priority 20, `sip-backup.harbor-supply.example` is used only when both of those fail. All three listen on port 5060. The verdict reads "3 servers for SIP (calls), 2 priority levels." and Findings folds one pass, "3 targets in 2 priority levels". Take it further hands `sip1.harbor-supply.example:5060` to the TCP Ping and the host to the DNS Lookup, both of which answer the sample in the browser. Press "Service not offered" for the "." target, and "A bare domain" to see the service picker.
+`_sip._tcp.harbor-supply.example` lists three servers. At priority 10, `sip1.harbor-supply.example` has weight 60 and `sip2.harbor-supply.example` weight 40, so the displayed weight ratios are 60% and 40%; at priority 20, `sip-backup.harbor-supply.example` is used only when both of those fail. All three listen on port 5060. The verdict reads "3 servers for SIP (calls), 2 priority levels." and Findings folds one pass, "3 targets in 2 priority levels". Take it further hands `sip1.harbor-supply.example:5060` to the TCP Ping and the host to the DNS Lookup, both of which answer the sample in the browser. Press "Service not offered" for the "." target, and "A bare domain" to see the service picker.
 
 ## For agents
 
-The Tamperbox MCP server exposes `srv-lookup` with a complete service `name` such as `_sip._tcp.example.com`; it does not offer services for a bare domain. It returns the question, status, flags, answer and authority. Keep these warnings with any conclusion:
+The Tamperbox MCP server exposes `srv_lookup` with a complete service `name` such as `_sip._tcp.example.com`; it does not offer services for a bare domain. It returns an `evidence` object containing the question, status, flags, answer and authority, plus `records` for the requested type. Keep these warnings with any conclusion:
 
 - The operation does not connect to the advertised service.
 - Shares follow from the weights inside a priority; clients that ignore SRV connect elsewhere.
 - One answer from one resolver at one moment.
 
 See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/).
+
+The response also contains parsed records and priority `tiers`; these are calculated shares, not a measurement of traffic distribution.
 
 ## Limits
 

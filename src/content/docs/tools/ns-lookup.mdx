@@ -1,7 +1,7 @@
 ---
 title: NS Lookup
 description: How the NS Lookup reads the nameservers a zone delegates to, names the provider behind each one, checks redundancy and mixed providers, and how to finish a DNS migration or add redundancy and confirm it.
-updated: 2026-10-20
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and guide for the Tamperbox NS Lookup, which asks Cloudflare for a zone's NS records over DNS over HTTPS or reads pasted NS records in the browser, names each nameserver's provider from a catalog of 29 providers or as self-hosted, and reports a single nameserver, more than one provider, self-hosted servers and servers not in the catalog.
 prerequisites:
@@ -14,7 +14,7 @@ limitations:
 
 The tool page is [tamperbox.dev/ns-lookup](https://tamperbox.dev/ns-lookup). It opens on `harbor-supply.example`, a sample domain on the reserved `.example` zone served by two providers, as after a DNS migration that was never finished. This page is the long version: what the NS records say, how providers are named, the rules applied, and how to finish a migration safely.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> a name is sent to the Tamperbox server, which asks Cloudflare for its NS records over DNS over HTTPS. Pasted records are read in your browser and never uploaded. Sample names under <code>.example</code> are answered in the browser. Nothing is stored.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> a name is sent to the Tamperbox server, which asks Cloudflare for its NS records over DNS over HTTPS. Pasted records are read in your browser and never uploaded. Sample names under <code>.example</code> are answered in the browser. Ordinary lookup results are not persisted by this page. An explicit handoff temporarily stores its value in session storage for one-use transfer.</div>
 
 ## What the tool answers
 
@@ -55,14 +55,6 @@ Pasted records stay in the browser; a name means one NS query from our server.
 
 Failures, checks and notes first, the passes folded.
 
-### Take it further
-
-The zone to the DNSSEC Checker, the zone to the WHOIS Lookup (the delegation at the registry), and for a live zone the first nameserver to the DNS Lookup for its addresses.
-
-### History and Heal it
-
-History logs every Break it and Heal it change. Heal it offers "Look up" followed by the zone's name when the name is inside a zone.
-
 ### NS records
 
 One row per nameserver: the host and its provider, "Self-hosted", or "Not in the catalog" with the domain the host belongs to.
@@ -70,6 +62,14 @@ One row per nameserver: the host and its provider, "Self-hosted", or "Not in the
 ### DNS response
 
 The answer as dig-style text, with a copy button.
+
+### History and Heal it
+
+History logs every Break it and Heal it change. Heal it offers "Look up" followed by the zone's name when the name is inside a zone.
+
+### Take it further
+
+The zone to the DNSSEC Checker, the zone to the WHOIS Lookup (the delegation at the registry), and for a live zone the first nameserver to the DNS Lookup for its addresses.
 
 ## Method
 
@@ -152,11 +152,11 @@ When `ns1.example.com` serves `example.com`, the registrar must publish glue: th
 
 ## Worked example
 
-`harbor-supply.example` lists three nameservers: two Cloudflare hosts and one Route 53 host. The verdict reads "3 nameservers at Cloudflare and Amazon Route 53.", with a check chip on each provider. Findings carries the check "2 providers answer for this zone" and the pass "3 nameservers". The story the sample tells is common: the domain moved to Cloudflare, and the Route 53 server was never removed from the list. Until it is, some resolvers ask Route 53, which may still serve last month's records. The cards walk through finishing the migration, and Take it further offers the zone to the DNSSEC Checker and to the WHOIS Lookup, where the registry's delegation shows which list resolvers start from.
+`harbor-supply.example` lists three nameservers: two Cloudflare hosts and one Route 53 host. The verdict reads "3 nameservers at Cloudflare and Amazon Route 53.", with a check chip on each provider. Findings carries the check "2 providers answer for this zone" and the pass "3 nameservers". The synthetic example models a possible unfinished migration. Multiple providers can also be intentional; their names alone do not prove a migration mistake. Until it is, some resolvers ask Route 53, which may still serve last month's records. The cards walk through finishing the migration, and Take it further offers the zone to the DNSSEC Checker and to the WHOIS Lookup, where the registry's delegation shows which list resolvers start from.
 
 ## For agents
 
-The Tamperbox MCP server exposes `ns-lookup` with a `name`, returning the question, status, flags, answer and authority. Provider naming is a separate operation, `dns-provider`, which reads the nameservers and names providers without guessing unknown ones. Keep these warnings with any conclusion:
+The Tamperbox MCP server exposes `ns_lookup` with a `name`, returning an `evidence` object with the question, status, flags, answer and authority, plus `records` for the requested type. Provider naming is a separate operation, `dns_provider`, which reads the nameservers and names providers without guessing unknown ones. Keep these warnings with any conclusion:
 
 - An NS record does not prove the server answers or holds the right records.
 - The zone's NS records and the parent's delegation can differ.

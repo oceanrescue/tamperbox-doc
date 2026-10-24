@@ -99,7 +99,6 @@ main > .content-panel:first-of-type { padding-top: 2.5rem !important; padding-bo
 .tb-page-meta button { border: 0; border-radius: var(--tb-radius-control); padding: 0.25rem 0.4rem; background: transparent; color: inherit; font: inherit; text-decoration: none; cursor: pointer; }
 .tb-page-meta a:hover,
 .tb-page-meta button:hover { background: var(--tb-surface-hover); color: var(--tb-text-strong); }
-.tb-page-meta time { color: var(--tb-text-strong); }
 
 .sl-markdown-content { color: var(--tb-text-body); font-size: 0.98rem; line-height: 1.72; }
 .sl-markdown-content h2:not(:where(.not-content *)) { margin-top: 2.35em; color: var(--tb-text-strong); font-size: 1.5rem; letter-spacing: -0.02em; }
@@ -121,6 +120,27 @@ main > .content-panel:first-of-type { padding-top: 2.5rem !important; padding-bo
 
 .right-sidebar-panel { padding-inline: 1.5rem !important; border-inline-start: 0 !important; }
 .tb-right-rail h2 { color: var(--tb-text-strong); font-size: 0.82rem; letter-spacing: 0; text-transform: none; }
+/* On-this-page: a quiet ruled list; the current section takes the accent bar, nesting reads by indent alone. */
+starlight-toc nav h2,
+mobile-starlight-toc .dropdown h2 { margin: 0 0 0.6rem; color: var(--tb-text-strong); font-size: 0.82rem; font-weight: 600; }
+starlight-toc ul,
+mobile-starlight-toc ul { margin: 0; padding: 0; list-style: none; }
+starlight-toc ul ul { margin: 0.1rem 0 0.3rem; }
+starlight-toc nav > ul { border-inline-start: 1px solid var(--tb-border-subtle); }
+starlight-toc a,
+mobile-starlight-toc .dropdown a { display: block; margin-inline-start: -1px; padding: 0.22rem 0 0.22rem calc(0.85rem + var(--depth, 0) * 0.85rem); border-inline-start: 2px solid transparent; color: var(--tb-text-muted) !important; font-size: 0.8rem; line-height: 1.4; text-decoration: none !important; }
+starlight-toc a:hover,
+mobile-starlight-toc .dropdown a:hover { color: var(--tb-text-strong) !important; }
+starlight-toc a[aria-current='true'],
+mobile-starlight-toc .dropdown a[aria-current='true'] { border-inline-start-color: var(--tb-accent); color: var(--tb-text-strong) !important; font-weight: 500; }
+starlight-toc ul ul a { font-size: 0.78rem; }
+mobile-starlight-toc .dropdown { border: 1px solid var(--tb-border-default); border-radius: var(--tb-radius-card); background: var(--tb-surface-card); }
+mobile-starlight-toc .dropdown a { margin: 0; border: 0; padding-block: 0.45rem; }
+
+/* Sidebar tool groups: small caps-free group labels, members indented under a hairline. */
+.sidebar-content ul ul details > summary .group-label > span { color: var(--tb-text-muted); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.01em; }
+.sidebar-content ul ul details > ul { margin-inline-start: 0.6rem; border-inline-start: 1px solid var(--tb-border-subtle); }
+
 .tb-agent-links { display: grid; gap: 0.2rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--tb-border-subtle); }
 .tb-agent-links a { display: flex; justify-content: space-between; padding: 0.3rem 0; color: var(--tb-text-muted); font-size: 0.8rem; text-decoration: none; }
 .tb-agent-links a:hover { color: var(--tb-accent); }

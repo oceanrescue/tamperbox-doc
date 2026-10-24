@@ -1,7 +1,7 @@
 ---
 title: DNS Lookup
 description: How the DNS Lookup asks a public resolver or a zone's own nameserver for one record type, how it checks the response, what every status, flag and finding means, and how to confirm a fix with dig.
-updated: 2026-10-20
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and guide for the Tamperbox DNS Lookup, which sends one DNS query for a name and type to Cloudflare, Google or Quad9 over DNS over HTTPS or to the zone's authoritative nameserver over TCP port 53, validates the response, and reports status, flags, TTLs, aliases and the AD flag as the resolver's DNSSEC assertion.
 prerequisites:
@@ -14,7 +14,7 @@ limitations:
 
 The tool page is [tamperbox.dev/dns-lookup](https://tamperbox.dev/dns-lookup). It opens on a live lookup of `tamperbox.dev`: a real resolver, real timing and a real DNSSEC flag. This page is the long version: what is sent, how the response is checked, what each status, flag and finding means, and how to confirm a change from your own terminal.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> a name is sent to the Tamperbox server, which sends one DNS query to the resolver you pick over DNS over HTTPS, or to the zone's own nameserver over TCP port 53, and returns the decoded response. Pasted records are parsed in your browser and never uploaded. Names under the reserved <code>.example</code> zone are answered in the browser from sample data. Nothing is stored.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> a name is sent to the Tamperbox server, which sends one DNS query to the resolver you pick over DNS over HTTPS, or to the zone's own nameserver over TCP port 53, and returns the decoded response. Pasted records are parsed in your browser and never uploaded. Names under the reserved <code>.example</code> zone are answered in the browser from sample data. Ordinary lookup results are not persisted by this page. An explicit handoff temporarily stores its value in session storage for one-use transfer.</div>
 
 ## What the tool answers
 
@@ -62,17 +62,17 @@ Two items beside the verdict: pasted records stay in the browser; a name means o
 
 Every rule that applied, worst first. Two or more passes fold into one "checks passed" line.
 
-### Take it further
+### Answer, Response, Authority, DNS response
 
-Links that carry a value from this answer into another tool: the first address to the ASN Lookup and to Reverse DNS, a name with A records to the propagation check, an unvalidated or failing zone to the DNSSEC Checker, and a TXT answer that holds an SPF record to the SPF Checker. Each one opens the other tool with the value already in its box; nothing is put in the URL.
+The answer table lists every record with its owner, TTL, type and data, aliases first. Response spells out the status and each flag that is set in words. Authority appears when the answer is empty: it usually holds the zone's SOA, which also sets how long the empty answer is cached. DNS response is the whole answer as dig-style text, with a copy button for a ticket.
 
 ### History and Heal it
 
 Break it and Heal it replace the input; History records each change with what it replaced, Revert undoes the newest, and Reset input returns to what you entered. Heal it offers to ask the authoritative server after a SERVFAIL, and to raise a pasted TTL under 60 seconds to one hour.
 
-### Answer, Response, Authority, DNS response
+### Take it further
 
-The answer table lists every record with its owner, TTL, type and data, aliases first. Response spells out the status and each flag that is set in words. Authority appears when the answer is empty: it usually holds the zone's SOA, which also sets how long the empty answer is cached. DNS response is the whole answer as dig-style text, with a copy button for a ticket.
+Links that carry a value from this answer into another tool: the first address to the ASN Lookup and to Reverse DNS, a name with A records to the propagation check, an unvalidated or failing zone to the DNSSEC Checker, and a TXT answer that holds an SPF record to the SPF Checker. Each one opens the other tool with the value already in its box; the input stays out of the URL; a temporary random fragment identifies a one-use transfer held in session storage.
 
 ## Method
 
@@ -192,11 +192,11 @@ Remove the CNAME, or recreate the target at the service it pointed to. Then look
 
 The page opens on `tamperbox.dev`, type A, asked of Cloudflare. It is a live lookup, so the addresses, TTLs and timing are whatever Cloudflare returns at that moment; the shape of the result is what this example is for.
 
-The verdict names the A records and says Cloudflare answered, with its time. The chips show NOERROR, the DNSSEC state and the lowest TTL. Because `tamperbox.dev` is not signed with DNSSEC today, Findings carries "Not validated with DNSSEC" as information, with the records answered folded under it: a working name, and an honest note on what the resolver did not vouch for. Take it further offers the first address to the ASN Lookup and Reverse DNS, the name to the propagation check, and the zone to the DNSSEC Checker. Switch the type to AAAA and the same name returns its IPv6 addresses; switch the server to Authoritative and the TTLs become the published ones.
+The verdict names the A records and says Cloudflare answered, with its time. The chips show NOERROR, the DNSSEC state and the lowest TTL. If the response lacks AD, Findings reports “Not validated with DNSSEC”; that flag alone does not establish whether the zone is unsigned. Available handoffs depend on the current answer, record type and flags. Switch the type to AAAA and the same name returns its IPv6 addresses; switch the server to Authoritative and the TTLs become the published ones.
 
 ## For agents
 
-The Tamperbox MCP server exposes the same lookup as the `dns-lookup` operation, with `name`, `type` and `resolver` (the three public resolvers, nine more, or `authoritative`). It returns the question, status, flags, answer and authority. Keep these warnings with any conclusion:
+The Tamperbox MCP server exposes the same lookup as the `dns_lookup` operation, with `name`, `type` and `resolver` (the three public resolvers, nine more, or `authoritative`). It returns the question, status, flags, answer and authority. Keep these warnings with any conclusion:
 
 - The AD flag is the resolver's assertion, not a local validation.
 - One answer from one resolver at one moment; other caches may differ until the TTL expires.
