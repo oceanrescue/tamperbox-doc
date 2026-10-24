@@ -12,7 +12,7 @@ limitations:
   - llms.txt is a proposal some AI tools read and many do not; links are checked for form, not requested; the draft names pages from the site's own links and paths
 ---
 
-The tool page is [tamperbox.dev/llms-txt](https://tamperbox.dev/llms-txt). It checks `tamperbox.dev` live when opened,  says whether its llms.txt follows the format and what an agent would read from it, and drafts a file from the site. This page is the long version: what is fetched, every rule, how the outline and the draft are made, and how to fix each finding.
+The tool page is [tamperbox.dev/llms-txt](https://tamperbox.dev/llms-txt). It checks `tamperbox.dev` live when opened, says whether its llms.txt follows the format and what an agent would read from it, and drafts a file from the site. This page is the long version: what is fetched, every rule, how the outline and the draft are made, and how to fix each finding.
 
 <div class="tb-callout"><strong>Where processing happens:</strong> a pasted llms.txt is read in your browser and never uploaded. A host name is sent to the Tamperbox server, which fetches <code>/llms.txt</code>, the home page, <code>/robots.txt</code> and up to two top-level sitemaps, each with up to four index children, without cookies; the file is read and the draft written in your browser. Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history. Sample hosts on the reserved <code>.example</code> zone are answered in the browser from a fixture.</div>
 
@@ -44,13 +44,7 @@ A pasted address loses quotes, brackets and trailing punctuation and keeps the h
 
 ### Findings
 
-Worst first, line findings prefixed with their line; passing findings remain visible.
-
-### Related checks and input transfer
-
-Use Check the rest to open another website tool with the current address. Pasted files are not transferred through these links. Transfers temporarily use browser `sessionStorage` with a one-use random token in the URL fragment; the input itself is not in the URL. The destination accepts a transfer for less than one minute and removes the token. Manual checks still wait for their run button or Enter.
-
-To inspect a value from the result, copy that specific address into the relevant tool. A separate check collects new evidence and can return a different result; do not interpret navigation as confirmation of the original verdict.
+Worst first, line findings prefixed with their line; two or more passing findings are grouped under an expandable **checks passed** row. A single passing finding stays visible.
 
 ### What an agent reads
 
@@ -58,11 +52,39 @@ The outline: the name (or "No name" in red), the summary (or the first note show
 
 ### llms.txt
 
-The file as written, numbered, issue lines tinted and noted. Long files show their first 60 lines and every marked line; **Show all n lines** lists the rest.
+The file as written, numbered, issue lines tinted and noted. Long files show their first 60 lines and every marked line; **Show all n lines** lists the rest, and **Show the first 60 lines** folds it again. Folding is offered only when at least ten unmarked lines after line 60 can be hidden; marked lines remain visible.
 
 ### Draft from the site
 
 A complete llms.txt built from the site, with a note saying how many link names came from the site's own links and how many from URL paths. **Copy**, **Download llms.txt**, and **Check the draft**, which loads the draft into the box and checks it.
+
+### History
+
+History follows the current result evidence. Break it and Heal it record input changes, newest first. **Revert** restores the input before the latest recorded change; **Reset input** restores the input before the first retained change and clears the list. **Restore input before this break** under Heal it also reverts the latest change.
+
+These actions reload and check the restored input. Restoring a public address can therefore send a new request, including on the two tools whose ordinary typing waits for a run button. Editing or pasting a new input clears History. The list lives in the current page; it is not saved monitoring data and does not restore an old network response.
+
+**Check the draft** is also logged as an input change, so Revert returns to the input that produced the draft.
+
+### Take it further
+
+Only links with an available result value appear.
+
+| Follow-up | Value carried | When offered |
+| --- | --- | --- |
+| [Redirect Checker](https://tamperbox.dev/redirect-checker) | `https://host/llms.txt` | A host was checked |
+| [Website Down Checker](https://tamperbox.dev/website-down-checker) | First absolute HTTP(S) link | Such a link appears in the file |
+| [SSL Checker](https://tamperbox.dev/ssl-checker) | A linked host outside the checked site | The file names a different host outside the site's subdomains |
+
+### Related checks and input transfer
+
+Check the rest carries the current address to a sibling tool. Take it further carries the specific value listed above. Pasted file contents are not transferred through these links. Transfers temporarily use browser `sessionStorage` with a one-use random token in the URL fragment; the input itself is not in the URL. The destination accepts a transfer for less than one minute and removes the token. Manual destination tools wait for their run button or Enter.
+
+Each destination collects new evidence. A follow-up link does not confirm the original verdict or repair the remote site.
+
+### Result cards
+
+Six expandable cards below the result explain its meaning, give a beginner explanation, offer an agent prompt, describe good practice, suggest fixes and state limitations. Their text follows the current result; it is not another measurement. Open a card for its full explanation and the relevant [Method](#method) or [Guide](#guide). The agent prompt can be copied for review; copying it does not run a repair or send it to an agent.
 
 ## Method
 
