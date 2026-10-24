@@ -1,7 +1,7 @@
 ---
 title: Post-Quantum TLS Checker
 description: How the post-quantum checker runs two TLS handshakes, how it classifies the key exchange group, what each finding means for recorded traffic, and how to turn on ML-KEM and confirm it.
-updated: 2026-10-21
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox Post-Quantum TLS Checker, which runs a default TLS handshake and an ML-KEM-only handshake on port 443 from the Tamperbox server, or reads pasted openssl s_client or curl -v output in the browser, and reports whether the session key is protected by an ML-KEM hybrid.
 prerequisites:
@@ -14,7 +14,7 @@ limitations:
 
 The tool page is [tamperbox.dev/post-quantum-checker](https://tamperbox.dev/post-quantum-checker). It opens by checking `tamperbox.dev` live and answers one narrow question: is the session key of a TLS connection to this host protected against a future quantum computer? This page is the long version: what the two handshakes do, how a group name is classified, every finding the page can show, and how to turn ML-KEM on and confirm it without Tamperbox.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> a host name is sent to the Tamperbox server, which opens two TLS connections to it on port 443 and returns what each handshake negotiated. Pasted handshake output is read in your browser and never uploaded. Nothing is stored.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> a host name is sent to the Tamperbox server, which opens two TLS connections to it on port 443 and returns what each handshake negotiated. Pasted handshake output is read in your browser and never uploaded. History and tool-to-tool transfers remain in the browser; see Browser transfers below.</div>
 
 ## What the tool answers
 
@@ -67,6 +67,10 @@ History logs each Break it load, with Revert for the newest change and Reset inp
 ### The key, the handshakes, what it protects
 
 **The key the probe negotiated** splits the group into its parts: a classical part and a post-quantum part, with an empty "Nothing" slot when there is no post-quantum part. **Two handshakes** shows each attempt: what was offered, what came back, and why. **What it protects** states whether traffic recorded today could be read later, the TLS version, and the certificate key. **Turn on ML-KEM** appears only when the server should change, with a configuration for nginx, Apache, Caddy, HAProxy or Go.
+
+### Browser transfers
+
+Explicit tool links temporarily place the transferred input in browser `sessionStorage`. The URL fragment carries a random token, not the input. The receiving page accepts that token once, for its destination path and for less than one minute, then removes it from the address. A same-origin browser channel can complete a transfer into another tab. Ordinary documentation links do not transfer input. When browser storage is unavailable, navigation still works but the input may need to be pasted again.
 
 ## Method
 
@@ -206,7 +210,7 @@ Each case is built from your host and cipher and read locally; History restores 
 
 ## Worked example
 
-The page opens on `tamperbox.dev`, checked live. Values change with the server's configuration, so read this as a guide to the shape, not as fixed facts. At the time of writing the default probe gets X25519MLKEM768 over TLS 1.3 and the ML-KEM-only handshake is accepted, so the verdict is **Post-quantum secure**. The key splits into X25519 and ML-KEM-768. Findings show the passes folded and one INFO line: the certificate signature is classical, which is expected. No configuration appears, because nothing needs to change, and Take it further offers the DANE check for `tamperbox.dev:443`.
+The page opens on `tamperbox.dev`, checked live. Values change with the server's configuration, so read this as a guide to the shape, not as fixed facts. Read the negotiated group and protocol from the current result, then compare the default handshake with the ML-KEM-only attempt. A hybrid result combines a classical group with ML-KEM; it does not make the certificate signature post-quantum. Findings explain missing support, preference or probe limitations, and configuration advice appears only when the result calls for it. Take it further offers the DANE check for `tamperbox.dev:443`.
 
 To see the repair path, press **Classical X25519**. The input becomes an `openssl s_client` transcript for your host with `Peer Temp Key: X25519`; the verdict turns to **Not post-quantum secure**, the empty "Nothing" slot appears, and **Turn on ML-KEM** shows the line for your server. Revert brings the live result back.
 
@@ -227,7 +231,7 @@ See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/).
 - A failed ML-KEM-only handshake does not prove lack of support.
 - Pure ML-KEM groups are classified but not probed.
 - Pasted output is reported as supplied.
-- Nothing is stored.
+- History is a browser interaction record, not server monitoring. Explicit tool links use temporary browser storage as described in [Browser transfers](#browser-transfers).
 
 ## References
 

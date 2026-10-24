@@ -1,7 +1,7 @@
 ---
 title: Redirect Checker
 description: What the redirect checker requests, how it reads each hop, every rule it applies to a chain, what each finding means for visitors and crawlers, and how to fix and verify each one.
-updated: 2026-10-21
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox Redirect Checker, which requests each hop of a redirect chain from the Tamperbox server without cookies, or reads pasted curl -sIL output in the browser, and reports loops, downgrades, temporary codes on permanent moves, long chains and dead ends.
 prerequisites:
@@ -14,7 +14,7 @@ limitations:
 
 The tool page is [tamperbox.dev/redirect-checker](https://tamperbox.dev/redirect-checker). It opens by tracing `tamperbox.dev` live from `http://`, answers in one sentence where the chain lands, and shows every hop under it. This page is the long version: what our server requests, every rule the page applies, what each finding means, and how to fix and verify each one.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> a URL is sent to the Tamperbox server, which requests each hop itself, without cookies, and returns the status, Location and response headers of every answer. Pasted curl output is read in your browser and never uploaded. Nothing is stored.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> a URL is sent to the Tamperbox server, which requests each hop itself, without cookies, and returns the status, Location and response headers of every answer. Pasted curl output is read in your browser and never uploaded. History and tool-to-tool transfers remain in the browser; see Browser transfers below.</div>
 
 ## What the tool answers
 
@@ -77,7 +77,11 @@ Every Break it and Heal it change, newest first, with what it replaced. Revert u
 
 ### Take it further
 
-Links that carry a value derived from this result into another tool in the same category. They appear only when the chain moved, that is, when the final address differs from the one you entered: the final address into the [HTTP/3 & Compression Checker](/tools/http3-checker/), which checks the page the chain lands on, and the final address into the CORS Tester, which loads it as the URL to call. Each opens the other tool with the value already in its box; nothing is put in a URL.
+Follow-up links appear only for a completed live trace whose final status is below 400 and whose final address differs from the input. The [HTTP/3 & Compression Checker](/tools/http3-checker/) receives that final address. The [CORS Tester](/tools/cors-tester/) link additionally requires an HTTPS destination; it fills the URL field, and you choose the request settings and run the check there. Pasted, interrupted, looping and failed traces do not offer these links.
+
+### Browser transfers
+
+Explicit tool links temporarily place the transferred input in browser `sessionStorage`. The URL fragment carries a random token, not the input. The receiving page accepts that token once, for its destination path and for less than one minute, then removes it from the address. A same-origin browser channel can complete a transfer into another tab. Ordinary documentation links do not transfer input. When browser storage is unavailable, navigation still works but the input may need to be pasted again.
 
 ## Method
 
@@ -280,7 +284,7 @@ See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for 
 - Times are measured from our server to the end of each hop's headers; they are not what a visitor elsewhere sees.
 - Cookie and authentication headers are left out of the evidence.
 - Pasted output carries no timings and cannot be checked for private targets.
-- Nothing is stored.
+- History is a browser interaction record, not server monitoring. Explicit tool links use temporary browser storage as described in [Browser transfers](#browser-transfers).
 
 ## References
 

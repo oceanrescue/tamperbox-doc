@@ -1,7 +1,7 @@
 ---
 title: security.txt Checker
 description: How the security.txt checker fetches /.well-known/security.txt or reads a pasted file, every RFC 9116 rule it applies, what each finding means for a researcher, and how to fix and verify it.
-updated: 2026-10-21
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox security.txt Checker, which fetches https://host/.well-known/security.txt from the Tamperbox server (up to five HTTPS redirects, 64 KiB) or reads a pasted file in the browser, and checks it against RFC 9116.
 prerequisites:
@@ -14,7 +14,7 @@ limitations:
 
 The tool page is [tamperbox.dev/security-txt-checker](https://tamperbox.dev/security-txt-checker). It opens by checking `google.com` live, answers in one sentence, and shows the file the way a security researcher reads it. This page is the long version: what our server requests, every rule the page applies with the section of [RFC 9116](https://www.rfc-editor.org/rfc/rfc9116) behind it, what each finding means, and how to fix and confirm it.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> a host name is sent to the Tamperbox server, which requests https://host/.well-known/security.txt once, follows up to five HTTPS redirects, reads at most 64 KiB and returns the file with its status and media type. A pasted or dropped file is read in your browser and never uploaded. The same parser judges both. Nothing is stored.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> a host name is sent to the Tamperbox server, which requests https://host/.well-known/security.txt once, follows up to five HTTPS redirects, reads at most 64 KiB and returns the file with its status and media type. A pasted or dropped file is read in your browser and never uploaded. The same parser judges both. History and tool-to-tool transfers remain in the browser; see Browser transfers below.</div>
 
 ## What the tool answers
 
@@ -70,6 +70,10 @@ The Expires date on a time axis with the moment of the check and the one-year ma
 ### History and Take it further
 
 History logs every Break it and Heal it load with Revert and Reset input. Take it further carries values from the file into other security tools: the host serving the Encryption key to the certificate checker, the first `https` Contact to the security headers checker, the first `https` Policy to the mixed content checker, and, after a redirect, the host that served the file to the certificate checker. Reserved example names are never offered.
+
+### Browser transfers
+
+Explicit tool links temporarily place the transferred input in browser `sessionStorage`. The URL fragment carries a random token, not the input. The receiving page accepts that token once, for its destination path and for less than one minute, then removes it from the address. A same-origin browser channel can complete a transfer into another tab. Ordinary documentation links do not transfer input. When browser storage is unavailable, navigation still works but the input may need to be pasted again.
 
 ## Method
 
@@ -259,7 +263,7 @@ See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for 
 - A valid file does not show who controls the contacts, that anyone reads them, or that testing is permitted; read the Policy.
 - A pasted file has no status, media type, redirects or fetch URL, so those rules and the Canonical comparison need a live check.
 - CSAF and other extension fields are listed but not validated.
-- Nothing is stored.
+- History is a browser interaction record, not server monitoring. Explicit tool links use temporary browser storage as described in [Browser transfers](#browser-transfers).
 
 ## References
 
@@ -268,4 +272,4 @@ See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for 
 - [RFC 5646, Tags for Identifying Languages](https://www.rfc-editor.org/rfc/rfc5646). Best Current Practice, BCP 47, September 2009.
 - [RFC 3986, Uniform Resource Identifier: Generic Syntax](https://www.rfc-editor.org/rfc/rfc3986). Internet Standard, STD 66, January 2005. Section used: [4.3](https://www.rfc-editor.org/rfc/rfc3986#section-4.3).
 - [RFC 9580, OpenPGP](https://www.rfc-editor.org/rfc/rfc9580). Proposed Standard, July 2024; obsoletes [RFC 4880](https://www.rfc-editor.org/rfc/rfc4880). Section used: [7](https://www.rfc-editor.org/rfc/rfc9580#section-7), the cleartext signature framework.
-- [IANA security.txt Fields registry](https://www.iana.org/assignments/securitytxt/securitytxt.xhtml). The registered field names, including CSAF.
+- [IANA security.txt Fields registry](https://www.iana.org/assignments/security-txt-fields). The registered field names, including CSAF.

@@ -1,7 +1,7 @@
 ---
 title: Security Headers Checker
 description: How the security headers checker fetches a page or reads pasted headers, the six headers it scores and every rule behind the grade, what each finding means, and how to fix and verify each header.
-updated: 2026-10-21
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox Security Headers Checker, which grades the final response of a public website (fetched by the Tamperbox server after up to 10 redirects) or pasted response headers (read in the browser) on six headers, from A+ to F, and writes the missing lines in server syntax.
 prerequisites:
@@ -16,7 +16,7 @@ limitations:
 
 The tool page is [tamperbox.dev/security-headers](https://tamperbox.dev/security-headers). It opens by grading `mozilla.org` live, answers in one sentence with a letter and the headers that cost points, and lists every header under it. This page is the long version: what our server requests, every rule behind the grade, what each finding means, and how to send each header and confirm it.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> a website is sent to the Tamperbox server, which requests the page itself, follows up to 10 redirects, removes cookie values and returns the final response's headers. Pasted headers are graded in your browser and never uploaded. Nothing is stored.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> a website is sent to the Tamperbox server, which requests the page itself, follows up to 10 redirects, removes cookie values and returns the final response's headers. Pasted headers are graded in your browser and never uploaded. History and tool-to-tool transfers remain in the browser; see Browser transfers below.</div>
 
 ## What the tool answers
 
@@ -71,6 +71,10 @@ One configuration block for every scored header that missed a point and has a su
 ### Response headers, History and Take it further
 
 The full response as received, folded, with the scored headers marked "counts", "weak" or "not working". History lists every Break it and Heal it change with Revert and Reset input. Take it further hands the host the headers came from to the other checks in this category; see [Guide](#guide).
+
+### Browser transfers
+
+Explicit tool links temporarily place the transferred input in browser `sessionStorage`. The URL fragment carries a random token, not the input. The receiving page accepts that token once, for its destination path and for less than one minute, then removes it from the address. A same-origin browser channel can complete a transfer into another tab. Ordinary documentation links do not transfer input. When browser storage is unavailable, navigation still works but the input may need to be pasted again.
 
 ## Method
 

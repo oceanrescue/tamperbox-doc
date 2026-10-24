@@ -1,7 +1,7 @@
 ---
 title: HTTP/3 & Compression Checker
 description: What the transport checker requests, how it tests HTTP/3, measures each compression encoding and judges HSTS against the preload list's rules, what each finding means, and how to fix and verify each one.
-updated: 2026-10-21
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox HTTP/3 & Compression Checker, which fetches a page from the Tamperbox server once per Accept-Encoding, tests a QUIC-only connection where the probe allows, reads HSTS on the host and its main domain and asks hstspreload.org, or reads pasted response headers in the browser.
 prerequisites:
@@ -14,7 +14,7 @@ limitations:
 
 The tool page is [tamperbox.dev/http3-checker](https://tamperbox.dev/http3-checker). It opens by checking `tamperbox.dev` live, answers in one sentence with one clause per lane, and shows the evidence under it. This page is the long version: what our server requests, every rule the page applies, what each finding means, and how to fix and verify each one.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> an address is sent to the Tamperbox server, which requests the page once per compression it can ask for, attempts one HTTP/3-only connection where the probe supports it, requests the http:// form of the address and the HTTPS main domain for HSTS, and asks hstspreload.org about the main domain. Pasted response headers are read in your browser and never uploaded. Nothing is stored.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> an address is sent to the Tamperbox server, which requests the page once per compression it can ask for, attempts one HTTP/3-only connection where the probe supports it, requests the http:// form of the address and the HTTPS main domain for HSTS, and asks hstspreload.org about the main domain. Pasted response headers are read in your browser and never uploaded. History and tool-to-tool transfers remain in the browser; see Browser transfers below.</div>
 
 ## What the tool answers
 
@@ -74,7 +74,13 @@ Every Break it and Heal it change, newest first, with what it replaced. Revert u
 
 ### Take it further
 
-Links that carry a value derived from this result into another tool in the same category: the `http://` form of the main domain into the [Redirect Checker](/tools/redirect-checker/), which traces the redirect the preload rules require, and the moment the HSTS max-age would run out, counted from now, into the Unix Timestamp Converter. Each opens the other tool with the value already in its box; nothing is put in a URL.
+For a live result with a main domain, the [Redirect Checker](/tools/redirect-checker/) link receives its `http://` root address to trace the redirect required by preload rules. A separate button opens the [Unix Timestamp Converter](/tools/unix-timestamp/) when the result has a finite, positive HSTS max-age. It adds that duration to the current time when the result is rendered. This illustrates the duration; it is not the expiry of a particular browser’s stored HSTS policy.
+
+The timestamp button uses a one-time message to a new same-origin tab, with no input in the URL or browser storage. Keep the source tab open until the transfer completes. A blocked popup or a transfer taking over 30 seconds produces a message; copy the value if needed. The Redirect Checker link uses the browser transfer described below.
+
+### Browser transfers
+
+Explicit tool links temporarily place the transferred input in browser `sessionStorage`. The URL fragment carries a random token, not the input. The receiving page accepts that token once, for its destination path and for less than one minute, then removes it from the address. A same-origin browser channel can complete a transfer into another tab. Ordinary documentation links do not transfer input. When browser storage is unavailable, navigation still works but the input may need to be pasted again.
 
 ## Method
 
@@ -282,7 +288,7 @@ See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for 
 - The TLS version is not reported here; HTTP/2 is inferred from the transfer that succeeded.
 - Preload coverage is reported from hstspreload.org; a domain can inherit coverage from a parent entry even without its own header.
 - A missing `Vary: Accept-Encoding` is a cache-compatibility warning, not proof of a wrong response.
-- Nothing is stored.
+- History is a browser interaction record, not server monitoring. Explicit tool links use temporary browser storage as described in [Browser transfers](#browser-transfers).
 
 ## References
 

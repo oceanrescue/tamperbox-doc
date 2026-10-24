@@ -1,7 +1,7 @@
 ---
 title: Mixed Content & Cookie Checker
 description: How the Mixed Content & Cookie Checker fetches or reads a page, sorts every insecure address by what browsers do with it, judges every Set-Cookie header, and how to fix and verify each finding.
-updated: 2026-10-21
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox Mixed Content & Cookie Checker, which fetches a public page from the Tamperbox server (or reads pasted HTML and headers in the browser), lists every http:// subresource and form on an HTTPS page as blocked, upgraded or warned, and checks every Set-Cookie header for Secure, HttpOnly, SameSite, Domain, lifetime, size and prefix rules.
 prerequisites:
@@ -14,7 +14,7 @@ limitations:
 
 The tool page is [tamperbox.dev/mixed-content-checker](https://tamperbox.dev/mixed-content-checker). It opens by fetching `tamperbox.dev` live, answers in one sentence whether the page loads anything over plain HTTP and how its cookies fare, and lists the evidence under it. This page is the long version: what is fetched, every rule the page applies, what each finding means, and how to fix and verify each one.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> an address is sent to the Tamperbox server, which fetches the page once, following up to 10 redirects, and returns the headers of every response and the first 512 KiB of HTML. Cookie values are replaced on the server by their length, so only names and attributes reach your browser. Pasted HTML and headers are read in your browser and never uploaded. Nothing is stored.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> an address is sent to the Tamperbox server, which fetches the page once, following up to 10 redirects, and returns the headers of every response and the first 512 KiB of HTML. Cookie values are replaced on the server by their length, so only names and attributes reach your browser. Pasted HTML and headers are read in your browser and never uploaded. History and tool-to-tool transfers remain in the browser; see Browser transfers below.</div>
 
 ## What the tool answers
 
@@ -74,6 +74,10 @@ For every cookie a repair applies to, the same line with Secure, HttpOnly or the
 ### History and Take it further
 
 History logs every Break it, Heal it and Revert, newest first; Revert puts the earlier input back and Reset input returns to where you started. Take it further hands a derived value to another security check: the host of an insecure address or of a form target into the [SSL Certificate Checker](/tools/ssl-checker/), to see whether that host serves HTTPS at all, and, when the fetch was redirected, the final address into the Security Headers checker and the final host into the certificate check. Reserved `.example` hosts are not linked.
+
+### Browser transfers
+
+Explicit tool links temporarily place the transferred input in browser `sessionStorage`. The URL fragment carries a random token, not the input. The receiving page accepts that token once, for its destination path and for less than one minute, then removes it from the address. A same-origin browser channel can complete a transfer into another tab. Ordinary documentation links do not transfer input. When browser storage is unavailable, navigation still works but the input may need to be pasted again.
 
 ## Method
 
@@ -231,7 +235,7 @@ See [Connect an MCP client](/mcp/connect/) for the calling pattern.
 - Addresses written inside scripts or JSON are not found.
 - Pasted input uses only the last response's headers and is assumed to be HTTPS.
 - The session-cookie name match is a hint; Path and public-suffix rules are not checked.
-- Nothing is stored.
+- History is a browser interaction record, not server monitoring. Explicit tool links use temporary browser storage as described in [Browser transfers](#browser-transfers).
 
 ## References
 
