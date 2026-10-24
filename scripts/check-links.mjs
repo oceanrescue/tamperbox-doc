@@ -78,7 +78,8 @@ export async function checkLinks({ root = defaultRoot, siteRoot = defaultSiteRoo
     for (const id of docsIds) {
       const page = websiteById.get(id), expected = `https://docs.tamperbox.dev/tools/${id}/`;
       if (!page || page.kind !== 'tool') errors.push(`${id}: no published website tool exists`);
-      else if (page.docs !== expected) errors.push(`${id}: website docs declaration must be ${expected}`);
+      // Guides can precede the landing rollout; landing pages must declare their docs.
+      else if ((page.layout === 'landing' || page.docs != null) && page.docs !== expected) errors.push(`${id}: website docs declaration must be ${expected}`);
     }
     for (const page of websitePages.filter(page => page.docs)) {
       if (!docsSet.has(page.id)) errors.push(`${page.id}: website declares docs but the MDX page is missing`);

@@ -25,6 +25,7 @@ The Worker preview is available at `http://localhost:8787`.
 ## Verify
 
 ```sh
+npm test
 npm run check
 npm run build
 npm run deploy:dry-run
@@ -33,8 +34,11 @@ npm run deploy:dry-run
 `npm run build` also runs the generated-site link gate. It checks internal routes and
 fragments, Markdown mirrors, required tool-documentation anchors, and reciprocal
 tool links. When the sibling `toolkit-apps` checkout is present, it also checks the
-website's `site/pages.json` declarations; run `npm run check:links` to repeat the
-gate without rebuilding.
+website's `site/pages.json` declarations. Guides may exist before a tool is converted
+to the landing layout; landing pages must declare the matching docs URL, and any
+explicit docs declaration is checked. Set `TAMPERBOX_SITE_ROOT` to a current website
+checkout when the default sibling checkout is on an older branch. Run
+`npm run check:links` to repeat the gate without rebuilding.
 
 ## Documentation architecture
 

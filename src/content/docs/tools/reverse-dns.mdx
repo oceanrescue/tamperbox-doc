@@ -14,7 +14,7 @@ limitations:
 
 The tool page is [tamperbox.dev/reverse-dns](https://tamperbox.dev/reverse-dns). It opens with a live lookup of `tamperbox.dev` and takes a list of addresses or a domain. This page is the long version: how a reverse name is found, what "points back" means and why mail receivers care, every finding, and how to fix each one with whoever holds the address.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> each public address is sent to the Tamperbox server, which asks public DNS for its PTR record and for the addresses of each name returned, and looks up the network that holds it. Private, loopback, link-local and documentation addresses are explained in your browser and never looked up. The page does not persist the input or report.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> each public address is sent to the Tamperbox server, which asks public DNS for its PTR record and for the addresses of each name returned, and looks up the network that holds it. Private, loopback, link-local and documentation addresses are explained in your browser and never looked up. History stays in memory in the open page. Explicit links to another tool may temporarily keep a one-use transfer in browser session storage; transfers expire after one minute and do not put the input in the URL.</div>
 
 ## What the tool answers
 
@@ -51,11 +51,17 @@ For one address the verdict is its outcome: the name and "points back to this ad
 
 ### Findings
 
-Findings report addresses without PTR and names not forward-confirmed (CHECK), plus generic names (INFO). Successful forward confirmation and special-address explanations appear in the result rows rather than separate PASS or INFO findings. The [finding reference](#finding-reference) lists every finding.
+Findings report addresses without PTR and names not forward-confirmed (CHECK), plus generic names (INFO). Successful forward confirmation also produces a PASS finding, and private or special addresses produce an INFO finding. Multiple passing checks are folded. The [finding reference](#finding-reference) lists every finding.
 
 ### Reverse names
 
 One row per address: the address with the reverse name it was looked up at, the PTR name or names (or "No PTR record", or why a private address has none), whether each name points back, and the network that holds the address with its AS number. On phones each row becomes a card.
+
+### History and next checks
+
+History appears below the result evidence after Break it or Heal it changes the input. Revert restores the input before the latest recorded change; Reset input returns to the input before the first recorded change. Typing or pasting a new input starts a new history. Restoring a live input runs the lookup again, rather than restoring a saved response.
+
+Take it further uses values derived from the results: the domain of a non-generic PTR name for SPF, an AS number for the announcing network, or a non-sample PTR hostname on port 25 for a certificate check. These links are conditional on the evidence returned.
 
 ## Method
 
@@ -114,11 +120,11 @@ RFC 8601 itself notes that "there is some contention regarding the wisdom and re
 
 | Finding | Severity | Source | What it means for a sending server | Fix |
 | --- | --- | --- | --- | --- |
-| Name points back (row/verdict) | PASS | [RFC 8601 3](https://www.rfc-editor.org/rfc/rfc8601#section-3) | Passes iprev | Keep PTR and A in step on moves |
+| N names point back (finding); Points back (row) | PASS | [RFC 8601 3](https://www.rfc-editor.org/rfc/rfc8601#section-3) | Passes iprev | Keep PTR and A in step on moves |
 | N addresses without a PTR record | CHECK | [RFC 1912 2.1](https://www.rfc-editor.org/rfc/rfc1912#section-2.1) | Many receivers refuse or score down the mail | [Set a PTR](#setting-a-ptr-record) at whoever holds the address |
 | N names not forward-confirmed | CHECK | [RFC 8601 3](https://www.rfc-editor.org/rfc/rfc8601#section-3) | Fails iprev: the name is treated as unverified | [Fix the A record or the PTR](#a-name-that-points-elsewhere) |
 | N generic names | INFO | | Valid, but trusted less for mail | Use a name under your own domain |
-| Private or special address (row/verdict) | INFO | [RFC 1918 3](https://www.rfc-editor.org/rfc/rfc1918#section-3) | Not on the internet; no public name | Check the public address instead |
+| N private or special addresses | INFO | [RFC 1918 3](https://www.rfc-editor.org/rfc/rfc1918#section-3) | Not on the internet; no public name | Check the public address instead |
 | Not an IPv4 address (stops the check) | | | | Correct the address |
 | No address to look up (stops the check) | | | The domain has no A or AAAA | Check the domain or enter addresses |
 
@@ -152,9 +158,9 @@ dig +short AAAA out.example.com
 
 ### Break it cases
 
-Each case replaces the input with a fixture. Several addresses loads a mixed list; the individual cases load one address or a sample domain.
+The first three cases append an address to the current list, or to the addresses resolved from the current domain. If no usable list is available, they use a small sample list. A domain replaces the input with a reserved sample domain.
 
-| Case | What it loads | What it shows |
+| Case | What it adds or loads | What it shows |
 | --- | --- | --- |
 | Address without PTR | `192.0.2.150`, a documentation address with no PTR | "1 address without a PTR record" |
 | Name points elsewhere | `198.51.100.81`, whose name resolves to another address | "1 name not forward-confirmed" |
@@ -167,7 +173,7 @@ The page opens by resolving `tamperbox.dev` live, then looking up the PTR and fo
 
 For each row, compare the original address with the addresses returned for its PTR name. A missing PTR on a web-hosting address is not proof that the website is broken. The same observation on an actual outgoing mail address is relevant to receiver policy, but the tool does not establish whether this address sends mail.
 
-For a repeatable offline contrast, choose Several addresses in Break it. Its documentation addresses include a confirmed name, a generic cloud-style name, a name pointing elsewhere and an address without a PTR. Treat those names and network labels as sample data. Heal it restores the previous input; restoring the live domain starts new queries and can produce different results.
+For a repeatable offline contrast, enter `198.51.100.24` and `203.0.113.80`, one per line. These documentation addresses show a confirmed name and a generic cloud-style name. Then choose Address without PTR or Name points elsewhere to append that case. Treat the names and network labels as sample data. Heal it restores the previous input; restoring the live domain starts new queries and can produce different results.
 
 ## For agents
 
@@ -192,7 +198,7 @@ Separate absence from failure. A successful response with no applicable record, 
 - The name in a server's SMTP greeting, blocklists and delivery itself are not checked.
 - "Generic name" is a heuristic.
 - Break it fixtures use documentation addresses answered in the browser.
-- The page does not persist the input or report.
+- History stays in memory in the open page. Explicit links to another tool may temporarily keep a one-use transfer in browser session storage; transfers expire after one minute and do not put the input in the URL.
 
 ## References
 
