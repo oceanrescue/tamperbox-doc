@@ -1,7 +1,7 @@
 ---
 title: ASN Lookup
 description: How the ASN Lookup finds the network that announces an address and the organisation its block is registered to, every rule behind its verdict and findings, and how to act on each one.
-updated: 2026-10-20
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and guide for the Tamperbox ASN Lookup, which asks RIPEstat (RIPE RIS route collectors) for the routed prefix and origin networks of a public address or the overview of an AS number, and asks the address registry over RDAP who holds the block.
 prerequisites:
@@ -12,9 +12,9 @@ limitations:
   - Route collector data is a sample of the internet and lags real changes; the registry names the holder of a block, never the person using an address; a domain is checked through its first address only
 ---
 
-The tool page is [tamperbox.dev/asn-lookup](https://tamperbox.dev/asn-lookup). It opens on a live lookup of `1.1.1.1`, answers in one sentence which network announces the address, and shows the evidence under it: the origin networks, the registration of the block and the findings. This page is the long version: what the lookup asks, every rule it applies, what each finding means for someone holding a log line or a firewall rule, and how to confirm the answer without Tamperbox.
+The tool page is [tamperbox.dev/asn-lookup](https://tamperbox.dev/asn-lookup). It opens on a live lookup of `tamperbox.dev`, answers in one sentence which network announces the address, and shows the evidence under it: the origin networks, the registration of the block and the findings. This page is the long version: what the lookup asks, every rule it applies, what each finding means for someone holding a log line or a firewall rule, and how to confirm the answer without Tamperbox.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> the input is read in your browser first. Private, loopback, link-local, shared (carrier-grade NAT) and unique local addresses are explained there and never sent. The documentation ranges that Break it uses are answered from sample data in the browser. Any other address or AS number is sent to the Tamperbox server, which asks RIPEstat and the address registry and keeps nothing. A domain costs one DNS lookup on the same server first.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> the input is read in your browser first. Private, loopback, link-local, shared (carrier-grade NAT) and unique local addresses are explained there and never sent. The documentation ranges that Break it uses are answered from sample data in the browser. Any other address or AS number is sent to the Tamperbox server, which asks RIPEstat and the address registry and returns the observation. A domain starts A and AAAA queries on the same server first, and the first returned address is selected.</div>
 
 ## What the tool answers
 
@@ -70,14 +70,6 @@ One of three sentences for an address: "AS… announces [address] in [prefix]", 
 
 Directly under the verdict, worst first. Every finding is listed in the [Finding reference](#finding-reference). The count on the right is the number of findings to check, never the informational ones.
 
-### Take it further
-
-Links that carry a value from this result into another tool, which opens with the value already in its box: the routed prefix into BGP Route Lookup, the resolved address into Reverse DNS when you entered a domain, and `address:443` into TCP Ping for a live result. Nothing is put in the URL. The links for a sample result stay inside the sample.
-
-### History
-
-Break it and Heal it replace the input; History logs each change with what it replaced. Revert undoes the newest change; Reset input returns to what you entered.
-
 ### Announced by
 
 One row per origin network: the organisation name, its registry handle, the AS number and an Announcing or Not announcing badge. If the name lookup for an origin fails, the row says "Name unavailable right now" instead of dropping the network. The line on the right gives the source and the age of the routing data, for example "data from 4 hours ago".
@@ -96,7 +88,7 @@ The input is parsed in the browser by `parseAsnInput` in the order above: a spac
 
 For an address, the server asks RIPEstat's `network-info` data call for the most specific prefix that RIPE RIS collectors see covering the address and the AS numbers originating it. The origin of a route is the AS that put it into BGP: the rightmost AS in the final `AS_SEQUENCE` of the route's `AS_PATH` ([RFC 4271, section 5.1.2](https://www.rfc-editor.org/rfc/rfc4271#section-5.1.2); the definition of "Route Origin ASN" in [RFC 6811, section 2](https://www.rfc-editor.org/rfc/rfc6811#section-2)). Duplicate origins are removed. An answer with more than 32 origins is refused as incomplete rather than shown partially. Names come from RIPEstat's `as-overview` for at most eight origins; beyond eight a finding lists every number.
 
-The verdict follows the number of origins. One origin is the expected state. Several origins are a warning because, in the words of [RFC 1930, section 7](https://www.rfc-editor.org/rfc/rfc1930#section-7), "Generally, a prefix can should belong to only one AS", and the exceptions (anycast, a customer announced by two providers, aggregation) are deliberate choices the tool cannot see. No origin is a warning: nothing routes traffic to the address.
+The verdict follows the number of origins. One origin is the expected state. Several origins are a warning because, in the words of [RFC 1930, section 7](https://www.rfc-editor.org/rfc/rfc1930#section-7), "Generally, a prefix can should belong to only one AS", and the exceptions (anycast, a customer announced by two providers, aggregation) are deliberate choices the tool cannot see. No observed origin produces a warning verdict. Collector absence does not prove that every network lacks a usable route.
 
 ### 3. Registration over RDAP
 
@@ -143,14 +135,14 @@ For an AS number the server asks RIPEstat's `as-overview` for the holder and whe
 
 | Finding | Severity | What it means for whoever holds the address | Fix |
 | --- | --- | --- | --- |
-| No network announces this address | CHECK | Nothing on the internet routes traffic to it; it is unreachable from outside | The holder announces the covering prefix, with a route object and an RPKI ROA |
+| No origin (verdict) | CHECK | The selected collectors report no covering route; other observations may differ | The holder announces the covering prefix, with a route object and an RPKI ROA |
 | N origin networks for one prefix | CHECK | Several networks originate the prefix: anycast or multi-homing on purpose, or a misconfiguration or hijack | Compare origins in BGP Route Lookup; ask the holder which it authorised |
 | No routes seen from this network | CHECK | The AS is registered but announces nothing collectors see | Its operator checks sessions and exports |
-| No holder and no routes | CHECK | The AS number is unassigned, reserved or returned | Check for a typo; investigate where it appeared |
+| No holder and no routes (verdict) | CHECK | No holder or announcement was reported; this does not independently establish allocation status | Check for a typo; investigate where it appeared |
 | Registered holder and announcing network differ | INFO | Another network routes the block: a provider for a customer, leased space, mitigation | Report abuse to the announcing network first |
 | Names shown for the first eight networks | INFO | More than eight origins; all numbers are listed | Look the remaining numbers up one by one |
-| No registration record | INFO | The registry has no record: unallocated or reserved space | |
-| The registry did not answer | INFO | The holder is unknown for now; routing evidence is unaffected | Check again later |
+| No registration (registration panel) | INFO | The registry has no record: unallocated or reserved space | |
+| Registry unavailable (registration panel) | INFO | The holder is unknown for now; routing evidence is unaffected | Check again later |
 | This names a network, not a person | INFO | Both names are organisations; neither is a customer or a location | |
 | Its prefixes and visibility | INFO | BGP Route Lookup holds the per-prefix evidence for an AS | |
 
@@ -177,7 +169,7 @@ whois -h whois.radb.net -- '-i origin AS13335'
 
 ### The address has two or more origins
 
-Open [BGP Route Lookup](/tools/bgp-lookup/) for the prefix through Take it further. Compare each origin's route object, first-seen date and visibility. An origin with no route object and a recent first-seen date is the one to ask about. If you hold the prefix, publish an RPKI ROA naming the origins you authorise, so networks that validate drop the others.
+Open [BGP Route Lookup](/tools/bgp-lookup/) for the prefix by entering the prefix there. Compare each origin's route object, first-seen date and visibility. An origin with no route object and a recent first-seen date is the one to ask about. If you hold the prefix, publish an RPKI ROA naming the origins you authorise, so validating networks can evaluate origin authorization; filtering remains their own policy.
 
 ### The address is not announced
 
@@ -200,9 +192,9 @@ The first address of a CDN-hosted name belongs to the CDN. To find the origin se
 
 ## Worked example
 
-The page opens on `1.1.1.1`, looked up live, so the values you see may differ from these notes. At the time of writing the verdict reads "AS13335 announces 1.1.1.1 in 1.1.1.0/24": one origin, Cloudflare's network. The registration names APNIC Labs, the research arm of the Asia Pacific registry, which holds the block; Cloudflare announces it under an agreement between the two. That difference produces the informational finding "Registered holder and announcing network differ", which is exactly the situation the finding exists for: the operator of the traffic and the holder of the space are different organisations, and an abuse report about traffic from the address belongs with the operator. The contacts list shows the registry's abuse handle as well.
+The page resolves `tamperbox.dev` live and looks up the first address returned. Read the resolved address before interpreting the route: a CDN or multi-address hostname can select different endpoints over time. Compare the observed prefix and origins with the registration panel. A holder/announcer difference is a string-based prompt to investigate, not evidence of abuse or an unauthorized route.
 
-Take it further offers the routed prefix `1.1.1.0/24` to BGP Route Lookup, where the same origin appears with its collector visibility and route objects, and `1.1.1.1:443` to TCP Ping. History stays empty until you use Break it or Heal it.
+For an independent comparison, enter the selected address directly, then check the prefix in BGP Route Lookup. Record the observation time and source alongside the result. Neither the current origin count nor the registered holder of this live default is fixed by this guide.
 
 ## For agents
 
@@ -214,6 +206,10 @@ The Tamperbox MCP server runs the same lookup. Search its catalog for the `asn_l
 
 See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for the calling pattern, and [Security and privacy](/reference/security/) for where the input travels.
 
+### Transfers to another tool
+
+Explicit sibling-tool controls can carry the current input or observed address to another page. The shared navigation stores that value temporarily in tab-scoped `sessionStorage` and puts a random transfer token in the URL fragment. The receiving page consumes the transfer and applies its own input rules; tools with a manual Run button still require that action for live checks. This is not a saved result, and the destination can send the value to the services it needs. Ordinary edits and lookups do not create a durable report archive.
+
 ## Limits
 
 - One lookup from the RIPE RIS view of the internet at one moment; routes that only some networks see may be missing.
@@ -221,7 +217,7 @@ See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for 
 - A domain is checked through its first address only.
 - The registry country describes the record, not where the address is used.
 - Sample answers for documentation ranges are made up and labelled as sample data.
-- Nothing you enter is stored.
+- The page keeps results in memory. Explicit transfers to another tool use temporary session storage.
 
 ## References
 

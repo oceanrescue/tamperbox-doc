@@ -1,7 +1,7 @@
 ---
 title: What Is My IP Address?
 description: How the What Is My IP page reads the public address your connection uses, why one connection shows only IPv4 or IPv6, how the device test checks both families, and how to read and act on each result.
-updated: 2026-10-20
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and guide for the Tamperbox What Is My IP page, which reads the source address, family, network, AS number and estimated country of the visitor's connection on the Tamperbox server, and on request runs an IPv4-only and an IPv6-only echo request to ipify from the browser.
 prerequisites:
@@ -14,7 +14,7 @@ limitations:
 
 The tool page is [tamperbox.dev/what-is-my-ip](https://tamperbox.dev/what-is-my-ip). It has no input box: opening it reads your connection and shows the address in large type, with the network it belongs to, and a device test checks IPv4 and IPv6 separately. This page is the long version: where each value comes from, why the page never shows a sample address, how the device test works, and how to use the result for an allowlist or a support ticket.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> opening the page sends one request to the Tamperbox server, which reads the address your browser connected from and the network metadata of that connection, returns them, and keeps nothing. The device test runs only when you press it: your browser sends two requests to the public echo service ipify, one over IPv4 and one over IPv6, without cookies or a referrer. Nothing else is sent, and the address is never passed to advertisers.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> opening the page sends one request to the Tamperbox server, which reads the address your browser connected from and the network metadata of that connection, returns them, and returns the observation. The device test runs only when you press it: your browser sends two requests to the public echo service ipify, one over IPv4 and one over IPv6, without cookies or a referrer. Nothing else is sent, and the address is never passed to advertisers.</div>
 
 ## What the tool answers
 
@@ -51,10 +51,6 @@ The chips say which families work, and "IPv6 not tested" until the device test r
 
 The caveats for this connection, worst first; see the [Finding reference](#finding-reference).
 
-### Take it further
-
-Your address into ASN Lookup, Reverse DNS and BGP Route Lookup, and when the device test found a separate IPv6 address, that address into ASN Lookup. The links appear only once your address is read. Nothing is put in the URL.
-
 ### IPv4 and IPv6
 
 Two lanes, one per family: Works (with the address), Not found, or Not tested, and the device test button with the hosts it contacts.
@@ -88,7 +84,7 @@ The test runs in the browser on purpose: a server-side request would test the se
 | IPv6 rotates | The connection used IPv6 | INFO |
 | VPN or proxy | An address was read | INFO |
 
-The rotation note follows [RFC 8981](https://www.rfc-editor.org/rfc/rfc8981): devices form temporary addresses ([section 3.4](https://www.rfc-editor.org/rfc/rfc8981#section-3.4)) with a default preferred lifetime of one day and a valid lifetime of two ([section 3.8](https://www.rfc-editor.org/rfc/rfc8981#section-3.8)), so the address a site sees changes about daily while the network prefix stays.
+The rotation note follows [RFC 8981](https://www.rfc-editor.org/rfc/rfc8981): devices form temporary addresses ([section 3.4](https://www.rfc-editor.org/rfc/rfc8981#section-3.4)) with a default preferred lifetime of one day and a valid lifetime of two ([section 3.8](https://www.rfc-editor.org/rfc/rfc8981#section-3.8)), so the address a site sees changes about daily while the provider may also change the delegated prefix.
 
 <span id="standards"></span>
 
@@ -106,9 +102,9 @@ The rotation note follows [RFC 8981](https://www.rfc-editor.org/rfc/rfc8981): de
 
 | Finding | Severity | What it means for you | Fix |
 | --- | --- | --- | --- |
-| No IPv6 from this device | CHECK | Sites reach you over IPv4 only; inconclusive if a blocker interfered | Enable IPv6 in the router; ask the provider; test without blockers |
-| This device has two public addresses | INFO | Logs and allowlists may show either | Allowlist both |
-| Your IPv6 address may change | INFO | Temporary addresses rotate about daily | Allowlist the /64 prefix |
+| No IPv6 from this device | CHECK | The IPv6-only request failed; other destinations or routes may still work | Enable IPv6 in the router; ask the provider; test without blockers |
+| This device has two public addresses | INFO | Logs and allowlists may show either | Account for both families under your access policy |
+| Your IPv6 address may change | INFO | Temporary addresses rotate about daily | Confirm the assigned prefix and authorize only the intended scope |
 | A VPN or proxy changes this address | INFO | The address shown may be the exit of a tunnel | Check again with it off to compare |
 
 ## Guide
@@ -117,8 +113,8 @@ The rotation note follows [RFC 8981](https://www.rfc-editor.org/rfc/rfc8981): de
 
 1. Read the address and its family here.
 2. For IPv4, allowlist the address; ask your provider whether it is static, because many home addresses change after a router restart.
-3. For IPv6, allowlist the prefix rather than the address: usually the first four groups followed by `::/64`.
-4. Run the device test; if both families work, add both.
+3. For IPv6, confirm the assigned prefix and its stability with your network administrator. Do not infer authorization scope from four printed groups: compressed notation can omit groups, and permitting a /64 permits many devices. Use the narrowest scope that meets the access policy.
+4. Run the device test and account for both families if the destination uses both, subject to the same access policy.
 
 ### Giving your address to support
 
@@ -130,7 +126,7 @@ Look for IPv6 in the router's WAN or internet settings (often "IPv6", "DHCPv6" o
 
 ### Reading the network row
 
-The network row names the organisation that announces your address (your provider, a mobile operator, a VPN company or a cloud provider), its autonomous system number, and the country the edge associates with the connection. A VPN or private relay shows the relay operator here, which is the quickest way to tell whether the tunnel is in use. A mobile connection often shows a country or city far from you, because mobile operators route traffic through a few central gateways. None of these values locates a household: the provider holds the mapping from address to customer and releases it only through legal process.
+The network row names the organisation that announces your address (your provider, a mobile operator, a VPN company or a cloud provider), its autonomous system number, and the country the edge associates with the connection. A VPN or private relay shows the relay operator here, which can help compare before and after an intended network change but does not prove that every application uses the tunnel. A mobile connection often shows a country or city far from you, because mobile operators route traffic through a few central gateways. None of these values locates a household: the provider holds the mapping from address to customer and its subscriber records are not part of this tool.
 
 ### Why the address is shared
 
@@ -143,17 +139,21 @@ curl -4 https://api.ipify.org
 curl -6 https://api6.ipify.org
 ```
 
-The first prints your IPv4 address, the second your IPv6 address or an error when there is none.
+The first prints your IPv4 address, the second your IPv6 address or an error if that request cannot complete.
 
 ## Worked example
 
-On a typical home connection over IPv4, the page shows the router's public address with the provider's name and country, the verdict "Connected over IPv4", and "IPv6 not tested". Pressing the device test sends the two echo requests. If the IPv6 request returns an address, the verdict becomes "IPv6 works too", both lanes read Works, and a finding notes that the device has two public addresses; Take it further gains a link for the IPv6 address. If it fails, the verdict warns that no IPv6 was found, and the fix card lists the router and provider steps. This page never shows a sample address, so there is no fixed example to describe.
+On a typical home connection over IPv4, the page shows the router's public address with the provider's name and country, the verdict "Connected over IPv4", and "IPv6 not tested". Pressing the device test sends the two echo requests. If the IPv6 request returns an address, the verdict becomes "IPv6 works too", both lanes read Works, and a finding notes that the device has two public addresses. If it fails, the verdict warns that no IPv6 was found, and the findings lists the router and provider steps. This page never shows a sample address, so there is no fixed example to describe.
 
 ## For agents
 
-Through the Tamperbox MCP server, `what_is_my_ip` describes the connection of whatever calls it: the agent's server, not the person using the agent. The result carries that warning. Use it to learn the agent host's own address, never to answer "what is my IP" for a user; send the user to the page instead.
+Through the Tamperbox MCP server, `what_is_my_ip` describes the connection of whatever calls it: the agent's outbound service or gateway, not the person using the agent. The result carries that warning. Use it to learn the request source seen by the service, never to answer "what is my IP" for a user; send the user to the page instead.
 
 See [Connect an MCP client](/mcp/connect/) and [Security and privacy](/reference/security/). [ASN Lookup](/tools/asn-lookup/) explains the network behind an address.
+
+### Transfers to another tool
+
+Explicit sibling-tool controls can carry the current input or observed address to another page. The shared navigation stores that value temporarily in tab-scoped `sessionStorage` and puts a random transfer token in the URL fragment. The receiving page consumes the transfer and applies its own input rules; tools with a manual Run button still require that action for live checks. This is not a saved result, and the destination can send the value to the services it needs. Ordinary edits and lookups do not create a durable report archive.
 
 ## Limits
 

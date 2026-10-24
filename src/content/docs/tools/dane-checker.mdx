@@ -1,0 +1,241 @@
+---
+title: DANE & TLSA Checker
+description: How the checker finds the servers behind a domain, reads their TLSA records through a validating resolver, compares each record with the certificate chain the server presents, every rule it applies, what each finding means for mail in transit, and how to fix and verify each one.
+updated: 2026-10-21
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and repair guide for the Tamperbox DANE & TLSA Checker, which resolves a domain's MX hosts, reads the TLSA records at _25._tcp.<host> with the resolver's DNSSEC AD flag, connects to each server (STARTTLS on port 25) and reports which record matches the presented leaf or issuing certificate.
+prerequisites:
+  - A domain, a host:port on a supported TLS port, or a TLSA record to paste
+outputs:
+  - A verdict with one chip per server, findings with fixes, a card per server showing each TLSA record and what it matched, and the record's three fields in words
+limitations:
+  - One observation from one location; DNSSEC is taken from the resolver's AD flag, not validated independently; a match is association evidence, not a complete DANE certification-path validation; DANE-TA name checks and certificate dates are not evaluated
+---
+
+The tool page is [tamperbox.dev/dane-checker](https://tamperbox.dev/dane-checker). It opens on a live check of the mail servers of `tamperbox.dev`; replace that domain to inspect your own. This page is the long version: how the servers are found, every rule the tool applies to their TLSA records, what each finding means for mail in transit, and how to fix and verify each one.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> a domain or host is sent to the Tamperbox server, which asks a public validating resolver for the MX and TLSA records and opens one TLS connection to each server that publishes TLSA records (STARTTLS on ports 25 and 587). A pasted TLSA record is parsed in your browser and never uploaded. Nothing is stored.</div>
+
+## What the tool answers
+
+DANE for SMTP ([RFC 7672](https://www.rfc-editor.org/rfc/rfc7672)) lets a domain publish, in DNSSEC-signed DNS, which certificate or key each of its mail servers will present. A sending server that supports DANE then requires TLS to that server and refuses an impostor, which closes the STARTTLS downgrade that plain opportunistic TLS leaves open. The tool answers, per server:
+
+1. **Which servers are checked?** The MX hosts of a domain in preference order, the domain itself on port 443, or one host:port.
+2. **Does the server publish TLSA records?** The records at `_port._tcp.host`.
+3. **Are they protected by DNSSEC?** Whether the resolver's answer carried the Authenticated Data (AD) flag.
+4. **Do they match the server?** Each record compared with the leaf certificate or the issuing certificates the server sent.
+5. **Is the record type a good choice for mail?** PKIX usages on port 25 are flagged.
+
+## Inputs
+
+### A domain
+
+`example.com`. When you stop typing, or on Enter, the server resolves the MX records. With **Mail servers (MX, port 25)** selected, every exchanger is checked on port 25, lowest preference first. With **Web server (port 443)**, the domain itself is checked on port 443. A domain with no MX record, or a null MX (`0 .`, [RFC 7505](https://www.rfc-editor.org/rfc/rfc7505#section-3)), reads "No mail servers", and Heal it offers the web server instead.
+
+### A host and port
+
+`mx1.example.net:25`. Exactly one server is checked; the service selector is hidden. The probe accepts the ports in the table below and refuses the rest with "Choose a supported TLS service port."
+
+| Port | How the probe connects |
+| --- | --- |
+| 25, 587 | Plain SMTP, then STARTTLS ([RFC 3207](https://www.rfc-editor.org/rfc/rfc3207#section-4)) |
+| 443, 465, 853, 993, 995 | TLS from the first byte |
+
+### A pasted record
+
+`3 1 1 2b5f…`, with or without its owner name, class and TTL (`_25._tcp.mx1.example.net. 300 IN TLSA 3 1 1 …`). Text that contains `TLSA` or starts with three small numbers and hex is treated as a record and explained in the browser with no lookup.
+
+### What the page does to your input
+
+| You paste | The box keeps |
+| --- | --- |
+| `https://example.com/blog` | `example.com` |
+| `postmaster@example.com` or `mailto:postmaster@example.com` | `example.com` |
+| `"example.com"`, `<example.com>` | `example.com` |
+| A TLSA record | the record, unchanged |
+| Text that fits nothing | the text as pasted, with the error |
+
+Typing is never rewritten, and Break it cases are loaded exactly as written.
+
+## Reading the result
+
+### Verdict and chips
+
+The verdict names the outcome across all servers and the first server in trouble; one chip per server carries its state. Copy result copies the verdict, findings and server cards as text.
+
+### Findings
+
+Problems come first, worst first. Two or more passes fold into one "n checks passed" line; open it to see each server that matched.
+
+### History
+
+Break it, Heal it and a change of the service selector are logged. Revert undoes the newest change; Reset input returns to what you entered.
+
+### Take it further
+
+Links that carry a server from this result into another security tool: the certificate and STARTTLS of the primary server, of the server that failed or could not be compared (or the last-preference server when all is well), and for a web server its post-quantum key exchange and security headers. They appear only for live lookups.
+
+### Servers
+
+One card per server: host and port, its state (Matches, No match, No TLSA, No DNSSEC, Not connected), MX preference, each TLSA record with its parameters in words and what it matched ("Matches the server certificate", "Matches the issuing CA", "Matches nothing the server presented", "Not compared"), whether the answer was DNSSEC-validated, the TLS version, and the leaf's subject, issuer and expiry date.
+
+### What the record says
+
+The first readable record's usage, selector and matching type, each in words, and the length of its data.
+
+## Method
+
+The rules run in this order. Code: `public/dane-checker.js` and `parseTlsa`, `tlsaMatches` in `public/lib/dns-intel.js`.
+
+### Finding the servers
+
+For a domain in mail mode, the MX RRset is read and sorted by preference, as a sending server would ([RFC 7672 section 2.2.1](https://www.rfc-editor.org/rfc/rfc7672#section-2.2.1)). The TLSA owner name for each server is `_<port>._tcp.<host>` ([RFC 6698 section 3](https://www.rfc-editor.org/rfc/rfc6698#section-3); [RFC 7672 section 2.2.3](https://www.rfc-editor.org/rfc/rfc7672#section-2.2.3)). For mail, the records belong under the MX host names, not under your domain, so a provider's shared MX hosts carry the provider's records.
+
+### Reading the TLSA answer
+
+The query goes to a public validating resolver. A response code other than NOERROR or NXDOMAIN stops the check with "TLSA lookup returned …; no DANE conclusion can be drawn", because RFC 7672 treats a lookup error differently from absence: lookup errors "MUST result in falling back to the next SMTP server or delayed delivery" ([section 2.2](https://www.rfc-editor.org/rfc/rfc7672#section-2.2)).
+
+### Parsing each record
+
+Usage must be 0 to 3, selector 0 or 1, matching type 0 to 2, and the data hexadecimal ([RFC 6698 section 2.1](https://www.rfc-editor.org/rfc/rfc6698#section-2.1)); anything else is "A TLSA record is usage (0–3), selector (0–1), matching type (0–2) and hex data". A SHA-256 association must be 64 hex characters and a SHA-512 one 128 ([section 2.1.3](https://www.rfc-editor.org/rfc/rfc6698#section-2.1.3)); otherwise the record is unreadable.
+
+### DNSSEC protection
+
+The tool takes the AD flag of the resolver's answer as the DNSSEC verdict. Records without it are "No DNSSEC": RFC 7672 says an "insecure" TLSA RRset means the client "SHOULD be made using (pre-DANE) opportunistic TLS" ([section 2.2](https://www.rfc-editor.org/rfc/rfc7672#section-2.2)), so the records do nothing.
+
+### Comparing with the server
+
+When a server publishes records, the probe connects and returns, for every certificate in the chain, the full DER and SHA-256 and SHA-512 digests of both the certificate and its public key. The selector picks certificate or key, the matching type picks full data or a digest ([RFC 6698 section 2.1.2](https://www.rfc-editor.org/rfc/rfc6698#section-2.1.2)).
+
+| Usage | Compared with | Extra condition |
+| --- | --- | --- |
+| 3 DANE-EE | the leaf only | none ([RFC 7671 section 5.1](https://www.rfc-editor.org/rfc/rfc7671#section-5.1)) |
+| 2 DANE-TA | the certificates after the leaf | none ([RFC 7671 section 5.2](https://www.rfc-editor.org/rfc/rfc7671#section-5.2)) |
+| 1 PKIX-EE | the leaf only | the probe's ordinary CA validation must pass |
+| 0 PKIX-TA | the certificates after the leaf | the probe's ordinary CA validation must pass |
+
+### Deciding a server's state
+
+| Order | Condition | State |
+| --- | --- | --- |
+| 1 | No TLSA records | No TLSA |
+| 2 | Records, no AD flag | No DNSSEC |
+| 3 | Any record matches | Matches |
+| 4 | The chain was read, nothing matches | No match |
+| 5 | The probe could not connect | Not connected |
+
+One matching record is enough: RFC 7672 requires the client to authenticate the server against the usable records, and a set passes when any one of them matches ([section 3.2](https://www.rfc-editor.org/rfc/rfc7672#section-3.2)). For a set with usable records, a failure "MUST result in falling back to the next SMTP server or delayed delivery" ([section 2.2](https://www.rfc-editor.org/rfc/rfc7672#section-2.2)), which is why a No match is a fail.
+
+### The verdict across servers
+
+"No DANE" when no server publishes TLSA; "No match" or "n of m pass DANE" naming the first failing host; "Not protected" when records lack DNSSEC; "n of m pass" with the uncompared host when some matched and some could not be reached; "Not compared" when none could be reached; otherwise a pass, downgraded to a warning when some servers have no TLSA.
+
+### Usage advice for port 25
+
+A record with usage 0 or 1 on a mail server is an info finding. RFC 7672: "TLSA records for the port 25 SMTP service used by client MTAs SHOULD NOT include TLSA RRs with certificate usage PKIX-TA(0) or PKIX-EE(1)" ([section 3.1.3](https://www.rfc-editor.org/rfc/rfc7672#section-3.1.3)).
+
+## Standards and conformance
+
+### RFC 6698, the TLSA record
+
+Implemented: the record format and the three parameters ([section 2.1](https://www.rfc-editor.org/rfc/rfc6698#section-2.1)), the owner name ([section 3](https://www.rfc-editor.org/rfc/rfc6698#section-3)), selector and matching computations, evaluated against the chain the probe returns. Stops at: the tool does not build a certification path from a trust anchor that the server did not send. Status: Proposed Standard, updated by [RFC 7218](https://www.rfc-editor.org/rfc/rfc7218) (the acronyms the page shows) and [RFC 7671](https://www.rfc-editor.org/rfc/rfc7671).
+
+### RFC 7671, DANE operations
+
+Implemented: DANE-EE matches the leaf alone, regardless of names ([section 5.1](https://www.rfc-editor.org/rfc/rfc7671#section-5.1)); DANE-TA matches a certificate the server presents above the leaf ([section 5.2.2](https://www.rfc-editor.org/rfc/rfc7671#section-5.2.2)). The guide follows its rollover procedure ([section 8.1](https://www.rfc-editor.org/rfc/rfc7671#section-8.1)). Differs: the tool does not apply DANE-TA path constraints, and does not flag matching type Full(0), which [section 5.2.1](https://www.rfc-editor.org/rfc/rfc7671#section-5.2.1) marks NOT RECOMMENDED.
+
+### RFC 7672, SMTP security via opportunistic DANE TLS
+
+Implemented: MX order ([section 2.2.1](https://www.rfc-editor.org/rfc/rfc7672#section-2.2.1)), `_25._tcp` lookup ([section 2.2.3](https://www.rfc-editor.org/rfc/rfc7672#section-2.2.3)), secure versus insecure and error handling ([section 2.2](https://www.rfc-editor.org/rfc/rfc7672#section-2.2)), the PKIX usage advice ([section 3.1.3](https://www.rfc-editor.org/rfc/rfc7672#section-3.1.3)). Stops at: CNAME expansion of the TLSA base domain is left to the resolver, so the candidate pair of [section 2.2.3](https://www.rfc-editor.org/rfc/rfc7672#section-2.2.3) is not tried separately; DANE-TA name checks ([section 3.2.2](https://www.rfc-editor.org/rfc/rfc7672#section-3.2.2)) are not evaluated; a secure set whose records are all unusable is not distinguished from one that does not match.
+
+### DNSSEC
+
+[RFC 9364](https://www.rfc-editor.org/rfc/rfc9364) (BCP 237) is the current DNSSEC reference. The tool relies on the resolver's AD flag ([RFC 4035 section 3.2.3](https://www.rfc-editor.org/rfc/rfc4035#section-3.2.3)) and does not validate signatures itself. For the zone's own chain of trust, use the DNSSEC Checker.
+
+## Finding reference
+
+### Failures
+
+| Finding | Severity | Source | What it means | Fix |
+| --- | --- | --- | --- | --- |
+| `<host>: no record matches` | fail | [RFC 7672 §2.2](https://www.rfc-editor.org/rfc/rfc7672#section-2.2) | DANE senders refuse to deliver to this server and queue the mail | Publish the record for the presented key, keep the old one two TTLs, then remove it |
+| `<host>: unreadable record` | fail | [RFC 6698 §2.1](https://www.rfc-editor.org/rfc/rfc6698#section-2.1) | The record cannot match anything | Recompute the data; no colons or spaces; 64 or 128 hex characters |
+| `Wrong data length` (pasted) | fail | [RFC 6698 §2.1.3](https://www.rfc-editor.org/rfc/rfc6698#section-2.1.3) | The digest is truncated or too long | Copy the full digest again |
+
+### Warnings
+
+| Finding | Severity | Source | What it means | Fix |
+| --- | --- | --- | --- | --- |
+| `<host>: TLSA without DNSSEC` | warn | [RFC 7672 §2.2](https://www.rfc-editor.org/rfc/rfc7672#section-2.2) | Senders ignore the records | Sign the zone and publish its DS at the registrar |
+
+### Information and passes
+
+| Finding | Severity | Source | What it means | Fix |
+| --- | --- | --- | --- | --- |
+| `<host>: certificate not compared` | info | none | The probe could not complete a handshake; no conclusion | Retry; confirm STARTTLS or TLS is reachable from the internet |
+| `<host>: usage 0/1 on a mail server` | info | [RFC 7672 §3.1.3](https://www.rfc-editor.org/rfc/rfc7672#section-3.1.3) | Senders treat PKIX usages as unusable for SMTP | Publish 3 1 1 or 2 0 1 instead |
+| `No TLSA record at …` / `No TLSA records on any server` | info | [RFC 7672 §2.2](https://www.rfc-editor.org/rfc/rfc7672#section-2.2) | Opportunistic TLS only | Deploy DNSSEC, then TLSA |
+| `n servers without TLSA` | info | [RFC 7672 §2.2](https://www.rfc-editor.org/rfc/rfc7672#section-2.2) | Mail to those servers is not protected | Cover every MX host, or remove it |
+| `No mail servers for <domain>` | info | [RFC 7505 §3](https://www.rfc-editor.org/rfc/rfc7505#section-3) | Nothing to check for mail | Check the web server, or publish MX |
+| `<host>: record matches` | pass | [RFC 7672 §3.2](https://www.rfc-editor.org/rfc/rfc7672#section-3.2) | One record names the presented key or its issuer | None |
+
+## Guide
+
+### A server fails after a certificate renewal
+
+1. Compute the record for the key the server presents now: `openssl s_client -connect mx1.example.net:25 -starttls smtp </dev/null 2>/dev/null | openssl x509 -noout -pubkey | openssl pkey -pubin -outform DER | openssl dgst -sha256`. The digest is the data of a `3 1 1` record.
+2. Publish it at `_25._tcp.mx1.example.net` next to the old record.
+3. Wait at least two TTLs of the TLSA RRset, then remove the old record ([RFC 7671 section 8.1](https://www.rfc-editor.org/rfc/rfc7671#section-8.1)).
+4. Next time, publish the next key's record before you switch, or reuse the key on renewal.
+
+### Records without DNSSEC
+
+Sign the zone that holds the MX host at its DNS provider and publish the DS at the registrar. Confirm with `dig +dnssec TLSA _25._tcp.mx1.example.net`: the `ad` flag must appear in the header.
+
+### Confirm a match yourself
+
+`dig +short TLSA _25._tcp.mx1.example.net` lists the records; the openssl pipeline above gives the 3 1 1 digest to compare. For a 2 0 1 record, take the issuing certificate from `openssl s_client -showcerts` and hash its DER.
+
+### Break it and Heal it
+
+| Break it | What it shows | Heal it |
+| --- | --- | --- |
+| Web server | Your host on port 443, usually No DANE | Restore input before this break |
+| One server | Your first mail server alone | Restore input before this break |
+| Truncated record | A 3 1 1 record with 4 hex characters | Restore input before this break |
+| No mail servers | A domain with no MX | Check the web server instead |
+
+## Worked example
+
+The page opens on a live check of `tamperbox.dev`. Its MX hosts are a mail provider's shared servers, so their TLSA records are the provider's. When compared on 21 October 2026, each server published one DANE-TA record that matched the issuing CA and two DANE-EE records, one of which matched the server key; the other may be a key published ahead of a rollover, the practice RFC 7671 recommends. Records, servers and keys change over time, so read the live result rather than these words.
+
+The comparison behind this choice ran the real page on five domains. Every candidate passed; `tamperbox.dev` showed both DANE-TA and DANE-EE matches and a pre-published key across three servers in about four seconds, more instructive than one-server or single-usage results and quicker than most.
+
+The reserved sample `harbor-supply.example` is used by the automated tests: three servers, the backup one presenting a renewed key its record does not name.
+
+## For agents
+
+The Tamperbox MCP server exposes the same comparison as the `dane_checker` operation. It checks one server: pass `host` and `port` (443 by default; use 25 for a mail server); it does not resolve MX records, so look those up first. Keep the operation's limitation text with any conclusion:
+
+- A pass means one association matched with the resolver's AD flag; DNSSEC is not validated independently.
+- Usages 0 and 1 also need the probe's PKIX validation.
+- This is association evidence, not a complete DANE validation verdict.
+
+See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for the calling pattern, and [Security and privacy](/reference/security/) for where the host travels.
+
+## Limits
+
+One observation from one location at one moment. DNSSEC comes from the resolver's AD flag. Certificate dates and DANE-TA name checks are not evaluated, and the probe's own chain is the only chain compared. A server that does not answer is not compared, never failed. Ports outside the table are refused. Browsers do not use DANE for websites. Nothing is stored.
+
+## References
+
+| Specification | Sections used | Status |
+| --- | --- | --- |
+| [RFC 6698](https://www.rfc-editor.org/rfc/rfc6698) The DANE TLSA record | [2.1](https://www.rfc-editor.org/rfc/rfc6698#section-2.1), [3](https://www.rfc-editor.org/rfc/rfc6698#section-3) | Updated by RFC 7218, RFC 7671 |
+| [RFC 7218](https://www.rfc-editor.org/rfc/rfc7218) Acronyms for DANE | [2](https://www.rfc-editor.org/rfc/rfc7218#section-2) | Current |
+| [RFC 7671](https://www.rfc-editor.org/rfc/rfc7671) DANE updates and operational guidance | [5.1](https://www.rfc-editor.org/rfc/rfc7671#section-5.1), [5.2](https://www.rfc-editor.org/rfc/rfc7671#section-5.2), [8.1](https://www.rfc-editor.org/rfc/rfc7671#section-8.1) | Current |
+| [RFC 7672](https://www.rfc-editor.org/rfc/rfc7672) SMTP security via opportunistic DANE TLS | [2.2](https://www.rfc-editor.org/rfc/rfc7672#section-2.2), [3.1.3](https://www.rfc-editor.org/rfc/rfc7672#section-3.1.3), [3.2](https://www.rfc-editor.org/rfc/rfc7672#section-3.2) | Current |
+| [RFC 3207](https://www.rfc-editor.org/rfc/rfc3207) SMTP STARTTLS | [4](https://www.rfc-editor.org/rfc/rfc3207#section-4) | Current |
+| [RFC 4035](https://www.rfc-editor.org/rfc/rfc4035) DNSSEC protocol | [3.2.3](https://www.rfc-editor.org/rfc/rfc4035#section-3.2.3) | Updated by later DNSSEC RFCs; see RFC 9364 |
+| [RFC 9364](https://www.rfc-editor.org/rfc/rfc9364) DNSSEC (BCP 237) | whole document | Current |
+| [RFC 7505](https://www.rfc-editor.org/rfc/rfc7505) Null MX | [3](https://www.rfc-editor.org/rfc/rfc7505#section-3) | Current |

@@ -1,7 +1,7 @@
 ---
 title: TCP Ping
 description: How TCP Ping measures connect time to a host and port from three regions, how each attempt is classified, what every verdict and finding means, and how to fix refused, filtered and lossy ports.
-updated: 2026-10-20
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and guide for the Tamperbox TCP Ping, which resolves a host in up to three regions (Eastern North America, Western Europe, Asia Pacific) and makes three TCP handshakes to the first public address from each, reporting open, refused or unanswered attempts with connect times.
 prerequisites:
@@ -12,9 +12,9 @@ limitations:
   - TCP handshake time from three broad regions, not ICMP ping and not your own latency; only the first resolved address is tested; a timeout is inconclusive; UDP cannot be tested
 ---
 
-The tool page is [tamperbox.dev/tcp-ping](https://tamperbox.dev/tcp-ping). It opens on a sample web server with fixed measurements, so the page shows a full result without spending a probe, and measures your own server when you press Ping. This page is the long version: what each region does, how an attempt is classified, what each verdict and finding means, and how to confirm a fix without Tamperbox.
+The tool page is [tamperbox.dev/tcp-ping](https://tamperbox.dev/tcp-ping). It opens with `tamperbox.dev:443` ready to check and measures it only when you press Ping or Enter. This page is the long version: what each region does, how an attempt is classified, what each verdict and finding means, and how to confirm a fix without Tamperbox.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> typing sends nothing. Names under the reserved <code>.example</code> zone, which the example and Break it use, are answered in your browser from fixed sample measurements. Pressing Ping or Enter sends the host and port to the Tamperbox server, which asks one measurement server in each chosen region to connect. Nothing is sent over the connections and nothing is stored.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> typing sends nothing. Names under the reserved <code>.example</code> zone, which the Break it fixtures use, are answered in your browser from fixed sample measurements. Pressing Ping or Enter sends the host and port to the Tamperbox server, which asks one measurement server in each chosen region to connect. No application bytes are sent over the connections and results remain in page memory.</div>
 
 ## What the tool answers
 
@@ -56,7 +56,7 @@ The verdict sentence is one of:
 | Reachable from all N regions | Every measured region connected on every attempt |
 | Reachable …, with lost attempts | Every region connected, but at least one lost an attempt |
 | Reachable from N of M regions | Some regions connected, the others refused or did not answer |
-| Refused from every region | Every measured region was refused on all three attempts |
+| Refused from every region | Every measured region reported refusal on its completed attempts |
 | No answer from any region | Nothing connected and the answers were not all refusals |
 | Measured N of M regions | Some regions did not complete the measurement; their reachability is unknown |
 | Measurements are unavailable | No region completed |
@@ -67,14 +67,6 @@ The detail line names the fastest and slowest regions. One chip per region gives
 ### Findings
 
 Directly under the verdict, worst first; the [Finding reference](#finding-reference) lists them all.
-
-### Take it further
-
-The address tested into ASN Lookup (which network announces it), and for a live result: the other address the name resolves to back into TCP Ping, the certificate the server sends into the SSL Certificate Checker when the port is a TLS port (443, 465, 993, 995 or 853) and the host is a name, and the address into Reverse DNS. Nothing is put in the URL.
-
-### History
-
-Each Break it and Heal it change, with Revert and Reset input.
 
 ### By region
 
@@ -96,7 +88,7 @@ Each chosen region resolves the name on its own, in parallel with the others. Ev
 
 ### 2. Three attempts
 
-Each region opens three TCP connections in sequence to the chosen address and port, each limited to 1.5 seconds, and the whole region, resolution included, must finish within 7 seconds. An attempt that completes the three-way handshake ([RFC 9293, section 3.5](https://www.rfc-editor.org/rfc/rfc9293#section-3.5)) is closed at once; no application data is sent, so the service behind the port never receives a request. The time recorded is from sending the SYN to the handshake completing: close to one network round trip from that region plus a little local overhead.
+Each region opens three TCP connections in sequence to the chosen address and port, each limited to 1.5 seconds, and the whole region, resolution included, must finish within 7 seconds. An attempt that completes the three-way handshake ([RFC 9293, section 3.5](https://www.rfc-editor.org/rfc/rfc9293#section-3.5)) is closed at once; no application data is sent; the service can still observe and log the accepted connection. The time recorded is from calling the socket connection function until its connect event: close to one network round trip from that region plus a little local overhead.
 
 Each attempt is classified from the socket outcome:
 
@@ -110,7 +102,7 @@ Each attempt is classified from the socket outcome:
 
 ### 3. Region state
 
-A region is **Open** when at least one attempt connected, **Refused** only when all three were refused, and **No answer** otherwise. Mixed refusals and timeouts count as no answer, because together they are inconclusive. Average, minimum and maximum are taken over the attempts that connected; the average is rounded to hundredths of a millisecond, and the page shows one decimal under 10 ms.
+A region is **Open** when at least one attempt connected, **Refused** only when all completed attempts were refused and at least one attempt completed, and **No answer** otherwise. Mixed refusals and timeouts count as no answer, because together they are inconclusive. Average, minimum and maximum are taken over the attempts that connected; the average is rounded to hundredths of a millisecond, and the page shows one decimal under 10 ms.
 
 ### 4. Findings
 
@@ -126,7 +118,7 @@ A region is **Open** when at least one attempt connected, **Refused** only when 
 
 ### 5. Reading distance
 
-Light in fibre covers about 200 km per millisecond, so each 100 km of fibre adds about 1 ms of round trip (0.5 ms each way). Routes are longer than straight lines, so a server in Europe usually answers Asia Pacific in 150 ms or more. When all three regions see similarly low times, the target is probably anycast or behind a CDN, and each region reached a different site.
+Light in fibre covers about 200 km per millisecond, so each 100 km of fibre adds about 1 ms of round trip (0.5 ms each way). Routes are longer than straight lines, so a server in Europe usually answers Asia Pacific in 150 ms or more. Similarly low times can be consistent with anycast or distributed endpoints, but timings alone cannot identify the topology. Compare each resolved address and the provider's deployment information.
 
 <span id="standards"></span>
 
@@ -146,7 +138,7 @@ Light in fibre covers about 200 km per millisecond, so each 100 km of fibre adds
 | Refused from N regions | FAIL | Clients there get an immediate "connection refused" | Start the service, listen on a public interface, open the host firewall |
 | No answer from N regions | CHECK | Connections hang until they time out; inconclusive | Allow the port in the network firewall or security group; check geo-blocking |
 | Some attempts were lost | CHECK | Occasional slow or failed connections | Look for packet loss, connection limits or overload |
-| Target refused by the probe | CHECK | The name resolves to a non-public address or too many records | Fix the DNS records or test the public address |
+| A region did not complete the test (unsafe target) | INFO | The name resolves to a non-public address or too many records | Fix the DNS records or test the public address |
 | N other addresses not tested | INFO | Clients may connect to another address, for example over IPv6 | Test each address as the host |
 | A region did not complete the test | INFO | That region's reachability is unknown | Press Ping again |
 | This is TCP connect time | INFO | Handshake time from the region, not your latency or ICMP ping | |
@@ -171,7 +163,7 @@ A timeout means the SYN or its answer was dropped. Look at the layer in front of
 
 ### Lost attempts
 
-Run the test a few times. Steady loss from one region points at the path; loss everywhere points at the server or its load balancer (SYN backlog, connection rate limits, overload).
+Run the test a few times. Failures limited to one region suggest comparing paths; failures across regions suggest also checking the server or load balancer. Neither pattern uniquely identifies the cause. These are failed connection attempts, not a direct packet-loss measurement.
 
 ### Confirm without Tamperbox
 
@@ -197,7 +189,11 @@ curl -o /dev/null -s -w 'connect %{time_connect}s\n' https://example.org/
 
 ## Worked example
 
-The page opens on `shop.harbor-supply.example:443`, a sample web server under the reserved `.example` zone with fixed measurements. All three regions connect on every attempt: Western Europe in about 11 ms, Eastern North America in about 84 ms, Asia Pacific in about 238 ms. The spread is distance: the sample server sits in Europe. The name also resolves to an IPv6 address, `2001:db8:a5::80`, which was not tested; the informational finding suggests entering it as the host, because many clients prefer IPv6 when both work ([RFC 8305, section 4](https://www.rfc-editor.org/rfc/rfc8305#section-4)). Take it further offers the tested address to ASN Lookup, which answers from sample data for this documentation address.
+The page starts with `tamperbox.dev:443` in the field and waits for Ping or Enter. No live probe is spent merely by loading or typing this target. Select the regions and run it, then inspect each region independently: the resolved address, successful attempts, individual outcomes and average connect time.
+
+A region that connects proves one TCP path worked at that time. It does not test the HTTPS response, certificate, bandwidth or your own device latency. If different regions resolve different addresses, compare the addresses before attributing the timing difference to geography.
+
+Reserved `.example` Break it fixtures run locally and illustrate refusal, silence and partial success. They are not evidence about a live server. Re-enter the live target and press Ping for a new measurement after changing configuration.
 
 ## For agents
 
@@ -209,6 +205,10 @@ The Tamperbox MCP server runs the same measurement. Search its catalog for `tcp_
 
 See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/), and [Security and privacy](/reference/security/) for where the input travels. [ASN Lookup](/tools/asn-lookup/) names the network that announces the address.
 
+### Transfers to another tool
+
+Explicit sibling-tool controls can carry the current input or observed address to another page. The shared navigation stores that value temporarily in tab-scoped `sessionStorage` and puts a random transfer token in the URL fragment. The receiving page consumes the transfer and applies its own input rules; tools with a manual Run button still require that action for live checks. This is not a saved result, and the destination can send the value to the services it needs. Ordinary edits and lookups do not create a durable report archive.
+
 ## Limits
 
 - Three broad regions, three attempts each, at one moment.
@@ -216,7 +216,7 @@ See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/), and
 - TCP only: UDP services (most voice, many game servers, QUIC) cannot be tested.
 - Names that resolve to private or reserved addresses are refused.
 - Sample results under `.example` are fixed and labelled.
-- Nothing you enter is stored.
+- The page keeps results in memory. Explicit transfers to another tool use temporary session storage.
 
 ## References
 

@@ -1,7 +1,7 @@
 ---
 title: Open Port Checker
 description: How the Open Port Checker tests one TCP port on your own public address from the internet, what open, refused and no answer mean for a port forward, and how to fix each outcome.
-updated: 2026-10-20
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and guide for the Tamperbox Open Port Checker, which makes one TCP connection, from Eastern North America with a 1.5 second limit, to the public address the visitor's request came from, on one port, and reports open, refused or no answer with next steps.
 prerequisites:
@@ -26,7 +26,7 @@ The tool page is [tamperbox.dev/open-port-checker](https://tamperbox.dev/open-po
 
 ### A port
 
-A number from 1 to 65535, typed or chosen from the common ports: 22 (SSH), 80 (HTTP), 443 (HTTPS), 3389 (Remote Desktop), 25565 (Minecraft), 32400 (Plex), 8096 (Jellyfin) and 8080 (an alternative web port). Anything else is refused in the page with "Not a port". The check runs only on Enter or the Check port button; changing the port says what will be tested and waits.
+A number from 1 to 65535, typed or chosen from the common ports: 22 (SSH), 80 (HTTP), 443 (HTTPS), 3389 (Remote Desktop), 25565 (Minecraft), 32400 (Plex), 8096 (Jellyfin) and 8080 (an alternative web port). Anything else is refused with "Use a port from 1 to 65535.". The check runs only on Enter or the Check port button; changing the port says what will be tested and waits.
 
 ### Your address
 
@@ -40,15 +40,7 @@ Not an input. The server takes the address the request came from: the `CF-Connec
 
 ### Findings
 
-The outcome as a finding, then any caveat for the port, worst first. See the [Finding reference](#finding-reference).
-
-### Take it further
-
-Your address into ASN Lookup (the network it belongs to), and for an open port, `address:port` into TCP Ping to measure it from three regions, and, for port 25565, your address into the Minecraft Server Status Checker. Nothing is put in the URL.
-
-### History
-
-Break it loads a port that shows a caveat before any probe is spent; History logs the change, Revert puts the previous port back, and Heal it offers "Restore input before this break". Typing a new port starts a new History.
+The current page explains the outcome in its verdict and What to do next section. The [finding reference](#finding-reference) below maps those outcomes and advice notes; it does not imply a separate Findings panel.
 
 ### The probe line
 
@@ -66,7 +58,7 @@ The last twelve checks, newest first, with their outcome and time. Kept in the p
 
 ### 1. The address
 
-The address comes from the request, never from the page. That is why the tool cannot scan other machines, and why a VPN or proxy changes what is tested: the server sees the exit of the tunnel, not your router. With carrier-grade NAT ([RFC 6598, section 4](https://www.rfc-editor.org/rfc/rfc6598#section-4)), the address belongs to your provider's gateway, which is shared by many customers and forwards nothing to you; a port forward on your router cannot work there.
+The address comes from the request, never from the page. That is why the tool cannot scan other machines, and why a VPN or proxy changes what is tested: the server sees the exit of the tunnel, not your router. With carrier-grade NAT ([RFC 6598, section 4](https://www.rfc-editor.org/rfc/rfc6598#section-4)), the address belongs to your provider's gateway, which may be shared by many customers. A local router rule alone does not configure the upstream NAT; provider support, an assigned public address or an approved tunnel may be needed.
 
 ### 2. One connection
 
@@ -90,7 +82,7 @@ A reset means a device answered for the port but nothing accepted the connection
 
 ### 4. Steps per outcome
 
-The steps under What to do next and in the How to fix it card follow the outcome: for open, confirm you meant it and keep the service updated; for refused, start the service, listen on the network rather than localhost, and point the forward at the right device; for no answer, add the forward, allow the port in the device's firewall, compare the router's WAN address for carrier-grade NAT, and turn off any VPN.
+The steps under What to do next  follow the outcome: for open, confirm you meant it and keep the service updated; for refused, start the service, listen on the network rather than localhost, and point the forward at the right device; for no answer, add the forward, allow the port in the device's firewall, compare the router's WAN address for carrier-grade NAT, and turn off any VPN.
 
 <span id="standards"></span>
 
@@ -107,12 +99,12 @@ The steps under What to do next and in the How to fix it card follow the outcome
 
 | Finding | Severity | What it means for the device behind the port | Fix |
 | --- | --- | --- | --- |
-| Port N accepts connections from the internet | PASS | Anyone can reach the service, including scanners | Keep it updated; close the forward when not needed |
-| Port N refused the connection | FAIL | The forward or device answers, but nothing listens | Start the service; bind to the network; fix the forward target |
+| Port N is open (verdict) | PASS | The measurement region connected; other sources may be filtered | Keep it updated; close the forward when not needed |
+| Port N is closed (verdict) | FAIL | The forward or device answers, but nothing listens | Start the service; bind to the network; fix the forward target |
 | No answer on port N | CHECK | Dropped before anything answered: no forward, a firewall, CGNAT or a VPN | Add the forward; allow it in the firewall; check for CGNAT |
-| … uses UDP | CHECK | The TCP result says nothing about this UDP service | Test the UDP service from outside with the app itself |
-| Port N is often blocked by home providers | INFO | The provider may filter it before your router | Ask the provider or use another port |
-| This tests the address our server sees | INFO | A VPN, proxy or CGNAT gateway is tested instead of your router | Turn the VPN off; ask for a public address |
+| … uses UDP (advice) | INFO | The TCP result says nothing about this UDP service | Test the UDP service from outside with the app itself |
+| Port N may be blocked by home providers (advice) | INFO | The provider may filter it before your router | Ask the provider or use another port |
+| Request-source address (scope) | INFO | A VPN, proxy or CGNAT gateway is tested instead of your router | Turn the VPN off; ask for a public address |
 
 ## Guide
 
@@ -155,21 +147,19 @@ From a machine on another network (a phone hotspot works):
 nc -vz -w 2 <your public address> 25565
 ```
 
-### Break it cases
+### Trying another port
 
-| Case | What it loads | What it shows |
-| --- | --- | --- |
-| A UDP-only port | `51820` | The WireGuard note: TCP says nothing about it |
-| Often blocked by providers | `25` | The provider-blocking note |
-| Port out of range | `70000` | "Not a port"; nothing can be checked |
+Select a common-port button or enter a port from 1 to 65535. This stages the target but does not send a probe until you press Check port or Enter. Results from earlier checks remain in Checked on this visit, up to twelve entries, and disappear on reload. Compare the target address and timestamp before interpreting repeated results.
 
 ## Worked example
 
-The page opens ready to check port 25565 on the address it read for you; nothing has been tested yet, so there is no result to read and the result cards wait. Press Check port and the server connects once. On a typical home connection with no forward, the answer is "No answer on port 25565": the router has no rule for the port and drops the connection. The steps say to add a forward for TCP 25565 to the computer running the server and allow it in its firewall. After that, the same check reads "Port 25565 is open" with a connect time, Take it further offers the Minecraft Server Status Checker for your address, and the server list entry there shows what your friends will see.
+The page starts ready to test TCP port 25565 on the request-source address. Nothing has been probed yet. After Check port, read the address actually tested and the outcome: handshake completed, explicit refusal, no answer or unavailable measurement.
+
+Suppose the first attempt receives no answer. That alone cannot identify a missing port forward, a stopped service or a firewall. Confirm the service is listening, compare your router WAN address with the observed address, and inspect the intended firewall and forwarding rules. After a deliberate configuration change, repeat the check. An open result proves reachability from the measurement region, not from every network, and does not establish that the application accepts logins or game sessions.
 
 ## For agents
 
-The Tamperbox MCP server exposes the same check as `open_port_checker`, but it tests the public address of whoever makes the request: called from an agent's server, it tests that server, not the user's connection. Use it only to test the machine the agent runs on, and keep these warnings:
+The Tamperbox MCP server exposes the same check as `open_port_checker`, but it tests the public address of whoever makes the request: called through an agent or gateway, it tests the public request source, not necessarily the user's connection. Interpret it as a test of the request source seen by the gateway; that may be shared egress rather than the machine the agent runs on, and keep these warnings:
 
 - No answer is inconclusive.
 - A VPN, proxy or CGNAT gateway is tested in place of the router behind it.
@@ -177,13 +167,17 @@ The Tamperbox MCP server exposes the same check as `open_port_checker`, but it t
 
 See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/), and [Security and privacy](/reference/security/). [TCP Ping](/tools/tcp-ping/) tests any public server from three regions.
 
+### Transfers to another tool
+
+Explicit sibling-tool controls can carry the current input or observed address to another page. The shared navigation stores that value temporarily in tab-scoped `sessionStorage` and puts a random transfer token in the URL fragment. The receiving page consumes the transfer and applies its own input rules; tools with a manual Run button still require that action for live checks. This is not a saved result, and the destination can send the value to the services it needs. Ordinary edits and lookups do not create a durable report archive.
+
 ## Limits
 
 - Your own public address only; no other address can be entered.
 - One TCP connection from one region, limited to 1.5 seconds.
 - UDP cannot be tested.
 - The history of checks is kept in the page only.
-- Nothing you enter is stored.
+- The page keeps results in memory. Explicit transfers to another tool use temporary session storage.
 
 ## References
 

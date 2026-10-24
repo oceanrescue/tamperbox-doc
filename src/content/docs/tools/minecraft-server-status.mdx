@@ -1,7 +1,7 @@
 ---
 title: Minecraft Server Status Checker
 description: How the Minecraft Server Status Checker follows the SRV record, asks a Java Edition server for its server list status and ping, what every verdict and finding means, and how to fix servers players cannot join.
-updated: 2026-10-20
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and guide for the Tamperbox Minecraft Server Status Checker, which follows the _minecraft._tcp SRV record when no port is given, connects once from Eastern North America, performs the Java Edition Server List Ping and reports the self-reported version, players and message with TCP connect and ping times.
 prerequisites:
@@ -12,9 +12,9 @@ limitations:
   - Java Edition only (Bedrock uses UDP); one region; version, players and message are self-reported; the check never logs in or joins
 ---
 
-The tool page is [tamperbox.dev/minecraft-server-status](https://tamperbox.dev/minecraft-server-status). It opens on a sample server network behind an SRV record, with fixed answers, and checks your own server when you press Check server. This page is the long version: how the address is resolved the way the game resolves it, what the status exchange asks, what each verdict and finding means for players, and how to confirm a fix without Tamperbox.
+The tool page is [tamperbox.dev/minecraft-server-status](https://tamperbox.dev/minecraft-server-status). It opens on `play.harbor-supply.example`, a local sample survival server with fixed answers, and checks your own server when you press Check server. This page is the long version: how the address is resolved the way the game resolves it, what the status exchange asks, what each verdict and finding means for players, and how to confirm a fix without Tamperbox.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> typing sends nothing. Names under the reserved <code>.example</code> zone, which the example and Break it use, are answered in your browser with fixed sample answers. Pressing Check server or Enter sends the address to the Tamperbox server, which resolves it, connects once from Eastern North America, asks for the server list status and a ping, and keeps nothing. It never logs in, joins or sends a player name.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> typing sends nothing. Names under the reserved <code>.example</code> zone, which the example and Break it use, are answered in your browser with fixed sample answers. Pressing Check server or Enter sends the address to the Tamperbox server, which resolves it, connects once from Eastern North America, asks for the server list status and a ping, and returns the observation. It never logs in, joins or sends a player name.</div>
 
 ## What the tool answers
 
@@ -27,7 +27,7 @@ The tool page is [tamperbox.dev/minecraft-server-status](https://tamperbox.dev/m
 
 ### A server address
 
-`play.example.org`, `example.org:25570`, `203.0.113.10` or `[2001:db8::10]:25565`. A pasted link keeps its host and port. Without a port, the check follows the SRV record, exactly as the game client does; with a port, it connects to that port and ignores the SRV record. A port outside 1 to 65535 is refused with a repair that removes it. Private, loopback, link-local, unique local and carrier-grade NAT addresses are refused in the browser: no server on the internet can reach them, and a home server must be checked by its public address.
+`play.example.org`, `example.org:25570`, `203.0.113.10` or `[2001:db8::10]:25565`. A pasted link keeps its host and port. Without a port, the check follows the SRV record, using the tool's bounded SRV lookup; with a port, it connects to that port and ignores the SRV record. A port outside 1 to 65535 is refused with a repair that removes it. Private, loopback, link-local, unique local and carrier-grade NAT addresses are refused in the browser: no server on the internet can reach them, and a home server must be checked by its public address.
 
 ### When it runs
 
@@ -43,14 +43,6 @@ Online: "Online with N of M players", then the version, the ping and, when used,
 
 Directly under the verdict, worst first; see the [Finding reference](#finding-reference).
 
-### Take it further
-
-The address the server resolved to into ASN Lookup, and for a live result the SRV record name `_minecraft._tcp.<name>` into the SRV Lookup and `address:port` into TCP Ping, which measures the game port from three regions. Nothing is put in the URL.
-
-### History
-
-Each Break it and Heal it change, with Revert and Reset input.
-
 ### The server list entry
 
 The server as the game's multiplayer list draws it: an initial in place of the icon (icons are not fetched), the address, the message of the day with its formatting codes removed, the player count with a fill bar, and the signal bars with the ping.
@@ -63,9 +55,9 @@ The address entered, the SRV record (or why it was not used), the address and po
 
 ### 1. Following the SRV record
 
-When no port is given and the host is a name, the server asks DNS for SRV records at `_minecraft._tcp.<name>` ([RFC 2782](https://www.rfc-editor.org/rfc/rfc2782#page-2), "The format of the SRV RR"). An answer with more than 32 records, or with a priority or weight outside 0 to 65535, is refused as invalid. The selection follows RFC 2782's usage rules ([page 6](https://www.rfc-editor.org/rfc/rfc2782#page-6)): keep the records with the lowest priority, then pick one at random in proportion to its weight ([page 5](https://www.rfc-editor.org/rfc/rfc2782#page-5)), or uniformly when all weights are zero. A target of `.` stops the check with "Unavailable", because, in the RFC's words, "A Target of "." means that the service is decidedly not available at this domain" ([page 4](https://www.rfc-editor.org/rfc/rfc2782#page-4)). No SRV record means the name itself on port 25565. A DNS failure other than "no such record" is reported as an error rather than silently falling back.
+When no port is given and the host is a name, the server asks DNS for SRV records at `_minecraft._tcp.<name>` ([RFC 2782](https://www.rfc-editor.org/rfc/rfc2782#page-2), "The format of the SRV RR"). An answer with more than 32 records, or with a priority or weight outside 0 to 65535, is refused as invalid. The selection approximates RFC 2782's usage rules ([page 6](https://www.rfc-editor.org/rfc/rfc2782#page-6)): keep the records with the lowest priority, then pick one at random in proportion to its weight ([page 5](https://www.rfc-editor.org/rfc/rfc2782#page-5)), or uniformly when all weights are zero. The implementation is not an exact RFC selection algorithm: zero-weight entries receive no chance when positive weights exist. When the positive weight total is smaller than the number of candidates, its random range can also leave no target selected, causing a failed lookup. A failure in this case is not evidence that every listed server is down. A target of `.` stops the check with "Unavailable", because, in the RFC's words, "A Target of "." means that the service is decidedly not available at this domain" ([page 4](https://www.rfc-editor.org/rfc/rfc2782#page-4)). No SRV record means the name itself on port 25565. A DNS failure other than "no such record" is reported as an error rather than silently falling back.
 
-Like the game, the check tries one target. It does not fall back to the next target when the chosen one fails, so a network with several SRV targets of equal priority can show different results on different checks.
+The check tries one target. It does not fall back to the next target when the chosen one fails, so a network with several SRV targets of equal priority can show different results on different checks.
 
 ### 2. Resolving and connecting
 
@@ -100,7 +92,7 @@ The bars follow the game client's thresholds: five under 150 ms, four under 300 
 
 | Specification | Parts used | How the tool applies them | Where it stops |
 | --- | --- | --- | --- |
-| [RFC 2782](https://www.rfc-editor.org/rfc/rfc2782) DNS SRV | [Format](https://www.rfc-editor.org/rfc/rfc2782#page-2), [target "."](https://www.rfc-editor.org/rfc/rfc2782#page-4), [weight](https://www.rfc-editor.org/rfc/rfc2782#page-5), [usage rules](https://www.rfc-editor.org/rfc/rfc2782#page-6) | Lowest priority, weighted random choice, "." means unavailable | One target is tried; no fallback to others, as in the game. Obsoletes [RFC 2052](https://www.rfc-editor.org/rfc/rfc2052) |
+| [RFC 2782](https://www.rfc-editor.org/rfc/rfc2782) DNS SRV | [Format](https://www.rfc-editor.org/rfc/rfc2782#page-2), [target "."](https://www.rfc-editor.org/rfc/rfc2782#page-4), [weight](https://www.rfc-editor.org/rfc/rfc2782#page-5), [usage rules](https://www.rfc-editor.org/rfc/rfc2782#page-6) | Lowest priority, weighted random choice, "." means unavailable | One target is tried; no fallback to other targets. Obsoletes [RFC 2052](https://www.rfc-editor.org/rfc/rfc2052) |
 | [RFC 9293](https://www.rfc-editor.org/rfc/rfc9293) TCP | [3.5](https://www.rfc-editor.org/rfc/rfc9293#section-3.5) | Connect time is the handshake | |
 | [Server List Ping](https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping) (community protocol documentation; there is no formal standard) | Handshake, status request and response, ping and pong | Modern status exchange (1.7 and later) | The legacy pre-1.7 ping and Bedrock's UDP protocol are not implemented |
 | [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918#section-3), [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598#section-4) | as listed | Private and shared addresses are refused | |
@@ -112,7 +104,7 @@ The bars follow the game client's thresholds: five under 150 ms, four under 300 
 | Connection refused | FAIL | "Connection refused": nothing listens on the port | Start the server; check server-port; check the port forward |
 | No answer within 5 seconds | FAIL | "Timed out": stopped, firewalled, or no port forward | Allow TCP on the port; forward it; check the server is up |
 | Not a Minecraft status reply | FAIL | Another program is on the port, or a proxy blocks status | Check the port and the proxy's listener |
-| The SRV record says the service is not offered | CHECK | The game stops at the record and cannot join by this name | Point the SRV record at the real host and port, or remove it |
+| Service unavailable (verdict) | FAIL | The game stops at the record and cannot join by this name | Point the SRV record at the real host and port, or remove it |
 | The server is full | CHECK | "The server is full" until someone leaves | Raise max-players or grant a bypass permission |
 | Port 19132 (or 19133) is Bedrock's default | CHECK | A Bedrock server cannot be checked this way | Use the Java port, or test Bedrock in the game |
 | Found through an SRV record | INFO | Players can type the name without a port | Keep the record in step with the server |
@@ -162,7 +154,11 @@ The answer lists priority, weight, port and target. Then check the name here wit
 
 ## Worked example
 
-The page opens on `harbor-supply.example`, a sample server network under the reserved `.example` zone with fixed answers. No port was given, so the SRV record `_minecraft._tcp.harbor-supply.example` is followed to `mc-eu-1.harbor-supply.example` on port 25577: players type the short name and the game finds the right machine. The proxy there reports Velocity 3.4.0 accepting clients from 1.8 to 1.21.4 (protocol 769), 412 of 2000 players, and does not enforce secure chat. The status ping took about 20 ms, which is five bars. The findings are informational: found through an SRV record, and reported by the server. Take it further offers the server's address to ASN Lookup, which answers from sample data for this documentation address.
+The opening input is `play.harbor-supply.example`, a reserved sample survival server answered locally. Read its message, reported version and player counts as fixture data. The sample does not contact a real game server or establish that any player can join.
+
+Replace it with a public Java Edition server and press Check server. When no explicit port is supplied, inspect whether an SRV target was selected and which address and port were actually contacted. Compare TCP connect time with status ping: the latter includes the application-level pong exchange.
+
+An online result means a valid status reply arrived. Whitelists, authentication, protocol compatibility and gameplay performance can still prevent a player from joining. A full-server fixture illustrates the capacity warning, while a reply without pong remains online with no status-ping timing.
 
 ## For agents
 
@@ -174,6 +170,10 @@ The Tamperbox MCP server runs the same check. Search its catalog for `minecraft_
 
 See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/), and [Security and privacy](/reference/security/) for where the input travels. [TCP Ping](/tools/tcp-ping/) measures the game port from three regions.
 
+### Transfers to another tool
+
+Explicit sibling-tool controls can carry the current input or observed address to another page. The shared navigation stores that value temporarily in tab-scoped `sessionStorage` and puts a random transfer token in the URL fragment. The receiving page consumes the transfer and applies its own input rules; tools with a manual Run button still require that action for live checks. This is not a saved result, and the destination can send the value to the services it needs. Ordinary edits and lookups do not create a durable report archive.
+
 ## Limits
 
 - Java Edition only; Bedrock uses UDP.
@@ -181,7 +181,7 @@ See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/), and
 - The legacy pre-1.7 status ping is not implemented.
 - Names that resolve to private or reserved addresses are refused.
 - Sample answers under `.example` are fixed and labelled.
-- Nothing you enter is stored.
+- The page keeps results in memory. Explicit transfers to another tool use temporary session storage.
 
 ## References
 
