@@ -36,6 +36,8 @@ export default defineConfig({
         { label: 'Tools', items: [
           { label: 'All tool pages', link: '/tools/' },
           { label: 'DNS records', collapsed: false, items: [
+            { label: 'DNSSEC Checker', link: '/tools/dnssec-checker/' },
+            { label: 'Reverse DNS Lookup', link: '/tools/reverse-dns/' },
             { label: 'DNS Lookup', link: '/tools/dns-lookup/' },
             { label: 'DNS Propagation Checker', link: '/tools/dns-propagation/' },
             { label: 'TXT Record Lookup', link: '/tools/txt-lookup/' },
@@ -67,6 +69,8 @@ export default defineConfig({
             { label: 'CORS Tester', link: '/tools/cors-tester/' },
           ] },
           { label: 'Domains & hosting', collapsed: false, items: [
+            { label: 'Domain Availability Checker', link: '/tools/domain-availability/' },
+            { label: 'WHOIS & RDAP Lookup', link: '/tools/whois-lookup/' },
             { label: 'Domain Health Check', link: '/tools/domain-health/' },
             { label: 'Website Hosting Checker', link: '/tools/website-hosting/' },
             { label: 'CDN Detector', link: '/tools/cdn-detector/' },
