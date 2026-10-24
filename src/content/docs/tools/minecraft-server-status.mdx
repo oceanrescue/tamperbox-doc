@@ -1,0 +1,191 @@
+---
+title: Minecraft Server Status Checker
+description: How the Minecraft Server Status Checker follows the SRV record, asks a Java Edition server for its server list status and ping, what every verdict and finding means, and how to fix servers players cannot join.
+updated: 2026-10-24
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and guide for the Tamperbox Minecraft Server Status Checker, which follows the _minecraft._tcp SRV record when no port is given, connects once from Eastern North America, performs the Java Edition Server List Ping and reports the self-reported version, players and message with TCP connect and ping times.
+prerequisites:
+  - A Java Edition server address (host name or public IP), with or without a port; the name must resolve only to public addresses
+outputs:
+  - The server list entry the game would draw (message, players, version, signal bars), the SRV target and address connected to, connect and ping times, and findings for full, offline, old or misconfigured servers
+limitations:
+  - Java Edition only (Bedrock uses UDP); one region; version, players and message are self-reported; the check never logs in or joins
+---
+
+The tool page is [tamperbox.dev/minecraft-server-status](https://tamperbox.dev/minecraft-server-status). It opens on `play.harbor-supply.example`, a local sample survival server with fixed answers, and checks your own server when you press Check server. This page is the long version: how the address is resolved the way the game resolves it, what the status exchange asks, what each verdict and finding means for players, and how to confirm a fix without Tamperbox.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> typing sends nothing. Names under the reserved <code>.example</code> zone, which the example and Break it use, are answered in your browser with fixed sample answers. Pressing Check server or Enter sends the address to the Tamperbox server, which resolves it, connects once from Eastern North America, asks for the server list status and a ping, and returns the observation. It never logs in, joins or sends a player name.</div>
+
+## What the tool answers
+
+1. **Where does the game connect?** The SRV record, if there is one, or the name on port 25565, and the address it resolves to.
+2. **Does a Java Edition server answer there?** Online, refused, no answer, or something that is not a Minecraft server.
+3. **What does it say about itself?** Message of the day, players online and the maximum, version name and protocol number, and whether it enforces secure chat.
+4. **How fast is it?** The TCP connect time and the status ping, drawn as the game's signal bars.
+
+## Inputs
+
+### A server address
+
+`play.example.org`, `example.org:25570`, `203.0.113.10` or `[2001:db8::10]:25565`. A pasted link keeps its host and port. Without a port, the check follows the SRV record, using the tool's bounded SRV lookup; with a port, it connects to that port and ignores the SRV record. A port outside 1 to 65535 is refused with a repair that removes it. Private, loopback, link-local, unique local and carrier-grade NAT addresses are refused in the browser: no server on the internet can reach them, and a home server must be checked by its public address.
+
+### When it runs
+
+Only on Enter or the Check server button. Adding spaces around the input keeps the current result; a changed address stages a new check and waits. A sample name under `.example` runs at once because it costs nothing.
+
+## Reading the result
+
+### Verdict and chips
+
+Online: "Online with N of M players", then the version, the ping and, when used, the SRV target. A full server is a warning. Offline outcomes read "Offline: … refused the connection", "No answer from …", "Not a Java server at …" or "Unavailable: … says it is not running". Chips give the player count, the version and "Uses SRV".
+
+### Findings
+
+Directly under the verdict, worst first; see the [Finding reference](#finding-reference).
+
+### The server list entry
+
+The server as the game's multiplayer list draws it: an initial in place of the icon (icons are not fetched), the address, the message of the day with its formatting codes removed, the player count with a fill bar, and the signal bars with the ping.
+
+### How it answered
+
+The address entered, the SRV record (or why it was not used), the address and port connected to, the TCP connect time, the status ping, the version, the protocol number with the release it belongs to where that is certain, the secure chat flag, and the region the check ran from.
+
+## Method
+
+### 1. Following the SRV record
+
+When no port is given and the host is a name, the server asks DNS for SRV records at `_minecraft._tcp.<name>` ([RFC 2782](https://www.rfc-editor.org/rfc/rfc2782#page-2), "The format of the SRV RR"). An answer with more than 32 records, or with a priority or weight outside 0 to 65535, is refused as invalid. The selection approximates RFC 2782's usage rules ([page 6](https://www.rfc-editor.org/rfc/rfc2782#page-6)): keep the records with the lowest priority, then pick one at random in proportion to its weight ([page 5](https://www.rfc-editor.org/rfc/rfc2782#page-5)), or uniformly when all weights are zero. The implementation is not an exact RFC selection algorithm: zero-weight entries receive no chance when positive weights exist. When the positive weight total is smaller than the number of candidates, its random range can also leave no target selected, causing a failed lookup. A failure in this case is not evidence that every listed server is down. A target of `.` stops the check with "Unavailable", because, in the RFC's words, "A Target of "." means that the service is decidedly not available at this domain" ([page 4](https://www.rfc-editor.org/rfc/rfc2782#page-4)). No SRV record means the name itself on port 25565. A DNS failure other than "no such record" is reported as an error rather than silently falling back.
+
+The check tries one target. It does not fall back to the next target when the chosen one fails, so a network with several SRV targets of equal priority can show different results on different checks.
+
+### 2. Resolving and connecting
+
+The target name must resolve to between 1 and 64 addresses, all public; the first is used. The server opens one TCP connection from Eastern North America. The time to complete the handshake is the TCP connect time. The whole exchange must finish within 5 seconds of starting and the request within 7 seconds.
+
+### 3. Server List Ping
+
+On connect, the server sends the two packets of the Java Edition status exchange, as documented in the [Server List Ping](https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping) protocol description: a handshake with protocol number `-1` (asking for status without claiming a client release), the address and port as the player typed them, and the next state "status", followed by an empty status request. The original name and port are sent, not the SRV target, because proxies and hosting panels use them to pick the virtual server.
+
+The answer must be one framed packet with id 0 holding UTF-8 JSON, with a string `version.name`, an integer `version.protocol`, and non-negative integer `players.online` and `players.max`; anything else is "Not a Minecraft status reply". The message is read from `description`, as a plain string or a text component with `extra` parts, and its `§` formatting codes are removed. `enforcesSecureChat` is reported when the server sends it. Responses are limited to 256 KiB in total and 128 KiB per packet. Player samples and the server icon are ignored.
+
+Then the server sends a ping packet with eight random bytes and times the matching pong. A server that answers the status but not the ping is still online, with "No status ping".
+
+### 4. Outcomes
+
+| Outcome | Socket or protocol event | Verdict |
+| --- | --- | --- |
+| Online | Status JSON read | Online with N of M players |
+| Refused | `ECONNREFUSED` | Offline: refused the connection |
+| No answer | No connection or no reply within 5 seconds | No answer |
+| Unreachable | `ENETUNREACH`, `EHOSTUNREACH` | No answer |
+| Not Minecraft | Connected, but the reply is not a status packet, or the connection closed | Not a Java server |
+| Unavailable | SRV target is `.` | Unavailable: says it is not running |
+
+### 5. Signal bars and releases
+
+The bars follow the game client's thresholds: five under 150 ms, four under 300 ms, three under 600 ms, two under 1000 ms, one above, none without a ping. Protocol numbers map to releases only where the mapping is certain (for example 47 is 1.8 to 1.8.9, 769 is 1.21.4); other numbers are shown as reported. A protocol below 754 (1.16.4) raises "An older game version", because current clients join such a server only through a version translation layer.
+
+<span id="standards"></span>
+
+## Standards and conformance
+
+| Specification | Parts used | How the tool applies them | Where it stops |
+| --- | --- | --- | --- |
+| [RFC 2782](https://www.rfc-editor.org/rfc/rfc2782) DNS SRV | [Format](https://www.rfc-editor.org/rfc/rfc2782#page-2), [target "."](https://www.rfc-editor.org/rfc/rfc2782#page-4), [weight](https://www.rfc-editor.org/rfc/rfc2782#page-5), [usage rules](https://www.rfc-editor.org/rfc/rfc2782#page-6) | Lowest priority, weighted random choice, "." means unavailable | One target is tried; no fallback to other targets. Obsoletes [RFC 2052](https://www.rfc-editor.org/rfc/rfc2052) |
+| [RFC 9293](https://www.rfc-editor.org/rfc/rfc9293) TCP | [3.5](https://www.rfc-editor.org/rfc/rfc9293#section-3.5) | Connect time is the handshake | |
+| [Server List Ping](https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping) (community protocol documentation; there is no formal standard) | Handshake, status request and response, ping and pong | Modern status exchange (1.7 and later) | The legacy pre-1.7 ping and Bedrock's UDP protocol are not implemented |
+| [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918#section-3), [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598#section-4) | as listed | Private and shared addresses are refused | |
+
+## Finding reference
+
+| Finding | Severity | What it means for players | Fix |
+| --- | --- | --- | --- |
+| Connection refused | FAIL | "Connection refused": nothing listens on the port | Start the server; check server-port; check the port forward |
+| No answer within 5 seconds | FAIL | "Timed out": stopped, firewalled, or no port forward | Allow TCP on the port; forward it; check the server is up |
+| Not a Minecraft status reply | FAIL | Another program is on the port, or a proxy blocks status | Check the port and the proxy's listener |
+| Service unavailable (verdict) | FAIL | The game stops at the record and cannot join by this name | Point the SRV record at the real host and port, or remove it |
+| The server is full | CHECK | "The server is full" until someone leaves | Raise max-players or grant a bypass permission |
+| Port 19132 (or 19133) is Bedrock's default | CHECK | A Bedrock server cannot be checked this way | Use the Java port, or test Bedrock in the game |
+| Found through an SRV record | INFO | Players can type the name without a port | Keep the record in step with the server |
+| An older game version | INFO | Current clients need a translation layer to join | Update the server or add ViaVersion |
+| No status ping | INFO | The game shows no signal bars | Usually harmless on old servers and some proxies |
+| Reported by the server | INFO | Version, players and message are unverified | |
+
+## Guide
+
+### Friends see "Connection refused"
+
+1. Start the server and wait for "Done" in its console.
+2. Check `server-port` in `server.properties` matches the port players use.
+3. For a server at home, forward that TCP port in the router to the computer running it; the [Open Port Checker](https://tamperbox.dev/open-port-checker) tests the forward from outside.
+4. Check again here.
+
+### Friends see "Timed out"
+
+The connection is dropped before it reaches the server: a firewall on the computer, a missing port forward, carrier-grade NAT at the provider (your router's WAN address starts with 100.64 to 100.127), or a server that is off.
+
+### Players must type a port
+
+Add an SRV record so the name alone works:
+
+```
+_minecraft._tcp.example.org. 3600 IN SRV 0 5 25577 mc.example.org.
+```
+
+Confirm it without Tamperbox:
+
+```sh
+dig +short SRV _minecraft._tcp.example.org
+```
+
+The answer lists priority, weight, port and target. Then check the name here without a port: "How it answered" should show the SRV target.
+
+### Break it cases
+
+| Case | What it loads | What it shows |
+| --- | --- | --- |
+| Server full | `full.harbor-supply.example` | 20 of 20 players and the full-server warning |
+| Old server, no ping | `old.harbor-supply.example` | Protocol 47 (1.8) and a server that skips the ping |
+| Offline | `down.harbor-supply.example` | A refused connection and its fix |
+| Bedrock address | `bedrock.harbor-supply.example:19132` | The Bedrock port warning with a timeout |
+| Private address | `192.168.1.50` | The refusal in the browser; nothing is sent |
+| Port out of range | your server with port 99999 | The port error and the repair without the port |
+
+## Worked example
+
+The opening input is `play.harbor-supply.example`, a reserved sample survival server answered locally. Read its message, reported version and player counts as fixture data. The sample does not contact a real game server or establish that any player can join.
+
+Replace it with a public Java Edition server and press Check server. When no explicit port is supplied, inspect whether an SRV target was selected and which address and port were actually contacted. Compare TCP connect time with status ping: the latter includes the application-level pong exchange.
+
+An online result means a valid status reply arrived. Whitelists, authentication, protocol compatibility and gameplay performance can still prevent a player from joining. A full-server fixture illustrates the capacity warning, while a reply without pong remains online with no status-ping timing.
+
+## For agents
+
+The Tamperbox MCP server runs the same check. Search its catalog for `minecraft_server_status`, inspect the input schema, and call it with the host and, only when the player uses one, the port. Each call spends one probe. Keep these warnings with any conclusion:
+
+- Online here does not mean a player can join: whitelists, versions and authentication are not tested.
+- Players, version and message are self-reported.
+- Bedrock servers cannot be checked.
+
+See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/), and [Security and privacy](/reference/security/) for where the input travels. [TCP Ping](/tools/tcp-ping/) measures the game port from three regions.
+
+### Transfers to another tool
+
+Explicit sibling-tool controls can carry the current input or observed address to another page. The shared navigation stores that value temporarily in tab-scoped `sessionStorage` and puts a random transfer token in the URL fragment. The receiving page consumes the transfer and applies its own input rules; tools with a manual Run button still require that action for live checks. This is not a saved result, and the destination can send the value to the services it needs. Ordinary edits and lookups do not create a durable report archive.
+
+## Limits
+
+- Java Edition only; Bedrock uses UDP.
+- One check from Eastern North America; one SRV target, no fallback.
+- The legacy pre-1.7 status ping is not implemented.
+- Names that resolve to private or reserved addresses are refused.
+- Sample answers under `.example` are fixed and labelled.
+- The page keeps results in memory. Explicit transfers to another tool use temporary session storage.
+
+## References
+
+- [RFC 2782](https://www.rfc-editor.org/rfc/rfc2782), A DNS RR for specifying the location of services (DNS SRV): the record format, target ".", the weight field and the usage rules (pages 2 to 6). Obsoletes [RFC 2052](https://www.rfc-editor.org/rfc/rfc2052).
+- [RFC 9293](https://www.rfc-editor.org/rfc/rfc9293), Transmission Control Protocol: section 3.5.
+- [Java Edition protocol: Server List Ping](https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping), community documentation of the status exchange.
+- [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918#section-3), [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598#section-4): private and shared address space.

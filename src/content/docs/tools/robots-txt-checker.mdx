@@ -1,7 +1,7 @@
 ---
 title: Robots.txt & Sitemap Checker
 description: How the robots.txt checker fetches and parses a site's rules and sitemaps, which group each crawler obeys, which rule decides a path, every finding it reports, and how to fix each one.
-updated: 2026-10-20
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox robots.txt and sitemap checker, which fetches robots.txt and up to six sitemaps from the Tamperbox server, or reads a pasted file in the browser, evaluates RFC 9309 groups and longest-match rules for 14 search and AI crawler tokens, and tests any path.
 prerequisites:
@@ -12,9 +12,9 @@ limitations:
   - robots.txt is a request crawlers may ignore; the crawler table judges the home page only; at most six sitemaps, 10 MiB each
 ---
 
-The tool page is [tamperbox.dev/robots-txt-checker](https://tamperbox.dev/robots-txt-checker). It opens on a sample shop answered by a fixture, says which search engines and AI crawlers the rules let in, and lets you test any path. This page is the long version: how the file is fetched and read, how a crawler's group and a path's rule are chosen, every finding, and how to fix each one.
+The tool page is [tamperbox.dev/robots-txt-checker](https://tamperbox.dev/robots-txt-checker). It checks `tamperbox.dev` live when opened,  says which search engines and AI crawlers the rules let in, and lets you test any path. This page is the long version: how the file is fetched and read, how a crawler's group and a path's rule are chosen, every finding, and how to fix each one.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> a pasted robots.txt or sitemap is read in your browser and never uploaded. A host name is sent to the Tamperbox server, which fetches <code>/robots.txt</code> and up to six sitemaps without cookies and returns them; the rules are evaluated in your browser. Nothing is stored. Sample hosts on the reserved <code>.example</code> zone are answered in the browser from a fixture.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> a pasted robots.txt or sitemap is read in your browser and never uploaded. A host name is sent to the Tamperbox server, which fetches <code>/robots.txt</code> and up to six sitemaps without cookies and returns them; the rules are evaluated in your browser. Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history. Sample hosts on the reserved <code>.example</code> zone are answered in the browser from a fixture.</div>
 
 ## What the tool answers
 
@@ -48,18 +48,13 @@ Files up to 10 MiB can be dropped or opened (`.txt`, `.xml`). A pasted address l
 
 ### Findings
 
-Every finding, worst first, line findings prefixed with their line; passes fold.
+Every finding, worst first, line findings prefixed with their line; passing findings remain visible.
 
-### History
+### Related checks and input transfer
 
-Every Break it and Heal it change, newest first, with Revert and Reset input. After a break with no repair, Heal it offers "Restore input before this break".
+Use Check the rest to open another website tool with the current address. Pasted files are not transferred through these links. Transfers temporarily use browser `sessionStorage` with a one-use random token in the URL fragment; the input itself is not in the URL. The destination accepts a transfer for less than one minute and removes the token. Manual checks still wait for their run button or Enter.
 
-### Take it further
-
-- **Redirect chain of robots.txt** opens the [redirect checker](https://tamperbox.dev/redirect-checker) on `https://host/robots.txt`. Crawlers follow at most five redirects for this file.
-- **Does the first sitemap answer?** opens the [website down checker](/tools/website-down-checker/) on the first sitemap address.
-- **Share preview of the first sitemap page** opens the [Open Graph preview](/tools/open-graph-preview/) on the first URL the sitemap lists.
-- **security.txt for this site** opens the [security.txt checker](https://tamperbox.dev/security-txt-checker) on the host: the other well-known file a site publishes for machines.
+To inspect a value from the result, copy that specific address into the relevant tool. A separate check collects new evidence and can return a different result; do not interpret navigation as confirmation of the original verdict.
 
 ### Test a URL
 
@@ -116,18 +111,18 @@ Following [RFC 9309, section 2.2](https://www.rfc-editor.org/rfc/rfc9309#section
 
 ### Which rule decides a path
 
-[RFC 9309, section 2.2.2](https://www.rfc-editor.org/rfc/rfc9309#section-2.2.2): "the most specific match found MUST be used. The most specific match is the match that has the most octets. ... If an allow rule and a disallow rule are equivalent, then the allow rule SHOULD be used." The tester implements that:
+[RFC 9309, section 2.2.2](https://www.rfc-editor.org/rfc/rfc9309#section-2.2.2): "the most specific match found MUST be used. The most specific match is the match that has the most octets. ... If an allow rule and a disallow rule are equivalent, then the allow rule SHOULD be used." The tester approximates those rules:
 
 - the path includes the query; percent-escapes of unreserved characters are decoded, others upper-cased, on both sides ([section 2.2.2](https://www.rfc-editor.org/rfc/rfc9309#section-2.2.2));
 - `*` matches any run of characters and a final `$` anchors the end ([section 2.2.3](https://www.rfc-editor.org/rfc/rfc9309#section-2.2.3)); every other rule is a prefix;
-- the longest pattern wins, measured without a final `$`; Allow wins a tie;
+- the longest raw pattern wins by JavaScript string length, excluding a final `$`; Allow wins a tie. This is not an octet-length comparison for every Unicode or percent-encoded spelling;
 - an empty `Disallow` matches nothing, and `/robots.txt` is always allowed ([section 2.2.2](https://www.rfc-editor.org/rfc/rfc9309#section-2.2.2)).
 
 With `Disallow: /shop/` and `Allow: /shop/sale`, `/shop/sale/boots` is allowed: the Allow rule is longer.
 
 ### The crawler table
 
-14 tokens at `/`: Googlebot, Bingbot, Applebot and DuckDuckBot (search, judged), GPTBot, OAI-SearchBot, ChatGPT-User, ClaudeBot, Claude-SearchBot, PerplexityBot, Google-Extended, Applebot-Extended, CCBot and Bytespider (AI, stated). Google-Extended and Applebot-Extended are control tokens read by their owners' crawlers, not crawlers themselves. When all four search crawlers are blocked, "Every search engine is blocked" leads the findings.
+14 tokens at `/`: Googlebot, Bingbot, Applebot and DuckDuckBot (search, judged), GPTBot, OAI-SearchBot, ChatGPT-User, ClaudeBot, Claude-SearchBot, PerplexityBot, Google-Extended, Applebot-Extended, CCBot and Bytespider (AI, stated). Google-Extended and Applebot-Extended are control tokens read by their owners' crawlers, not crawlers themselves. When all four search crawlers are blocked, "Every search engine is blocked" leads the findings. That title describes only these four catalogued search tokens at `/`, not every crawler or every path.
 
 ### Sitemaps
 
@@ -155,7 +150,7 @@ Implemented: groups and combination (2.2.1), longest match with Allow on ties (2
 
 ### Sitemaps protocol 0.9
 
-Implemented: both root elements, `loc`, `lastmod`, the 50,000 entry and 50 MiB limits, escaping, same-host URLs. Live fetching stops at 10 MiB, so the 50 MiB rule applies only to pasted files. Text sitemaps and image or news extensions are not read.
+Implemented: both root elements, `loc`, `lastmod`, the 50,000 entry and 50 MiB limits, escaping, same-host URLs. Live fetching and file drops stop at 10 MiB. The parser also has a 50 MiB size rule, but those bounded inputs cannot exercise it; it is not evidence that a larger original file was fully validated. Text sitemaps and image or news extensions are not read.
 
 ### Crawler documentation
 
@@ -163,9 +158,11 @@ Tokens and their meaning come from each operator's own crawler documentation; th
 
 ## Finding reference
 
+### File and record findings
+
 | Finding | Severity | What it means for crawlers | Fix |
 | --- | --- | --- | --- |
-| Every search engine is blocked | FAIL | Site drops out of search | Remove `Disallow: /` from `*` |
+| Every search engine is blocked | FAIL | All four catalogued search tokens are denied at `/` | Remove `Disallow: /` from `*` |
 | robots.txt answered 5xx or 429 | FAIL | Google crawls nothing | Serve the file statically |
 | robots.txt is an HTML page | FAIL | No rules found | Serve a text file before the catch-all |
 | robots.txt is n KiB | CHECK | Rules past 500 KiB ignored | Use wildcards |
@@ -179,6 +176,11 @@ Tokens and their meaning come from each operator's own crawler documentation; th
 | Line n: Crawl-delay is not read by Google, Host is obsolete | INFO | Partly ignored | Optional |
 | Line n: No rules for x | INFO | That crawler may fetch everything | Add rules or remove the group |
 | Line 1: Starts with a byte order mark | INFO | First line misread by some | Save without BOM |
+
+### Sitemap findings
+
+| Finding | Severity | What it means for crawlers | Fix |
+| --- | --- | --- | --- |
 | n sitemap URLs are blocked by robots.txt | CHECK | Conflicting signals | Narrow the rule or drop the URL |
 | No Sitemap line | INFO | Sitemap found more slowly | Add one (Heal it) |
 | Sitemap answered n, did not answer | CHECK | Skipped by crawlers | Fix the address |
@@ -224,30 +226,28 @@ The first four are built from your own file when you entered a host or pasted on
 
 ## Worked example
 
-The page opens on `www.harbor-supply.example`, a sample shop on the reserved `.example` zone, answered by a fixture.
+The page opens with a live check of `tamperbox.dev`. It fetches the current robots.txt and a bounded selection of sitemap files. The crawler table describes permission for `/`; it does not summarize every path on the site.
 
-- The verdict: open to search engines, with GPTBot and CCBot blocked and three things to fix.
-- The tester opens on a product URL the sitemap lists but the rules close, with Googlebot, and marks the deciding line.
-- Findings: the sitemap URL blocked by robots.txt, a `lastmod` that is not a W3C date, a listed sitemap that answers 404, and Crawl-delay noted as ignored by Google. The crawler table shows the four search crawlers allowed, GPTBot and CCBot blocked, and Google-Extended in its own group.
-- A sitemap index and its three child sitemaps are read: 17 URLs in two of them, and the third answers 404.
-- Take it further offers the robots.txt redirect chain, the first sitemap's status, a share preview of its first page and the site's security.txt, each answered by the destination's own fixture.
+Choose a crawler and enter a path that matters to your site. Read the highlighted deciding rule and compare it with the most specific matching group. An allowed home page can coexist with a blocked checkout or administration path. Likewise, a listed sitemap URL can be blocked by the rules even though the sitemap itself was fetched successfully.
+
+Review any suggested repair before copying it into your repository. Heal it replaces the input with corrected text; it does not publish a policy. Recheck a published change by fetching the file independently and testing the affected paths again. Blocking a crawler is a policy choice, not an authentication barrier, and a clean syntax result does not prove that every crawler will obey it.
 
 ## For agents
 
-The Tamperbox MCP server can fetch the same files; search its catalog for the site file operation and call it with the host and `robots.txt`. Keep these warnings:
+Use the Tamperbox MCP `search` tool to inspect the schema, then `execute` with `tamperbox.request` to call `POST /v1/tools/robots_txt_checker`. Supply the required `domain` field as a public domain name. The operation is named `robots_txt_checker`; the browser page’s hyphenated identifier is not the API operation name.
 
-- robots.txt is advisory; it does not prove a crawler stays out.
-- The home-page table is not the answer for other paths; evaluate the path.
-- Blocking an AI crawler is a choice, not a defect.
+The response contains file `evidence`, HTTP `response` interpretation and a parsed `report`. It does not fetch the sitemap collection or reproduce the browser’s path-testing table. Sitemap declarations are parsed URLs, not proof that the files or their pages were retrieved.
 
-See [Connect an MCP client](/mcp/connect/) and [Security and privacy](/reference/security/).
+Keep the input, observation time, source limitations and inconclusive results with any summary. Browser fixtures are demonstrations, not live MCP targets. Do not turn missing evidence into a passing check or infer that an inaccessible resource has been deleted.
+
+See [Connect an MCP client](/mcp/connect/), [Code mode](/mcp/code-mode/) and [Security and privacy](/reference/security/).
 
 ## Limits
 
 - One fetch of robots.txt (512 KiB, 5 redirects) and up to six sitemaps (10 MiB each).
 - The crawler table is for `/` only.
 - Crawler-specific extensions beyond RFC 9309 are not evaluated.
-- Live checks are rate limited. Nothing is stored.
+- Live checks are rate limited. Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history.
 
 ## References
 

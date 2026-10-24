@@ -1,0 +1,195 @@
+---
+title: JSON to YAML Converter
+description: How Tamperbox converts JSON to YAML live in the browser, which hostile or ambiguous inputs it refuses, and how to verify semantic round trips.
+updated: 2026-10-24
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Convert JSON fixtures to YAML locally, reject duplicate keys and unsafe numbers, and verify the parsed data rather than comparing formatting.
+prerequisites:
+  - A JSON value pasted, typed, dropped or opened as a local file
+outputs:
+  - YAML representing the same JSON objects, arrays and scalar values
+  - Findings for validity, complexity and interoperability boundaries
+limitations:
+  - The converter preserves parsed data, not whitespace, quote style or object layout
+  - It does not validate an application schema or predict every YAML loader's schema choices
+  - Input is limited to 1,000,000 characters, 80 levels and 100,000 values
+---
+
+The tool page is [tamperbox.dev/json-to-yaml](https://tamperbox.dev/json-to-yaml). It opens with a synthetic QA test-suite object and converts it immediately. This guide explains the parser boundary, the live-update behavior, every refusal, how the reverse handoff works and how to test that a conversion kept the intended data.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> the source is sent only to a Web Worker in the current browser tab. Conversion does not upload the source or interpret it as code. Explicit reverse-conversion navigation temporarily stores the output in tab-scoped session storage for the handoff; ordinary conversion does not persist it. The worker returns converted text and bounded counts to the page.</div>
+
+## What the tool answers
+
+The page answers four questions in task order. First, is the source unambiguous JSON under the interoperability rules used by the converter? Second, what JSON kind and how many values or containers did the parser read? Third, can that tree be represented with the JSON-compatible YAML schema without changing its values? Fourth, what should a QA engineer test before the YAML becomes a fixture, configuration file or deployment input?
+
+The verdict is about the parsed data model. “Converted valid JSON to YAML” does not mean an application accepts the document. It does not apply JSON Schema, an OpenAPI schema or a product configuration schema. It also does not promise that a YAML loader using YAML 1.1 implicit typing will interpret every plain scalar like this converter's YAML 1.2-oriented JSON schema.
+
+## Inputs
+
+### Typed or pasted JSON
+
+The field accepts any JSON value: object, array, string, number, boolean or null. Editing is live. An input event clears the old output immediately, waits 120 milliseconds to avoid parsing every intermediate keystroke, then sends the current source to the worker. Worker results carry a revision number and are ignored after a newer conversion request starts. The current implementation advances that revision when it dispatches the request, rather than on the initial keystroke; see the timing limitation below.
+
+Pasting in the field or elsewhere on the page replaces the source. The text is not “cleaned” into a different shape because punctuation is meaningful JSON. Clear empties the source, output and cards. Empty input is a neutral state, not an invalid document.
+
+### Dropped or opened files
+
+The shared drop zone accepts `.json`, `application/json` and plain-text files. The browser reads the file as text. A file above 1,000,000 bytes is refused before conversion. The file name may appear in the field hint; the bytes never leave the browser.
+
+### Reverse-conversion handoff
+
+Take it further sends the current YAML output to the YAML to JSON page. The transfer uses a one-use random token, session storage and same-origin BroadcastChannel communication, with a 60-second validity window. The source is never placed in a query string or durable storage. The destination consumes the value once and removes the token from its address.
+
+### Input limits
+
+| Boundary | Limit | Why it exists |
+| --- | ---: | --- |
+| Source text | 1,000,000 characters | Bounds memory, worker messages and parsing time |
+| Nesting | 80 levels | Prevents hostile recursion and impractical fixtures |
+| Tree size | 100,000 values and containers | Bounds traversal and YAML generation |
+| Integer interoperability | −(2<sup>53</sup>−1) through 2<sup>53</sup>−1 | Prevents silent precision changes in JavaScript and common JSON consumers |
+| Worker freshness | Current dispatched revision only | Rejects responses superseded by a newer dispatched request |
+
+## Reading the result
+
+### Verdict and checks
+
+A successful verdict names both formats and states that the represented data is unchanged. The checks name valid JSON and JSON-model preservation; the validity detail and a chip give the bounded node count. A failed verdict clears the output before showing the reason, so Copy result cannot accidentally return the previous valid conversion. Heal it then offers the newest source that converted successfully.
+
+### Findings
+
+The findings separate syntax from interoperability. Valid syntax receives a Pass. The data-model check receives a Pass after the complete tree walk. A parser refusal receives one Fail with a safe message; it never echoes private input. The page folds multiple passing rows into one disclosure so problems remain first.
+
+### Converted output
+
+Output uses two-space indentation and a line-width preference of 100 characters. The emitter uses the JSON-compatible YAML schema and disables references, so repeated objects are written as repeated values rather than synthesized anchors. That makes the output predictable for test fixtures but can make a document larger.
+
+### History and reverse conversion
+
+Break it replacements and Heal it repairs are logged newest first. Revert restores the input before the latest change. Reset returns to the first input in that history. Ordinary typing starts a new history because it is a new source, not an automated repair. The reverse link appears only for a valid current output.
+
+## Method
+
+### Strict JSON parsing
+
+The source first passes the platform JSON parser. Then a JSON-token parser checks the same source inside a wrapper object. This second pass detects duplicate member names and integers that cannot be represented safely. A converter must not silently keep the first or last duplicate because different downstream parsers choose differently.
+
+[RFC 8259 section 4](https://www.rfc-editor.org/rfc/rfc8259#section-4) says object names “SHOULD be unique.” The tool treats that interoperability recommendation as a refusal: the intended value cannot be inferred safely. Section 4 also explains that receiver behavior is unpredictable when names are not unique. The stricter choice is deliberate and appears in the page limits.
+
+### Numeric interoperability
+
+[RFC 8259 section 6](https://www.rfc-editor.org/rfc/rfc8259#section-6) permits implementations to set number range and precision limits. It identifies integers in the binary64 exact range as interoperable. The tree walk therefore accepts finite numbers and rejects an integer outside the safe range with “A number is too large to convert safely. Quote it as text.” Quoting identifiers is not a workaround that changes nothing: it intentionally makes the identifier a string, which is usually the correct contract for account numbers, database IDs and long request IDs.
+
+### Complexity walk
+
+The parsed value is traversed iteratively. Each stack item carries depth. More than 80 levels or 100,000 visited nodes stops before YAML emission. The iterative walk avoids using the JavaScript call stack for attacker-controlled nesting. Primitive values count because a flat array with a million strings can be as expensive as a deep tree.
+
+### YAML emission
+
+The emitter receives only the checked value. It uses the JSON schema described by [YAML 1.2.2 section 10.2](https://yaml.org/spec/1.2.2/#102-json-schema), disables references and selects two-space indentation. YAML mappings represent JSON objects, sequences represent arrays, and JSON strings, finite numbers, booleans and null use compatible scalar forms.
+
+Key order follows the parsed object's enumeration order as an implementation convenience, not a semantic promise. JSON object order does not establish application meaning. A consumer that depends on order needs an array or an explicit order field.
+
+### Live rendering and stale-result control
+
+An input edit clears the visible output and schedules conversion. Dispatch increments the revision, and the worker echoes it. The page ignores a response whose revision no longer matches. This guards requests already superseded by another dispatched request. It does not invalidate the earlier revision during the preceding debounce interval or on the empty-input path. Wait for conversion to settle before copying or following the reverse link; a matching revision alone does not prove that the source has remained unchanged since dispatch.
+
+## Standards and conformance
+
+### RFC 8259
+
+| Sections | Applied here | Deliberate boundary |
+| --- | --- | --- |
+| [3 Values](https://www.rfc-editor.org/rfc/rfc8259#section-3) | Accepts every JSON value at the root | Does not require an object or array |
+| [4 Objects](https://www.rfc-editor.org/rfc/rfc8259#section-4) | Parses objects and refuses repeated names | Stricter than `SHOULD` for deterministic conversion |
+| [5 Arrays](https://www.rfc-editor.org/rfc/rfc8259#section-5) | Preserves element order and mixed value kinds | Does not apply an item schema |
+| [6 Numbers](https://www.rfc-editor.org/rfc/rfc8259#section-6) | Requires finite, safely representable integers | Does not preserve source exponent spelling |
+| [8 Strings](https://www.rfc-editor.org/rfc/rfc8259#section-8) | Uses the platform Unicode JSON parser | Does not normalize Unicode |
+
+### YAML 1.2.2
+
+The output targets the [JSON schema](https://yaml.org/spec/1.2.2/#102-json-schema), not the core schema and not YAML 1.1. It uses block mappings and sequences chosen by the emitter. The tool does not claim byte-level canonical YAML, preserve comments or attach application tags. The YAML specification defines a representation graph, serialization tree and presentation stream as distinct levels; this conversion promises the compatible representation, not the original presentation.
+
+## Finding reference
+
+### Refusals
+
+| Finding | Status | Meaning | Fix |
+| --- | --- | --- | --- |
+| Invalid JSON | Fail | Syntax is incomplete or a duplicate/unsafe value made intent ambiguous | Correct the source or restore the last valid JSON |
+| Input above limit | Fail | The browser worker budget would be exceeded | Split the artifact or remove unrelated data |
+| Document too complex | Fail | Depth or node count exceeded its bound | Flatten nesting or split the fixture |
+| Unsafe integer | Fail | A common JSON consumer may round the identifier | Quote it as a string and update the schema |
+
+### Successful evidence
+
+| Finding | Status | What it proves | What it does not prove |
+| --- | --- | --- | --- |
+| Valid JSON | Pass | The complete source parsed under the strict checks | The application schema accepts it |
+| JSON data model preserved | Pass | The emitter received the checked tree | Every YAML loader chooses identical schemas |
+| Node count | Pass | The bounded walk completed | The document is small enough for every consumer |
+
+## Guide
+
+### Convert a fixture safely
+
+1. Paste or open the JSON. Wait for the valid verdict; conversion normally follows the edit after 120 milliseconds.
+2. Use Break it → Duplicate key. Confirm the tool clears the YAML rather than choosing one value. Heal it restores the last valid source.
+3. Use Break it → Unsafe integer. Decide whether that field is an identifier. If so, quote it in JSON and require a string in the schema.
+4. Read the YAML once for application conventions such as required document markers or key order rules. These are outside the data-model conversion.
+5. Open “Convert this YAML back to JSON.” Deep-compare the parsed JSON values.
+6. Run the application's own schema validator and tests on the exported YAML.
+
+### Check independently
+
+With Node.js and a YAML package already approved by your project, parse both ends and compare values rather than text:
+
+```js
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { load } from 'js-yaml';
+
+const json = JSON.parse(readFileSync('fixture.json', 'utf8'));
+const yaml = load(readFileSync('fixture.yaml', 'utf8'));
+assert.deepEqual(yaml, json);
+```
+
+This command tests your chosen loader, which is valuable because schemas and duplicate-key policies vary. Run it in the project's locked dependency environment, not by installing an unreviewed global package.
+
+### Break it and manual edge cases
+
+| Case | Input property | Expected result |
+| --- | --- | --- |
+| Duplicate key | Two `role` members | Refused; neither value is selected |
+| Unsafe integer | `9007199254740993` | Refused; quote the identifier intentionally |
+| Truncated JSON | An unclosed array | Refused; no stale YAML remains |
+| Excessive depth | More than 80 nested arrays | Refused before emission |
+| Empty source | Whitespace only | Neutral empty state |
+
+## Worked example
+
+The synthetic opening object describes a checkout suite with two cases. Each case has a name and expected HTTP status, and the suite has an enabled boolean. The YAML mapping keeps the suite name, the sequence keeps case order, each nested mapping keeps its fields, numeric statuses remain numbers and the boolean remains a boolean. No real endpoint, credential or customer data appears.
+
+Changing `expected` from `401` to `403` clears the old YAML immediately, then rewrites that scalar after the debounce. Removing the closing brace clears the output and produces a refusal. Restoring it creates a fresh result. Check each completed result against the current source. Rapid edits while a worker is still running are subject to the timing limitation below.
+
+## For agents
+
+The browser page is the private-input surface. Remote automation may call `json_to_yaml` through the Tamperbox API or MCP with an `application/json` text artifact and an optional indentation from 1 through 8. A remote call transmits the artifact to Tamperbox infrastructure; preserve that distinction when advising a user with secrets.
+
+An agent should retain the warnings and provenance, avoid claiming that conversion validates a schema, and test hostile cases before recommending generated fixtures. It should never “repair” a duplicate by choosing the value that looks safer. Ask which value the producer intended or reject the source.
+
+## Limits
+
+### Timing and handoff boundaries
+
+Revision checks begin at dispatch, not at each edit. An earlier worker response can arrive during the 120-millisecond debounce or after Clear and repaint an earlier result. Do not rely on this version for a strict no-stale-output guarantee; wait for the current conversion and compare the output with the source before using it. Reverse handoff temporarily uses session storage and a random URL fragment, with expiry and one-use consumption.
+
+### Format boundaries
+
+The converter does not preserve JSON whitespace, exponent notation, escape spelling or member order as a contract. It does not infer YAML tags, comments or anchors. It does not validate Kubernetes, GitHub Actions, Docker Compose, OpenAPI or another application schema. It cannot prove how a YAML 1.1 loader interprets plain scalars. Processing is local on the page, but a user who follows a remote API or MCP example changes that privacy boundary.
+
+## References
+
+- [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259), especially [values](https://www.rfc-editor.org/rfc/rfc8259#section-3), [objects](https://www.rfc-editor.org/rfc/rfc8259#section-4), [arrays](https://www.rfc-editor.org/rfc/rfc8259#section-5), [numbers](https://www.rfc-editor.org/rfc/rfc8259#section-6) and [strings](https://www.rfc-editor.org/rfc/rfc8259#section-8). Internet Standard.
+- [YAML 1.2.2](https://yaml.org/spec/1.2.2/), especially the [representation model](https://yaml.org/spec/1.2.2/#chapter-3-processes-and-models) and [JSON schema](https://yaml.org/spec/1.2.2/#102-json-schema). Current YAML language specification used for the output boundary.

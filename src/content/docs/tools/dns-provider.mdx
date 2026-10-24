@@ -1,169 +1,178 @@
 ---
 title: DNS Provider Lookup
-description: How the lookup reads a zone's NS records, finds the zone when you enter a name inside it, names the provider behind each nameserver, and flags a single nameserver, several providers and self-hosted servers, with the rules and RFC sections behind each finding.
-updated: 2026-10-20
+description: How Tamperbox groups authoritative nameservers, recognises providers, and flags fragile or mixed delegation.
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
-agentSummary: Method, finding reference and repair guide for the Tamperbox DNS Provider Lookup, which asks a public resolver for a domain's NS records (and its SOA to find the enclosing zone when there are none), matches each nameserver host against 29 provider patterns, recognises self-hosted nameservers, and flags a single nameserver, more than one provider and nameservers not in the catalog. Pasted NS records are read in the browser.
+agentSummary: Method, finding reference and repair guide for the Tamperbox DNS Provider Lookup.
 prerequisites:
-  - A domain, or a list of nameservers or NS records to paste
+  - a domain name or pasted NS records
 outputs:
-  - A verdict naming the provider, the share of nameservers per provider, every nameserver with its provider, and findings with fixes
+  - provider groups, nameserver evidence, self-hosting clues and delegation findings
 limitations:
-  - The NS set comes from one recursive resolver at one moment; the registrar's delegation can differ for up to a TTL after a change; providers are recognised by host name only
+  - Public observations are time-sensitive and do not prove ownership, intent or private configuration
 ---
 
-The tool page is [tamperbox.dev/dns-provider](https://tamperbox.dev/dns-provider). It opens on `harbor-supply.example`, a sample domain on the reserved `.example` zone whose nameservers sit at two providers, as after an unfinished migration. This page is the long version: what the lookup asks, how it names providers, what each finding means and how to fix and confirm it.
+The tool page is [tamperbox.dev/dns-provider](https://tamperbox.dev/dns-provider). It opens with a live lookup of `google.com`; replace it to inspect your own target. This guide documents the actual input path, evidence contract, classifications and independent verification steps.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> a domain is sent to the Tamperbox server, which asks a public DNS resolver for its NS records, and for its SOA record when there are none, to find the zone the name belongs to. Matching nameservers to providers runs in your browser. Pasted nameservers or NS records never leave the browser. The sample is answered in the browser. Nothing is stored.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> input cleanup, pasted-data parsing and report rendering happen in the browser. Live checks send only the validated public target to the Tamperbox server and the public services required for the lookup. The page stores no report; History is local to the current browser session.</div>
 
 ## What the tool answers
 
-1. **Which nameservers answer for this zone?** The NS records at the zone apex.
-2. **Who runs them?** The provider behind each nameserver host name, or "self-hosted" when the servers are named inside the zone.
-3. **Is there enough redundancy?** One nameserver is a single point of failure.
-4. **Is more than one provider involved?** Either deliberate redundancy or a migration left half done.
-5. **Which zone is it, when you entered a name inside one?** A subdomain has no NS records of its own; the lookup says which zone serves it.
+The checker answers which organisations appear to operate the nameservers published for a zone and whether the set is redundant or mixed. Its conclusion is deliberately narrower than an ownership or security claim. A displayed provider, product, name or passing check means that the listed public evidence matched a documented rule at the observation time.
 
-It does not query the nameservers themselves, compare their answers, or check the delegation at the parent zone.
+Every conclusion is paired with evidence. The opening verdict is a summary for orientation, while Findings contains the actionable interpretation and the later result sections retain the underlying records, addresses, fields or names. If a conclusion matters operationally, verify that evidence through an authoritative account or an independent standards-aware client before changing production.
 
 ## Inputs
 
-### A domain
+### Accepted source
 
-`example.com`, or a full address pasted from the address bar, which becomes the domain in the box. The lookup runs when you stop typing or on Enter.
+Enter a domain for a live NS lookup, or paste nameserver hostnames or NS records for local classification. Multiple lines, an `IN NS` record, or names beginning with forms such as `ns1`, `dns1` or `name.ns.` select record mode. A single hostname that does not match those patterns is treated as a domain to look up. Pasted NS records can supply an owner name for the self-hosting comparison.
 
-### Pasted nameservers or NS records
+Text files are read in the browser. The resulting input follows the same classification rules as the field; reading a file locally does not make a domain or public-IP lookup offline. Cleanup keeps an already accepted record intact and otherwise tries unwrapping a single-line address. Unusable text remains visible for correction.
 
-A list of nameserver host names, one per line, or NS records as `dig` prints them (`example.com. 86400 IN NS ns1.example.net.`). One line that already looks like a nameserver (`ns1.…`, `dns1.…`, `….ns.cloudflare.com`, `ns-12.awsdns-…`) is read as a pasted nameserver rather than looked up as a domain. The owner name of a pasted NS record, when there is one, is taken as the zone. Host names that are not valid are dropped; if none is left, "No nameservers found. Paste one hostname per line, or NS records."
+### When work runs
 
-### Files
+Domain input runs after a 600-millisecond typing pause. Enter runs it immediately; pasted records run immediately. Drops and page-wide paste use the same input loader. Leaving the field applies cleanup and reruns only when cleanup changes the text. Each edit aborts the previous request and increments a generation marker. A slower old response therefore cannot replace a newer result, and clearing the source immediately clears copyable output.
 
-A `.txt` file dropped on the page or opened with Add a file is read in the browser.
+The opening input uses the same parser and processing path as a replacement. The labelled live default sends the same requests as another domain.
 
 ## Reading the result
 
-### Verdict and chips
+### Verdict and privacy
 
-"Amazon Route 53 answers for example.com." for one known provider; "Cloudflare, plus 1 Amazon Route 53 nameserver." for two; "Self-hosted DNS:" when the servers are named inside the zone; "DNS runs at x.net: a provider not in the catalog."; "One nameserver:" for a single server; "No NS records at …" for a name inside a zone. One chip per provider with its count, and one for the number of nameservers.
+The verdict states what the available evidence supports and uses pass, check, fail or informational status consistently. Pass means the bounded rule succeeded. Check means a human should confirm context. Fail means a concrete operational rule was violated. Info describes a limitation, absence or neutral fact and must not be promoted into success or failure by an automated reader.
 
-### Findings, Take it further, History
+Two privacy lines distinguish browser-only work from live lookup work. The Checked line names the cleaned input and source mode. Copy result is hidden while work is pending, after an error and when input is empty, preventing a stale report from being exported as current.
 
-Findings worst first, passes folded. Take it further hands the zone to the [DNSSEC Checker](https://tamperbox.dev/dnssec-checker) and the [WHOIS and RDAP Lookup](https://tamperbox.dev/whois-lookup), and, for a real domain, the first nameserver to the [Website Hosting Checker](https://tamperbox.dev/website-hosting) to see where it runs. History logs every Break it case and Heal it repair, with Revert and Reset input.
+### Findings and evidence
 
-### Who answers
+Findings are ordered with failures first, then checks, informational notes and passes. Repeated passing details can fold into a disclosure so that exceptions remain visible. Each item states the observation and its consequence; any remediation is scoped to the evidence rather than presented as a universal configuration recipe.
 
-A bar split by provider, the largest first, then each provider with its share ("2 of 3") and its host names. Providers not in the catalog are named by the last two labels of their host names.
+Evidence sections follow Findings and precede History. They are the audit trail for the verdict. A provider label derived from a catalog remains an inference, while a literal record or response field remains an observation. This distinction matters when signatures are incomplete, white-labelled or stale.
 
-### Nameservers
+### History and handoffs
 
-Every nameserver with its provider.
+History records intentional input replacements, including Break it examples and their repairs. Revert restores the prior input and runs it again, including live requests when applicable; Reset input returns to the value at the beginning of the recorded sequence. History is not monitoring, persistence or an account log.
+
+Check the rest carries the current input to other tools in Domains & hosting. Take it further is hidden because this page has no derived-value destinations. A receiving tool runs its own check; agreement is not guaranteed.
+
+Explicit tool links transfer the input through temporary browser `sessionStorage` and, when needed, a same-origin browser channel. The URL fragment contains a random transfer token, not the input. Transfers are accepted for less than one minute, consumed once, and bound to the destination path. The destination removes the token from its address. Ordinary documentation links and direct visits do not restore a previous input; if transfer storage is unavailable, the link still opens the tool.
+
 
 ## Method
 
-### 1. The NS lookup
+### Validation and collection
 
-The server asks for NS records ([RFC 1035 section 3.3.11](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.11)) at the name and keeps only answers whose owner is that name. NS records live at a zone's apex: [RFC 1034 section 4.2](https://www.rfc-editor.org/rfc/rfc1034#section-4.2) describes the zone as the unit of delegation, with its NS records marking the cut. An ordinary name inside a zone therefore has none.
+Before collection, the same domain validation runs in the browser and on the server boundary. Requests are restricted to supported public DNS names and HTTPS roots, redirects are bounded, response sizes are capped and abort signals are propagated. These limits make the observation reproducible and prevent an entered value from becoming an unrestricted network fetch.
 
-### 2. Finding the zone
+Use the input modes above to determine which requests run. DNS evidence comes from a public recursive view and can reflect cache state. Local classification cannot add observations absent from the supplied evidence. A server lookup is a fresh observation, not confirmation that cached or pasted evidence is still current.
 
-When the name has no NS records the server asks for its SOA record ([RFC 1035 section 3.3.13](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.13)). A recursive resolver returns the SOA of the enclosing zone in the answer or authority section, which names the zone without guessing from the public suffix list. The page says "No NS records at www.example.com." and Heal it offers "Look up example.com", saying whether the zone came from the SOA or is just the immediate parent.
+### Classification rules
 
-### 3. Naming the provider
+The tool asks for NS at the entered name, normalises unique hostnames and maps their suffixes against a maintained provider catalog. If no NS exists at that owner it offers the enclosing zone. Self-hosting is inferred when nameserver names sit inside the checked zone. [RFC 1034 section 4.3.2](https://www.rfc-editor.org/rfc/rfc1034#section-4.3.2) defines referrals and authoritative data; the tool reports the observed set but does not perform a full delegation trace.
 
-Each nameserver host name is matched against 29 provider patterns: Cloudflare (`*.ns.cloudflare.com`), Amazon Route 53 (`ns-N.awsdns-N.com|net|org|co.uk`), Google Cloud DNS, Azure DNS, GoDaddy (`*.domaincontrol.com`), Namecheap (`*.registrar-servers.com`), NS1 (`*.nsone.net`), DNSimple, DigitalOcean, Akamai Edge DNS (`*.akam.net`), UltraDNS, Oracle Dyn, Hetzner, OVHcloud, Gandi, Porkbun, Vercel, Wix, Squarespace, Hostinger, Network Solutions, Hurricane Electric, Linode, Name.com, IONOS, Bluehost, Hover, Gcore and deSEC. A host named inside the zone itself (`ns1.example.com` for `example.com`) is self-hosted. Anything else is named by its last two labels and marked as not in the catalog.
+No confidence percentage is invented. When sources disagree, the disagreement is a finding. When a source is unavailable, the affected conclusion becomes informational or inconclusive rather than silently using a previous result. Catalog matches are exact bounded rules; unknown is a valid outcome.
 
-### 4. Redundancy
+### Ordering and export
 
-One nameserver is a failure. [RFC 1034 section 4.1](https://www.rfc-editor.org/rfc/rfc1034#section-4.1) is direct about it: "By administrative fiat, we require every zone to be available on at least two servers". [RFC 2182 section 5](https://www.rfc-editor.org/rfc/rfc2182#section-5) recommends more, on separate networks, so that no single failure takes the zone away. Two or more nameservers pass.
+The renderer calculates all findings from the current observation before updating the verdict, chips, evidence and landing cards. Status priority is fail, check, info, pass. Stable secondary ordering keeps repeated runs readable without changing severity.
 
-### 5. More than one provider
-
-Nameservers at more than one provider are a check, not a failure. Resolvers choose among all listed nameservers, so each must serve the same records. That is a supported design when the providers are kept in sync (zone transfers or an API), and the classic symptom of a migration where the old provider's nameservers were never removed. The finding names both providers and asks you to compare their answers before changing delegation.
-
-### 6. Self-hosted and unknown
-
-Self-hosted nameservers are informational: they work, but the registrar must hold glue records, the addresses of nameservers named inside the zone they serve ([RFC 1034 section 4.2.1](https://www.rfc-editor.org/rfc/rfc1034#section-4.2.1)), and the glue must match. Nameservers not in the catalog are informational too: the provider is named by the domain its nameservers belong to.
+The Markdown mirror and Copy result output preserve input, summary, findings and important evidence in text form. They do not embed secrets, browser state or the expanded educational cards. Agents should cite the observation time and limitation alongside any exported conclusion.
 
 ## Standards and conformance
 
-| Specification | Sections used | How the tool applies them | Where it stops |
-| --- | --- | --- | --- |
-| [RFC 1034](https://www.rfc-editor.org/rfc/rfc1034), Domain Concepts | [4.1](https://www.rfc-editor.org/rfc/rfc1034#section-4.1) two servers, [4.2](https://www.rfc-editor.org/rfc/rfc1034#section-4.2) zones and cuts, [4.2.1](https://www.rfc-editor.org/rfc/rfc1034#section-4.2.1) glue | A single nameserver fails; NS records are read at the apex only; self-hosted servers prompt a glue check | The parent zone's delegation and glue are not queried; the NS set is the zone's own as a resolver returns it |
-| [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035), Domain Implementation | [3.3.11](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.11) NS, [3.3.13](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.13) SOA | NS records read; SOA used to find the enclosing zone | Serial numbers and timers in the SOA are not compared between providers |
-| [RFC 2182](https://www.rfc-editor.org/rfc/rfc2182), Selection and Operation of Secondary DNS Servers | [5](https://www.rfc-editor.org/rfc/rfc2182#section-5) | Explains why two is the minimum, not the target | Network diversity of the servers is not measured |
+### Applied specifications
+
+| Source | Rule used | Boundary |
+| --- | --- | --- |
+| [RFC 1034 section 4.2.1](https://www.rfc-editor.org/rfc/rfc1034#section-4.2.1) | Zones are served by authoritative name servers | The page reads NS publication from one resolver |
+| [RFC 1035 section 3.3.11](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.11) | NS identifies an authoritative host | Hostnames are grouped after normalisation |
+| [RFC 1034 section 4.2.2](https://www.rfc-editor.org/rfc/rfc1034#section-4.2.2) | Delegations can require address glue | Self-hosted names trigger a glue reminder, not a glue audit |
+| [RFC 2182 section 5](https://www.rfc-editor.org/rfc/rfc2182#section-5) | Multiple secondary servers improve reliability | A single server is a failure |
+
+These references define the records and message semantics, not the provider catalogs. A catalog is product logic and can lag branding, acquisitions or custom deployments. Where a standard permits several valid configurations, the tool reports the observed form and avoids declaring one commercial pattern universally correct.
+
+### Where conformance stops
+
+The checker is an observer, not an authoritative DNS server, browser, certificate monitor, mail receiver or provider control plane. It does not claim protocol conformance for the target. It applies selected validation and interpretation rules to bounded evidence and exposes the boundary where a fuller protocol operation would begin.
+
+The phrase “public” refers to the server's Internet view. Private split-horizon answers, authenticated dashboards and regional routing can differ. Cached answers can remain until TTL expiry, and HTTP intermediaries can transform what the origin sent.
 
 ## Finding reference
 
-| Finding | Severity | What it means | Fix |
+### Emitted findings
+
+| Finding | Severity | Meaning | Repair or next check |
 | --- | --- | --- | --- |
-| Only one nameserver | FAIL | One failure takes the whole zone offline ([RFC 1034 section 4.1](https://www.rfc-editor.org/rfc/rfc1034#section-4.1)) | Add the second nameserver your provider lists, at the registrar and in the zone |
-| N nameservers | PASS | Enough to survive one failing | |
-| N providers answer for this zone | CHECK | Resolvers may get answers from either; a stale copy is served without error | Confirm both are intended and in sync, or remove the old provider at the registrar |
-| Self-hosted nameservers | INFO | The registrar's glue must match the servers' addresses ([RFC 1034 section 4.2.1](https://www.rfc-editor.org/rfc/rfc1034#section-4.2.1)) | Check the glue at the registrar |
-| N nameservers not in the catalog | INFO | The provider is named by its domain | None |
-| X has no NS records of its own | INFO | The name is inside a zone; that zone's nameservers serve it | Look up the zone (Heal it) |
+| One nameserver | Fail | One published authority is a single point of failure | Add an independently reachable authoritative server |
+| Multiple providers | Check | Hostnames map to more than one provider | Confirm deliberate secondary DNS or complete migration |
+| Self-hosted DNS | Info | Nameservers are below the zone they serve | Confirm registrar glue and resilient networks |
+| Recognised provider | Pass | All names map to one catalogued operator | Verify the zone exists in that provider account |
+| Provider not in catalog | Info | Ownership cannot be named from suffix rules | Inspect RDAP and provider documentation |
+| No NS records here | Info | The name is probably below a zone apex | Look up the enclosing authoritative zone |
+
+Wording can include the observed name, count, provider or status. Automated consumers should use the supplied status and evidence rather than parsing the English title as a permanent identifier. A missing finding is not evidence that the corresponding external condition is absent when its source could not be collected.
+
+### Status handling
+
+| Status | Consumer action | What not to infer |
+| --- | --- | --- |
+| Pass | Preserve the evidence and continue normal review | Permanent correctness, ownership or availability |
+| Check | Confirm intent and inspect the named evidence | Definite compromise or outage |
+| Fail | Prioritise the concrete broken rule and verify independently | That every user sees the same failure |
+| Info | Carry the limitation or neutral fact with the report | Success merely because no failure was emitted |
 
 ## Guide
 
-### Add a second nameserver
+### Verify independently
 
-1. In the DNS provider's dashboard, find the full list of nameservers for the zone (most give two to four).
-2. At the registrar, set the delegation to all of them.
-3. Make sure the zone's own NS records list the same set.
-4. Confirm: `dig +short NS example.com` lists them all, and `dig +trace example.com` shows the same set at the parent. Then check here again.
+Start with an authoritative or widely used command-line client. For DNS, use `dig` with the exact record type and compare every returned owner, target and TTL. Add `+trace` only when delegation matters; a trace and a recursive answer solve different questions. For HTTPS, use `curl -I --location https://host/` and retain each hop and response field. For certificates, use an established TLS client and a CT monitor you trust.
 
-### Two providers
+Repeat from another network when geography or split routing could matter. Save the observation time and the original evidence before editing. After a DNS change, wait at least the prior TTL and then query both the intended authorities and independent recursive resolvers.
 
-1. Decide whether both should serve the zone.
-2. If yes, compare their answers directly: `dig +short SOA example.com @ns1.provider-a.net` and `@ns1.provider-b.net`; the serials should match after every change.
-3. If no, remove the old provider's nameservers at the registrar, wait for the parent TTL (often a day or two), then delete the old zone.
-4. Check here again: one provider remains.
+### Repair safely
 
-### Moving to a new DNS provider
+Do not delete an unfamiliar record or reroute a public name merely because a catalog labels it. First identify the owning service, deployment repository or provider account. Confirm whether the item is current, a migration remnant, a failover path or a delegated responsibility. Make the smallest reversible change, keep the prior value, and have a rollback trigger.
 
-Copy every record to the new provider first, lower the TTLs, then change the delegation at the registrar. Keep the old zone serving the same records until the parent TTL has passed. Turning off DNSSEC first, or adding the new provider's key, avoids a validation failure during the move; the [DNSSEC Checker](https://tamperbox.dev/dnssec-checker) shows the chain.
+Re-run this page after propagation, then verify the user-visible service. A clean public lookup cannot prove application health. Conversely, an informational unknown does not require a speculative change.
 
-### Self-hosted nameservers
+### Diagnose conflicting evidence
 
-Register the nameserver host names at the registrar with their addresses (glue), and check that `dig +short A ns1.example.com` returns the same addresses.
+When two signals disagree, ask whether they describe different layers: apex versus www, resolver cache versus authority, CDN edge versus origin, entered host versus redirected host, or certificate history versus current DNS. Compare literal evidence before comparing labels. The disagreement itself often reveals a migration or intermediary.
 
-### Break it cases
+If a lookup fails, preserve the error and retry once. Repeated timeouts are not equivalent to empty data. Use the specialist tool linked by the finding for deeper parsing rather than converting an inconclusive aggregate result into a failure.
 
-| Case | What it loads | What it shows |
-| --- | --- | --- |
-| One nameserver | Your first nameserver alone, as an NS record | The single-nameserver failure |
-| DNS records | Two pasted NS records at one provider | Pasted record parsing |
-| Self-hosted | Two NS records named inside your zone | The self-hosted reading |
-| Not in the catalog | Two nameservers at an unknown provider | The not-in-catalog reading |
-| A subdomain | `www.` plus your domain | No NS records, and Heal it to the zone |
+### Break it and heal it
+
+The Break it controls create documented edge cases from the visitor's own input or a reserved fixture. They are teaching states, not scans. Heal it restores a safe derived value when the repair is deterministic. Revert remains available when several changes have been made.
+
+Use these cases to learn how invalid, missing, mixed or stale evidence appears before diagnosing production. The control never edits DNS, hosting, certificates or provider accounts.
 
 ## Worked example
 
-The page opens on `harbor-supply.example`, answered in the browser. Its NS records are `ivy.ns.cloudflare.com`, `rob.ns.cloudflare.com` and `ns-1204.awsdns-22.org`.
+The live default is `google.com`. Its in-zone nameserver names make the self-hosted case visible and allow the page to explain glue without pretending that a commercial DNS label is always available.
 
-**Cloudflare, plus 1 Amazon Route 53 nameserver.** Three nameservers pass the redundancy rule; "2 providers answer for this zone" is the check, the shape a migration from Route 53 to Cloudflare leaves when the old nameserver is not removed. Take it further hands `harbor-supply.example` to the DNSSEC and WHOIS tools, which answer their own samples. Replace the sample with your own domain and every section, card and link is rewritten for it.
+Read the example from verdict to Findings, then compare the literal evidence. Open one Break it case and use Heal it or Revert. Finally, replace the default with a domain you are authorised to assess. This sequence demonstrates both the successful path and the failure contract without implying that the named public domain endorses the tool.
 
 ## For agents
 
-The Tamperbox MCP server has a `dns-provider` operation. Call it with the domain; it reads the NS records (finding the zone through SOA when needed), groups the nameservers by provider with its own server-side patterns, and lists unknown nameservers separately. Keep these with any conclusion:
+Agents can discover the `dns_provider` operation through Tamperbox MCP. The browser page id `dns-provider` is not the operation name. The server operation and browser renderer can expose different fields; inspect the operation schema before supplying arguments. Preserve the result's distinction between observed evidence, catalog inference and limitation. State whether the run was live or pasted, include the cleaned target and observation time, and never turn “not found” into “does not exist” unless the method truly establishes that condition.
 
-- Nameserver patterns identify the authoritative DNS service, not the registrar, the website host or the CDN.
-- Custom nameserver names and resellers can hide the provider.
-- Multiple providers can be deliberate; compare their answers before calling it a fault.
+Choose a specialist operation when the task is narrow. Use this page's report when its combined view or educational findings add value. Do not pass credentials, private hostnames or customer data into a public lookup. If a repair would change production, present the exact evidence, expected effect, propagation window and rollback before acting.
 
-See [Connect an MCP client](/mcp/connect/) and [Security and privacy](/reference/security/).
+Machine readers should branch on status and structured fields where available, not English punctuation. Treat network and parse errors as inconclusive. Re-run after a meaningful interval rather than repeatedly polling a third-party source.
 
 ## Limits
 
-- One recursive resolver at one moment; the parent's delegation can differ after a change.
-- The nameservers are not queried, so a server that does not answer, or answers differently, is not detected.
-- Providers are recognised by host name only.
-- Nothing is stored.
+Provider inference follows hostname conventions, which can be white-labelled, resold or deliberately generic. A recursive answer may be cached. The tool does not query the parent registry, compare every authority, test geographic diversity, validate glue, transfer a zone or prove that the provider account is controlled by the domain owner.
+
+All outputs are point-in-time observations. Resolver caching, negative caching, anycast, geo steering, redirects and intermittent upstream failures can change a later run. The service does not retain a monitoring history or notify on change. Local History is an interaction aid, not durable evidence.
+
+No result grants permission to probe a target or modify it. Use authorised accounts and owner-approved procedures for deeper checks. Where business, security or legal decisions depend on attribution, obtain confirmation from the responsible provider or domain operator.
 
 ## References
 
-- [RFC 1034, Domain Names: Concepts and Facilities](https://www.rfc-editor.org/rfc/rfc1034): sections 4.1, 4.2 and 4.2.1.
-- [RFC 1035, Domain Names: Implementation and Specification](https://www.rfc-editor.org/rfc/rfc1035): sections 3.3.11 (NS) and 3.3.13 (SOA).
-- [RFC 2182, Selection and Operation of Secondary DNS Servers](https://www.rfc-editor.org/rfc/rfc2182): section 5.
-- [RFC 9471, DNS Glue Requirements in Referral Responses](https://www.rfc-editor.org/rfc/rfc9471), for how resolvers use glue.
-- [DNSSEC Checker](https://tamperbox.dev/dnssec-checker), for the signatures the provider publishes.
+- [RFC 1034](https://www.rfc-editor.org/rfc/rfc1034), Domain Names — Concepts and Facilities, especially [section 4.3.2](https://www.rfc-editor.org/rfc/rfc1034#section-4.3.2) for resolver behavior.
+- [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035), Domain Names — Implementation and Specification, especially [section 3.2.1](https://www.rfc-editor.org/rfc/rfc1035#section-3.2.1) for resource-record types and classes.
+- [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110), HTTP Semantics, especially [section 3.7](https://www.rfc-editor.org/rfc/rfc9110#section-3.7) for intermediaries and [section 15](https://www.rfc-editor.org/rfc/rfc9110#section-15) for status codes when HTTP evidence is collected.
+- [Tamperbox DNS Provider Lookup](https://tamperbox.dev/dns-provider), the interactive tool and current Markdown mirror.

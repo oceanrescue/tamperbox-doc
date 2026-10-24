@@ -1,7 +1,7 @@
 ---
 title: Website Down Checker
 description: How the website down checker requests a site from the Tamperbox server, where it places a failure, what each outcome means for visitors and owners, and how to confirm a fix.
-updated: 2026-10-20
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox Website Down Checker, which makes one HTTP request from the Tamperbox server, follows up to five redirects within ten seconds, and reports up, slow, erroring or down with the stage where a request stopped.
 prerequisites:
@@ -12,15 +12,15 @@ limitations:
   - One request from one location at one moment; connection and TLS failures share one stage; any answer below 500 counts as up
 ---
 
-The tool page is [tamperbox.dev/website-down-checker](https://tamperbox.dev/website-down-checker). It opens on a sample shop answered by a fixture, says in one sentence whether the site is up for everyone, and shows the stage where a request stopped. This page is the long version: what the request does, every rule that decides the verdict, what each outcome means, and how to fix and confirm each one.
+The tool page is [tamperbox.dev/website-down-checker](https://tamperbox.dev/website-down-checker). It loads `tamperbox.dev` and waits for you to run a live check,  says in one sentence whether the site answers from the probe’s location, and shows the stage where a request stopped. This page is the long version: what the request does, every rule that decides the verdict, what each outcome means, and how to fix and confirm each one.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> typing an address is read in your browser only. Nothing is sent until you press Check now or Enter. Then the Tamperbox server makes one request to the address, follows up to five redirects within ten seconds, and returns what it saw. Nothing is stored. Sample addresses on the reserved <code>.example</code> zone are answered in the browser from a fixture and never reach the network.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> typing an address is read in your browser only. Nothing is sent until you press Check now or Enter. Then the Tamperbox server makes one request to the address, follows up to five redirects within ten seconds, and returns what it saw. Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history. Sample addresses on the reserved <code>.example</code> zone are answered in the browser from a fixture and never reach the network.</div>
 
 ## What the tool answers
 
 Three questions, in the order a person with a broken site asks them:
 
-1. **Is it down for everyone, or just for me?** If our server gets an answer, the site is up for anyone who can reach our server, and the problem is likely between you and the site.
+1. **Does it answer this probe?** A successful request establishes reachability from the current server location. It cannot establish availability for every visitor or rule out regional, account-specific or intermittent failures.
 2. **If it is down, where does it stop?** The name does not resolve, the connection or TLS handshake fails, nothing answers within ten seconds, the redirects never end, or the application answers with a server error.
 3. **If it is up, is it slow or answering with something other than the page?** A total time over three seconds, or a 4xx status, are worth knowing even when the site counts as up.
 
@@ -40,7 +40,7 @@ Refused before any request, with the reason in the field:
 | --- | --- |
 | A space anywhere | A web address cannot contain spaces. |
 | A scheme other than http or https | Use an http:// or https:// address, not ftp://. |
-| `mailto:`, `tel:`, `javascript:`, `data:` or `file:` | Enter a web address, such as example.com or https://example.com/page. |
+| `mailto:`, `tel:`, `javascript:`, `data:` or `file:` | Enter a web address, such as example.com or `https://example.com/page`. |
 | A user name or password in the address | Remove the user name and password from the address. Heal it offers to remove them. |
 | A port other than 80 or 443 | Only the standard ports (80 and 443) are checked. Heal it offers the standard port. |
 | An IP address | Enter a host name. Addresses written as IP numbers are not checked. |
@@ -62,21 +62,13 @@ Under the chips, two items say where the input went: typing stays in the browser
 
 ### Findings
 
-The outcome comes first: one finding that names what happened, with its severity. Then the evidence: how many redirects were followed and where they ended, and the time to the first byte of the final request. When the site is up, two notes follow for the visitor who still cannot open it. Two or more passes fold into one line, "n checks passed".
+Advice follows the observed outcome: DNS, connection, HTTP failure, timeout or slow response. Reachable results also show two notes for visitors who cannot open the site. Redirects, the final address and durations are evidence in separate panels, not additional passing findings.
 
-### History
+### Related checks and input transfer
 
-Every Break it and Heal it change, newest first, with what it replaced. **Revert** undoes the newest change; **Reset input** returns to what you entered. After a break, Heal it offers "Restore input before this break".
+Use Check the rest to open another website tool with the current address. Pasted files are not transferred through these links. Transfers temporarily use browser `sessionStorage` with a one-use random token in the URL fragment; the input itself is not in the URL. The destination accepts a transfer for less than one minute and removes the token. Manual checks still wait for their run button or Enter.
 
-### Take it further
-
-Links that carry a value derived from this result into another tool, which opens with the value in its box:
-
-- **Reachability from three regions** hands the final host and port (443, or 80 for an `http://` final address) to [TCP ping](https://tamperbox.dev/tcp-ping), which connects from three regions. This answers the "one place" limit below. It is shown for live results only, and not when DNS failed.
-- **Certificate on the final host** hands the host the redirects ended on to the [SSL certificate checker](/tools/ssl-checker/), which tells a certificate failure from a closed port.
-- **Who hosts the final host** hands the same host to the [website hosting checker](https://tamperbox.dev/website-hosting).
-
-Nothing is put in a URL; each value travels through a one-use handoff in the browser.
+To inspect a value from the result, copy that specific address into the relevant tool. A separate check collects new evidence and can return a different result; do not interpret navigation as confirmation of the original verdict.
 
 ### Status
 
@@ -84,7 +76,7 @@ One word (Up, Slow, Erroring or Down), the address requested with an arrow to th
 
 ### Response
 
-A table of what came back: the status, the time to the first byte of the final request, the total time (or the time until it failed), the number of redirects followed, and the final address (or the address tried).
+A table of what came back: the status, the recorded duration of the final hop, the total time (or the time until it failed), the number of redirects followed, and the final address (or the address tried).
 
 ## Method
 
@@ -92,27 +84,29 @@ The page sends the address to `/api/web/uptime`. The server makes the request an
 
 | Severity | Shown as | Meaning |
 | --- | --- | --- |
-| Problem | FAIL | Visitors cannot use the site |
-| Warning | CHECK | The site works but visitors wait |
-| Information | INFO | Worth knowing; the site is up |
+| Problem | FAIL | The probe could not retrieve a successful response |
+| Warning | CHECK | The probe observed a slow response |
+| Information | INFO | Interpret the response in its observed scope |
 
 ### The request
 
 1. **Address check.** The server accepts HTTP and HTTPS addresses up to 2,048 characters, on port 80 or 443, without credentials. Anything else is refused before DNS.
 2. **DNS.** The host's A and AAAA records ([RFC 1035, section 3.4.1](https://www.rfc-editor.org/rfc/rfc1035#section-3.4.1); [RFC 3596, section 2](https://www.rfc-editor.org/rfc/rfc3596#section-2)) are resolved over Cloudflare's DNS-over-HTTPS JSON interface, following CNAME aliases. Both lookups must complete; an empty answer for one family is fine. A name that does not exist (RCODE 3, Name Error, [RFC 1035, section 4.1.1](https://www.rfc-editor.org/rfc/rfc1035#section-4.1.1)), an inconclusive or truncated answer, a name with no address at all, and a name that resolves to any non-public address (the special-purpose ranges in the [IANA registries](https://www.iana.org/assignments/iana-ipv4-special-registry/iana-ipv4-special-registry.xhtml), such as [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918#section-3) private space) all stop here.
+### Connection, response and limits
+
 3. **Connection and TLS.** The server opens the connection and, for `https://`, the TLS handshake ([RFC 8446, section 4](https://www.rfc-editor.org/rfc/rfc8446#section-4)). The runtime that makes the request does not report TCP and TLS separately, so a refused port, a reset, an expired or wrong certificate and a failed handshake are all reported as one stage.
 4. **HTTP.** A `GET` with the user agent `Mozilla/5.0 (compatible; TamperboxBot/1.0; +https://tamperbox.dev/bot)`, `Accept: */*`, `Accept-Encoding: identity`, and no cookies. Redirects are not followed automatically: each 301, 302, 303, 307 or 308 is read, its `Location` ([RFC 9110, section 10.2.2](https://www.rfc-editor.org/rfc/rfc9110#section-10.2.2)) resolved against the current address and checked like the first address, and the next request made. The body is never read; the run stops as soon as the final status and headers arrive.
-5. **Limits.** At most six requests (five redirects), one ten-second budget for the whole run, DNS and redirects included. [RFC 9110, section 15.4](https://www.rfc-editor.org/rfc/rfc9110#section-15.4) leaves the redirect limit to the client ("A client SHOULD detect and intervene in cyclical redirections"); five is a stricter bound than most browsers, which allow around twenty, and is enough for any healthy site.
+5. **Limits.** At most six requests (five redirects), one ten-second budget for the whole run, DNS and redirects included. [RFC 9110, section 15.4](https://www.rfc-editor.org/rfc/rfc9110#section-15.4) leaves the redirect limit to the client ("A client SHOULD detect and intervene in cyclical redirections"); five is a stricter bound than most browsers, which allow around twenty, and can stop a legitimate but longer chain.
 
 ### Times
 
-Two times are measured on the server. **First byte** is the final request alone, from sending it to receiving its status line. **Total** is the whole run, from before the first DNS lookup to the final status. A long redirect chain makes the total larger than the final page deserves; compare the two to see where time went.
+Two times are measured on the server. **First byte** uses the final hop’s recorded duration, including its DNS validation and the wait for response headers. It is not a separately measured browser time to first byte. **Total** is the whole run, from before the first DNS lookup to the final status. A long redirect chain makes the total larger than the final page deserves; compare the two to see where time went.
 
 ### The outcome
 
-The page reads the server's answer in this order. The first rule that applies decides the outcome.
+The following table summarizes how to interpret the observation. Its guide labels are not emitted finding IDs; the advice actually shown is listed in [Finding reference](#finding-reference).
 
-| Rule | Outcome id | Severity | Verdict |
+| Rule | Guide label | Interpretation | Verdict |
 | --- | --- | --- | --- |
 | The request stopped at DNS | `dns` | FAIL | Site unavailable |
 | The request stopped connecting or in TLS | `connect` | FAIL | Site unavailable |
@@ -128,6 +122,8 @@ Why 500 is the line: [RFC 9110, section 15.6](https://www.rfc-editor.org/rfc/rfc
 Why three seconds: it is a judgment, not a standard. No RFC defines slow; three seconds is far above what a cached page or a healthy origin needs, so crossing it means something is worth looking at. The threshold applies to the total, so a site that is fast but redirects three times can cross it.
 
 ### Stage placement
+
+DNS, TCP and TLS timing fields are currently null. The stage panel derives its labels from a reported failure rather than measuring three independent phases. Policy failures can therefore be displayed under a broader stage label. Preserve the literal error code when diagnosing the cause.
 
 The server reports a failure with a stage and a code. Stages map to the three columns as follows:
 
@@ -159,28 +155,33 @@ Read as an answer from a working server: INFO, not down.
 
 ## Finding reference
 
-| Id | Severity | Title | What it means for visitors | Fix |
-| --- | --- | --- | --- | --- |
-| `up` | PASS | Answered 200 OK (or any status below 400) | The site works for anyone who can reach our server | Nothing; if it fails for you, check your side |
-| `client` | INFO | Answered 403 Forbidden (or another 4xx) | The server is up but refused or has no page here | Open it in a browser; allow TamperboxBot if a filter blocks it |
-| `slow` | CHECK | Up, but slow | Visitors wait over three seconds; some give up | Find the slow part: server load, queries, cache, redirects |
-| `http` | FAIL | The server answers with an error (5xx) | Everyone who reaches the site gets an error page | Application logs, the upstream behind the proxy, the last change |
-| `dns` | FAIL | The name does not resolve | Nobody can reach the site by this name | Domain expiry, nameservers, A or AAAA for this exact host |
-| `connect` | FAIL | Connection or TLS failed | Browsers show a connection or certificate error | Certificate, open port, firewall, load balancer, server running |
-| `timeout` | FAIL | No answer within 10 seconds | The page never loads | Overload, a hanging application, a firewall that drops traffic |
-| `redirect` | FAIL | Redirects could not be followed to the end | "Too many redirects" or a dead end | Fix the redirect rule; one hop to the final https address |
-| `redirects` | INFO | Followed n redirects | One round trip per hop | Link and redirect straight to the final address |
-| `first-byte` | PASS or CHECK | First byte after n ms | The final request alone; over 3,000 ms is CHECK | Profile the application for that request |
-| `your-side` | INFO | If it will not open for you | The site works here; the problem is between you and it | Another network, no VPN or ad blocker, clear the DNS cache |
-| `one-place` | INFO | If only some visitors see it down | One check from one place | Check from other regions with TCP ping |
+### Advice emitted by the browser
+
+The browser selects advice from the reported outcome. These titles are display text, not stable operation identifiers.
+
+| Title | Severity | Observed condition | Next check |
+| --- | --- | --- | --- |
+| The name does not resolve | FAIL | The probe reports a DNS-stage failure | Check authoritative records and another resolver; inspect the error code |
+| Connection or TLS failed | FAIL | The runtime reports a connection-stage failure | Inspect the certificate, firewall, load balancer and listener |
+| The server answers with an error | FAIL | The observed final status is 500 or higher | Compare application logs with the request time |
+| No answer within 10 seconds | FAIL | Timeout advice, also used as a fallback for an unrecognized failure stage | Read the literal error and final attempted address before diagnosing a timeout |
+| Up, but slow | CHECK | A reachable response took over 3,000 ms in total | Compare redirects and server processing with an independent client |
+| If it will not open for you | INFO | The probe received a reachable response | Compare a browser, another network and any local proxy |
+| If only some visitors see it down | INFO | The result is one observation from one place | Check independent locations and retain unavailable results |
+
+### Evidence separate from advice
+
+Status, redirect count, final address and recorded durations appear in the status and response panels. They are not additional findings with stable IDs. A 4xx status still counts as reachable in this tool, even though it may represent a missing page, denied access or rate limiting. The total-time threshold does not measure how long the page takes to render in a browser.
+
+An unknown failure stage may fall back to timeout advice while the status panel retains another code. Use the literal code and attempted address as the diagnostic evidence. Do not infer that all visitors see the same failure from the wording of a headline.
 
 ## Guide
 
 ### It works here but not for me
 
-The check reached the site, so the failure is on the path between you and it.
+The check reached the site from this server. Compare the failing client’s request, network and session before locating the cause.
 
-1. Open the site on mobile data instead of your usual network. If it loads, your network, router or company firewall blocks it.
+1. Open the site on mobile data instead of your usual network. If it loads, compare DNS, routing, proxies and access policies on the failing network.
 2. Turn off a VPN, proxy or ad blocker and reload.
 3. Clear the DNS cache: restart the browser, or run `sudo dscacheutil -flushcache` (macOS), `ipconfig /flushdns` (Windows) or `resolvectl flush-caches` (Linux).
 4. Compare what your resolver returns with a public one: `dig +short example.com` and `dig +short example.com @1.1.1.1`. Different answers point at a stale or filtering resolver.
@@ -197,7 +198,7 @@ Confirm with the check again: DNS should be Passed.
 ### Connection or TLS failed
 
 1. Check the certificate with the [SSL certificate checker](/tools/ssl-checker/) or `openssl s_client -connect example.com:443 -servername example.com </dev/null`. An expired, self-signed or wrong-name certificate fails here.
-2. Check the port is open from outside: `nc -vz example.com 443`, or TCP ping from three regions through Take it further.
+2. Check the port is open from outside: `nc -vz example.com 443`, or use [TCP Ping](/tools/tcp-ping/) for the host and port, retaining unavailable-region results.
 3. Check the server, load balancer and firewall are running and accept connections on port 443 (or 80).
 
 ### Server errors
@@ -223,7 +224,7 @@ Reproduce outside Tamperbox: `curl -sS -o /dev/null -w '%{http_code} %{time_tota
 
 ### Slow
 
-1. Compare First byte with Total in Response. If First byte is most of the total, the application is slow; if not, DNS, the connection or the redirects are.
+1. Compare First byte with Total in Response. If First byte is most of the total, the final hop dominates; earlier hops account for the remainder. The final-hop duration includes DNS validation and connection setup, so it cannot isolate application processing.
 2. Cache what does not change, and cut redirects to one.
 3. Check again at a quiet hour to tell load from a constant cost.
 
@@ -240,29 +241,25 @@ Break it loads a case that shows each failure. A site cannot be made to fail on 
 | Slow to answer | `slow.harbor-supply.example` | Up, but slow; the time chip turns CHECK |
 | No such host | `nohost.` plus your domain | DNS Failed |
 
-Heal it after a break offers "Restore input before this break". History records each step with Revert.
+Break it replaces the field with an adapted input or a labelled fixture. Keep a copy of your original input if you want to restore it after experimenting.
 
 ## Worked example
 
-The page opens on `harbor-supply.example`, a sample shop on the reserved `.example` zone. It is an Example: the answer comes from a fixture in the browser and no request is made.
+The page loads `tamperbox.dev` in the field without sending a request. Press **Check now** to inspect `https://tamperbox.dev/`. The result is a live observation, so status codes, redirects and timings can change between runs.
 
-- The verdict reads "harbor-supply.example is up." with the status 200 OK, the total time and "after 1 redirect".
-- Status shows Up, the address `https://harbor-supply.example/` with an arrow to `https://www.harbor-supply.example/`, and all three stages Passed.
-- Findings: "Followed 1 redirect" (INFO), then the two notes for a visitor who cannot open it, then "Answered 200 OK" and "First byte after n ms" folded into "2 checks passed".
-- Response lists the status, both times, one redirect and the final address.
-- Take it further offers the certificate and the hosting of `www.harbor-supply.example`; both destinations answer the sample from their own fixtures. TCP ping is hidden because the sample is not a live result.
+Start with the returned status and observation time. An HTTP answer below 500 is classified as reachable, including 403 and 404; that does not mean the visitor received the intended content. Compare total time with time to the final response, then inspect the final address. The DNS, Connect / TLS and HTTP panels explain the reported failure stage, but they are not three independent tests.
 
-Replace it with your own address in the box on the left and press Check now: every section, card and link is rewritten for that result.
+To exercise failures without depending on a public outage, choose a reserved-domain Break it case. A fixture is labelled as a sample and does not contact that host. Replace the field with your own address to return to live mode and press Check now again. Compare another network or independent monitor before concluding that an outage affects everyone.
 
 ## For agents
 
-The Tamperbox MCP server runs the same uptime operation. Search its catalog for the website status or uptime operation, inspect the input schema, and call it with the full URL. The answer carries the status, times, redirect count, final URL and, on failure, the stage and code from the [method](#stage-placement). Keep these warnings with any conclusion:
+Use the Tamperbox MCP `search` tool to inspect the schema, then `execute` with `tamperbox.request` to call `POST /v1/tools/website_down_checker`. Supply the required `url` field as a full public HTTP or HTTPS URL. The operation is named `website_down_checker`; the browser page’s hyphenated identifier is not the API operation name.
 
-- One request from one location at one moment. It does not prove the site is up or down in another region.
-- Any status below 500 is reported as answering; read the status before saying the page works.
-- Connection and TLS failures are one stage.
+The response contains regional observations, requested regions and unavailable-region details. Unconfigured regional probes are explicitly unavailable; one successful server observation does not establish global reachability.
 
-See [Connect an MCP client](/mcp/connect/) for the calling pattern and [Security and privacy](/reference/security/) for where the address travels.
+Keep the input, observation time, source limitations and inconclusive results with any summary. Browser fixtures are demonstrations, not live MCP targets. Do not turn missing evidence into a passing check or infer that an inaccessible resource has been deleted.
+
+See [Connect an MCP client](/mcp/connect/), [Code mode](/mcp/code-mode/) and [Security and privacy](/reference/security/).
 
 ## Limits
 
@@ -273,7 +270,7 @@ See [Connect an MCP client](/mcp/connect/) for the calling pattern and [Security
 - Only ports 80 and 443, only public addresses, at most five redirects and ten seconds.
 - A site can block the TamperboxBot user agent while it works for people.
 - Live checks are rate limited.
-- Nothing is stored.
+- Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history.
 
 ## References
 

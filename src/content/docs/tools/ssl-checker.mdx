@@ -1,7 +1,7 @@
 ---
 title: SSL Certificate Checker
 description: What the certificate checker connects to, every rule it applies to a chain, what each finding means for the people behind the host, and how to fix and verify each one.
-updated: 2026-10-19
+updated: 2026-10-21
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox SSL Certificate Checker, which probes one TLS connection from the Tamperbox server or reads a pasted PEM chain in the browser and reports trust, names, expiry, chain order, keys and the negotiated protocol.
 prerequisites:
@@ -108,11 +108,11 @@ Every Break it and Heal it change, newest first, with what it replaced. Revert u
 
 ### Take it further
 
-Links that carry a value from this result into another tool: the host to the post-quantum checker and the security.txt checker, the host and port to the DANE checker, and the certificate's expiry as a Unix timestamp to the timestamp converter. Each opens the other tool with the value already in its box; nothing is put in a URL.
+A link that carries a value from this result into another security tool: the host and port to the DANE checker, for a live connection. The other security checks on the same host are in Check the rest, and the result's Key exchange row links the post-quantum checker for port 443. The link opens the other tool with the value already in its box; nothing is put in a URL.
 
 ## Method
 
-The same rules read a live chain and a pasted one. The difference is that a live chain also has a trust result from the probe, while a pasted chain is judged against the host name and date you choose.
+The same rules read a live chain and a pasted one. The difference is that a live chain also has a trust result from the probe, while a pasted chain is judged against the host name and date you choose. Each rule below names the section it comes from; rules marked as Tamperbox recommendations have no specification behind them.
 
 Findings come in three severities:
 
@@ -124,7 +124,15 @@ Findings come in three severities:
 
 ### Trust and the verification result
 
-On port 443 the probe connects to the first public address the host resolves to, sends the host name as SNI, offers HTTP/2 and HTTP/1.1 through ALPN, and verifies the chain against its trust store with the host name checked. Up to ten certificates are kept from what the server sends. Verification is OpenSSL's; its result code becomes a plain-language finding:
+On port 443 the probe resolves the host, refuses it unless every address is public, and runs `openssl s_client` against the first address. It sends the host name as SNI ([RFC 6066, Section 3](https://www.rfc-editor.org/rfc/rfc6066#section-3)), offers `h2` and `http/1.1` through ALPN ([RFC 7301, Section 3.1](https://www.rfc-editor.org/rfc/rfc7301#section-3.1)), and asks OpenSSL to verify the chain with the host name checked (`-verify_hostname`). Up to ten certificates are kept from what the server sends.
+
+OpenSSL runs the path validation of [RFC 5280, Section 6.1](https://www.rfc-editor.org/rfc/rfc5280#section-6.1) against the CA bundle installed in the probe container. Trust is PASS only when OpenSSL returns code 0. The rule follows [RFC 9846, Appendix C.2](https://www.rfc-editor.org/rfc/rfc9846#appendix-C.2): "certificates should always be verified to ensure proper signing by a trusted certificate authority (CA)."
+
+Browser trust stores and policies differ from the probe's. A chain the probe verifies can still be refused by a browser that distrusts the authority, and the reverse.
+
+#### OpenSSL result codes
+
+Verification is OpenSSL's; its result code becomes a plain-language finding:
 
 | Code | Finding | Fix offered |
 | --- | --- | --- |
@@ -141,36 +149,44 @@ On port 443 the probe connects to the first public address the host resolves to,
 | 68 | A certificate in the chain uses a weak key | Reissue the chain with stronger keys |
 | other | The chain did not verify | Check the chain the server sends |
 
-Browser trust stores and policies differ from the probe's. A chain the probe verifies can still be refused by a browser that distrusts the authority, and the reverse.
+#### Mail ports and pasted chains
 
-Mail ports use a separate connection and report trust the same way. Pasted certificates are marked "Trust not checked" (INFO) unless the pasted openssl output carries a `Verify return code` line, in which case that code is reported as "Pasted verification result" (INFO) without confirmation.
+Mail ports go through a different client in the same probe: Node.js TLS, with Node's own bundled root list, after SMTP STARTTLS on ports 25 and 587 ([RFC 3207, Section 4](https://www.rfc-editor.org/rfc/rfc3207#section-4)). Node's error name is mapped to the codes above (for example `CERT_HAS_EXPIRED` to 10). A name mismatch on a mail port arrives as `ERR_TLS_CERT_ALTNAME_INVALID`, which has no mapping, so it shows as "The chain did not verify" next to "Does not name host".
+
+Pasted certificates are marked "Trust not checked" (INFO) unless the pasted openssl output carries a `Verify return code` line, in which case that code is reported as "Pasted verification result" (INFO) without confirmation.
 
 ### Name coverage
 
-The host is matched against the certificate's DNS Subject Alternative Names, case-insensitively, with a trailing dot ignored.
+The host is matched against the certificate's DNS Subject Alternative Names ([RFC 5280, Section 4.2.1.6](https://www.rfc-editor.org/rfc/rfc5280#section-4.2.1.6)), case-insensitively, with a trailing dot ignored, as [RFC 9525, Section 6.3](https://www.rfc-editor.org/rfc/rfc9525#section-6.3) requires for labels.
 
-- A wildcard covers exactly one left-most label: `*.example.com` covers `www.example.com`, not `example.com` and not `a.b.example.com`.
-- The subject common name is used only when the certificate has no DNS names at all. Such a certificate gets its own FAIL, "No DNS names", because browsers require Subject Alternative Names.
-- No match is FAIL, "Does not name host", unless the probe already reported code 62 for the same reason.
+- A wildcard covers exactly one left-most label: `*.example.com` covers `www.example.com`, not `example.com` and not `a.b.example.com`. Section 6.3: "The wildcard character appears only as the complete content of the left-most label" and "A wildcard in a presented identifier can only match one label in a reference identifier."
+- The subject common name is displayed for context when there are no DNS names but is never used to match a service. Such a certificate gets its own FAIL, "No DNS names", from [Baseline Requirements 7.1.2.7.12](https://cabforum.org/working-groups/server/baseline-requirements/requirements/#712712-subscriber-certificate-subject-alternative-name): "the Subject Alternative Name MUST be present and MUST contain at least one dNSName or iPAddress GeneralName". The tool counts DNS names only.
+- No match is FAIL, "Does not name host", unless the probe already reported code 62. [RFC 9525, Section 6.6](https://www.rfc-editor.org/rfc/rfc9525#section-6.6): an automated client "SHOULD terminate the communication attempt with a bad certificate error".
+
+On port 443 the match comes from Node's certificate host check and OpenSSL's code 62, not from the page's own matcher; see [where the live probe differs](#where-the-tool-differs-live-probe).
 
 Typical causes: a certificate issued for `www` served on the bare domain, a second-level subdomain under a wildcard, or a server returning its default certificate because no virtual host matched the SNI name.
 
 ### Expiry and the renewal window
 
-No fixed day count is used. The warning point depends on how long the certificate was issued for:
+No fixed day count is used. The warning point depends on how long the certificate was issued for. Dates follow [RFC 5280, Section 4.1.2.5](https://www.rfc-editor.org/rfc/rfc5280#section-4.1.2.5): "The validity period for a certificate is the period of time from notBefore through notAfter, inclusive." Path validation step (a)(2) of [Section 6.1.3](https://www.rfc-editor.org/rfc/rfc5280#section-6.1.3) requires that "The certificate validity period includes the current time."
 
-| State | Severity | Title |
-| --- | --- | --- |
-| Past its end date | FAIL | Expired N days ago (or Expired today) |
-| Before its start date | FAIL | Not valid yet |
-| Less than a third of its lifetime left | CHECK | Renew soon: N days left |
-| Otherwise | PASS | N days left |
+| State | Severity | Title | Source |
+| --- | --- | --- | --- |
+| Past its end date | FAIL | Expired N days ago (or Expired today) | RFC 5280, 4.1.2.5 |
+| Before its start date | FAIL | Not valid yet | RFC 5280, 4.1.2.5 |
+| Less than a third of its lifetime left | CHECK | Renew soon: N days left | Tamperbox recommendation |
+| Otherwise | PASS | N days left | RFC 5280, 4.1.2.5 |
 
-For a 90-day certificate the warning starts under 30 days. ACME clients renew at about two thirds of the lifetime, so a CHECK here almost always means renewal has failed, or ran and the server never reloaded the new file.
+For a 90-day certificate the warning starts under 30 days. ACME clients ([RFC 8555](https://www.rfc-editor.org/rfc/rfc8555)) commonly renew at about two thirds of the lifetime, so a CHECK here almost always means renewal has failed, or ran and the server never reloaded the new file. The one-third threshold is a Tamperbox choice; no specification sets it.
 
-An intermediate that ends before your certificate gets its own CHECK, "X expires first", because the chain will break on the intermediate's date even though yours is still valid.
+An intermediate that ends before your certificate gets its own CHECK, "X expires first", because step (a)(2) applies to every certificate in the path: the chain breaks on the intermediate's date even though yours is still valid.
 
-The total lifetime is compared with the public TLS limit that applied on the certificate's start date, used as an estimate of the issuance date:
+The expiry FAIL is not repeated when the probe already reported code 10 (expired) or 9 (not valid yet).
+
+### Lifetime limit
+
+The total lifetime is compared with the public TLS limit in [Baseline Requirements 6.3.2](https://cabforum.org/working-groups/server/baseline-requirements/requirements/#632-certificate-operational-periods-and-key-pair-usage-periods), for example: "Subscriber Certificates issued on or after 2026-03-15 and before 2027-03-15 SHOULD NOT have a Validity Period greater than 199 days and MUST NOT have a Validity Period greater than 200 days." The tool uses the MUST NOT figure:
 
 | Issued on or after | Maximum lifetime |
 | --- | --- |
@@ -179,56 +195,185 @@ The total lifetime is compared with the public TLS limit that applied on the cer
 | 15 March 2027 | 100 days |
 | 15 March 2029 | 47 days |
 
+A certificate does not record when it was issued, so the start date (notBefore) stands in for the issuance date. The [subscriber certificate profile in 7.1.2.7](https://cabforum.org/working-groups/server/baseline-requirements/requirements/#7127-subscriber-server-certificate-profile) requires notBefore to be "A value within 48 hours of the certificate signing operation", which keeps the estimate close.
+
 A longer lifetime is CHECK, "Valid for N days": public authorities no longer issue it, so the certificate is almost certainly from a private authority and trusted only where that root is installed.
 
 ### Chain order and completeness
 
-Each certificate's issuer should be the subject of the certificate after it.
+Each certificate's issuer should be the subject of the certificate after it. [RFC 9846, Section 4.5.1](https://www.rfc-editor.org/rfc/rfc9846#section-4.5.1): "The sender's certificate MUST come in the first CertificateEntry in the list. Each following certificate SHOULD directly certify the one immediately preceding it." The tool compares the issuer name with the next subject name; it does not check signatures.
 
-- **Out of order** (CHECK): every certificate is present but not each followed by its issuer. Most clients cope; some strict ones do not. A pasted chain can be reordered with Heal it.
+- **Out of order** (CHECK): every certificate is present but not each followed by its issuer. The same section says clients "SHOULD be prepared to handle potentially extraneous certificates and arbitrary orderings", so this is a warning, not a failure. A pasted chain can be reordered with Heal it.
 - **Gap** (FAIL): a link is missing altogether; "Certificate 3 did not sign certificate 2".
-- **Intermediate not sent**: the server sent only its own certificate, which is not self-signed. CHECK when the live chain still verified (the probe filled the gap from its store), FAIL otherwise. Browsers may fill the gap from cache; API clients and phones often cannot. The fix is nearly always to point the server at the full-chain file instead of the certificate alone.
-- **Root certificate sent** (INFO): the chain ends in a self-signed root. Clients already have it; sending it adds bytes to every handshake.
-- **Your certificate was not first** (CHECK, pasted only): the first non-CA certificate is read as yours and the chain reordered for reading.
+- **Intermediate not sent**: the server sent only its own certificate, which is not self-signed. CHECK when the live chain still verified (the probe filled the gap from its store), FAIL otherwise. Not repeated when OpenSSL already reported code 2, 20 or 21.
+- **Root certificate sent** (INFO): the chain ends in a self-signed root. Section 4.5.1 says a trust anchor "MAY be omitted from the chain", so sending it is allowed and only adds bytes.
+- **Your certificate was not first** (CHECK, pasted only): the first non-CA certificate (by the cA flag of [RFC 5280, Section 4.2.1.9](https://www.rfc-editor.org/rfc/rfc5280#section-4.2.1.9)) is read as yours and the chain reordered for reading.
 
-### Keys, signatures and protocol
+### Keys and signatures
 
-- An RSA key under 2048 bits anywhere below the root is FAIL. RSA of 2048 bits or more, ECDSA on P-256, P-384 or P-521, Ed25519 and Ed448 pass. If the probe already refused the key (codes 66 and 68) the finding is not repeated.
-- A SHA-1 or MD5 signature on any certificate other than the root is FAIL; browsers stopped accepting SHA-1 in 2017.
-- TLS 1.0 or 1.1 negotiated is FAIL; browsers removed both in 2020. TLS 1.2 and 1.3 pass, with a note that 1.3 is needed for post-quantum key exchange.
-- The key exchange group is INFO: "Classical key exchange" (secure today, but recorded traffic could be decrypted by a future quantum computer), PASS for a post-quantum hybrid such as X25519MLKEM768, CHECK for an obsolete pre-standard Kyber draft, INFO for an unrecognised group. The connection table links to the post-quantum checker for the full picture.
+- An RSA key under 2048 bits anywhere below the root is FAIL. [Baseline Requirements 6.1.5](https://cabforum.org/working-groups/server/baseline-requirements/requirements/#615-key-sizes): the CA SHALL "Ensure that the modulus size, when encoded, is at least 2048 bits". [RFC 9846, Appendix C.2](https://www.rfc-editor.org/rfc/rfc9846#appendix-C.2) says the same for clients. RSA of 2048 bits or more, ECDSA on P-256, P-384 or P-521, Ed25519 and Ed448 pass. If the probe already refused the key (codes 66 and 68) the finding is not repeated.
+- A SHA-1 or MD5 signature on any certificate other than the root is FAIL. [RFC 9846, Section 4.5.1.3](https://www.rfc-editor.org/rfc/rfc9846#section-4.5.1.3): an endpoint that must validate an MD5-based signature "MUST abort the handshake with a "bad_certificate" alert", and doing the same for SHA-1 is RECOMMENDED. [Baseline Requirements 7.1.3.2](https://cabforum.org/working-groups/server/baseline-requirements/requirements/#7132-signature-algorithmidentifier) has ended SHA-1 for public certificates.
+
+### Protocol and key exchange
+
+- TLS 1.0 or 1.1 negotiated is FAIL. [RFC 8996, Section 4](https://www.rfc-editor.org/rfc/rfc8996#section-4): "TLS 1.0 MUST NOT be used." [Section 5](https://www.rfc-editor.org/rfc/rfc8996#section-5): "TLS 1.1 MUST NOT be used." TLS 1.2 and 1.3 pass, with a note that 1.3 is needed for post-quantum key exchange.
+- The key exchange group ([RFC 9846, Section 4.3.7](https://www.rfc-editor.org/rfc/rfc9846#section-4.3.7)) is reported for port 443. The verdict on it is a Tamperbox classification: INFO "Classical key exchange" (secure today, but recorded traffic could be decrypted by a future quantum computer), PASS for a post-quantum hybrid such as X25519MLKEM768, CHECK for an obsolete pre-standard Kyber draft, INFO for an unrecognised group. The connection table links to the post-quantum checker for the full picture.
+
+## Standards and conformance
+
+The checker reads evidence from one TLS connection made by our server, then judges it in your browser with the rules above. A pasted chain is parsed locally, byte by byte from its DER encoding, and never leaves the browser. The tool is an observer: it reports what one handshake and one chain show, and it is not a conforming TLS client or path validator itself. Path validation is delegated to OpenSSL (port 443) or Node.js (mail ports) and is absent for pasted chains.
+
+### RFC 9846: TLS 1.3
+
+[RFC 9846](https://www.rfc-editor.org/rfc/rfc9846) is a Proposed Standard (July 2026). It obsoletes RFC 8446, the previous TLS 1.3 specification, and also RFC 5246 (TLS 1.2), 5077, 6961, 7627 and 8422.
+
+| Section | Requirement | What the tool does |
+| --- | --- | --- |
+| [4.3.7](https://www.rfc-editor.org/rfc/rfc9846#section-4.3.7) | Client lists the groups it supports | The probe offers OpenSSL's default list; the negotiated group is reported on port 443 only |
+| [4.5.1](https://www.rfc-editor.org/rfc/rfc9846#section-4.5.1) | Sender's certificate first; each following one SHOULD certify the one before | Checked by name only; out of order CHECK, gap FAIL |
+| [4.5.1](https://www.rfc-editor.org/rfc/rfc9846#section-4.5.1) | A trust anchor MAY be omitted | Root sent is INFO, never a fault |
+| [4.5.1.1](https://www.rfc-editor.org/rfc/rfc9846#section-4.5.1.1) | OCSP status in the certificate entry | Not requested; `s_client` runs without `-status` |
+| [4.5.1.2](https://www.rfc-editor.org/rfc/rfc9846#section-4.5.1.2) | Clients SHOULD send `server_name` | SNI is always sent, on every port |
+| [4.5.1.3](https://www.rfc-editor.org/rfc/rfc9846#section-4.5.1.3) | Empty Certificate message MUST abort | "No certificate" FAIL |
+| [4.5.1.3](https://www.rfc-editor.org/rfc/rfc9846#section-4.5.1.3) | MD5 MUST abort, SHA-1 RECOMMENDED to abort; trust anchors exempt | Both FAIL on any certificate not read as a root |
+| [Appendix C.2](https://www.rfc-editor.org/rfc/rfc9846#appendix-C.2) | Paths weaker than 2048-bit RSA or 224-bit ECDSA are not appropriate | RSA under 2048 bits FAIL; ECDSA passes only on P-256, P-384, P-521 |
+
+Because RFC 9846 obsoletes RFC 5246, TLS 1.2 is no longer described by its own current RFC; [Section 1.4](https://www.rfc-editor.org/rfc/rfc9846#section-1.4) lists the changes that affect it. The tool still reports TLS 1.2 as PASS.
+
+### RFC 5280: certificates and path validation
+
+[RFC 5280](https://www.rfc-editor.org/rfc/rfc5280) is a Proposed Standard, updated by RFC 6818, 8398, 8399, 9549, 9598, 9608, 9618, 9925 and 10007. None of the updates changes the fields the tool reads.
+
+| Section | Requirement | What the tool does |
+| --- | --- | --- |
+| [4.1.2.5](https://www.rfc-editor.org/rfc/rfc5280#section-4.1.2.5) | Validity is notBefore through notAfter, inclusive | Expired only after notAfter, not valid yet only before notBefore |
+| [4.1.2.5.1](https://www.rfc-editor.org/rfc/rfc5280#section-4.1.2.5.1) | UTCTime year under 50 is 20YY, otherwise 19YY | Local parser does exactly this; GeneralizedTime read as is |
+| [4.2.1.6](https://www.rfc-editor.org/rfc/rfc5280#section-4.2.1.6) | Identities go in the subject alternative name | DNS, IP, email and URI entries read; only DNS names shown and matched |
+| [4.2.1.9](https://www.rfc-editor.org/rfc/rfc5280#section-4.2.1.9) | The cA boolean marks a CA | Read locally; finds your certificate in a pasted chain |
+| [6.1](https://www.rfc-editor.org/rfc/rfc5280#section-6.1), [6.1.3](https://www.rfc-editor.org/rfc/rfc5280#section-6.1.3) | Verify signature, validity, revocation and issuer name for each certificate | Port 443: OpenSSL; mail ports: Node.js; pasted: not done. Revocation, step (a)(3), never |
+| [7.1](https://www.rfc-editor.org/rfc/rfc5280#section-7.1) | Name comparison rules for distinguished names | Not applied locally: issuer and subject are compared as exact strings |
+
+### RFC 9525: service identity
+
+[RFC 9525](https://www.rfc-editor.org/rfc/rfc9525) is a Proposed Standard (November 2023) that obsoletes RFC 6125, which older implementations may still follow.
+
+| Section | Requirement | What the tool does |
+| --- | --- | --- |
+| [2](https://www.rfc-editor.org/rfc/rfc9525#section-2) | "The Common Name RDN MUST NOT be used to identify a service" | Common-name fallback disabled; SAN DNS names required |
+| [4.1](https://www.rfc-editor.org/rfc/rfc9525#section-4.1) | Certificate SHOULD include a DNS-ID | No DNS names is FAIL, stricter than the SHOULD (it follows the Baseline Requirements) |
+| [6.3](https://www.rfc-editor.org/rfc/rfc9525#section-6.3) | Case-insensitive label match; wildcard only as the whole left-most label, matching one label | Local matcher does this, and also refuses a wildcard over a single remaining label such as `*.com` |
+| [6.3](https://www.rfc-editor.org/rfc/rfc9525#section-6.3) | Convert U-labels to A-labels before comparing | Not done for Host name to match; a Unicode host never matches |
+| [6.6](https://www.rfc-editor.org/rfc/rfc9525#section-6.6) | No match: terminate with a bad certificate error | FAIL |
+
+### RFC 8996: TLS 1.0 and 1.1
+
+[RFC 8996](https://www.rfc-editor.org/rfc/rfc8996) is a Best Current Practice (BCP 195). The tool applies [Section 4](https://www.rfc-editor.org/rfc/rfc8996#section-4) and [Section 5](https://www.rfc-editor.org/rfc/rfc8996#section-5) as a protocol FAIL.
+
+In practice the FAIL appears for pasted transcripts only. The probe's clients (OpenSSL 3 for port 443 and Node.js 22, whose default minimum is TLS 1.2, for mail ports) do not offer TLS 1.0 or 1.1. A server that accepts nothing newer makes the live handshake fail, and the page shows an error instead of a finding.
+
+### SNI, ALPN and SMTP STARTTLS
+
+| Specification | Section | What the tool does |
+| --- | --- | --- |
+| [RFC 6066](https://www.rfc-editor.org/rfc/rfc6066), Proposed Standard, updated by RFC 9846 | [3](https://www.rfc-editor.org/rfc/rfc6066#section-3), Server Name Indication | Host name sent as SNI on every port |
+| [RFC 7301](https://www.rfc-editor.org/rfc/rfc7301), Proposed Standard | [3.1](https://www.rfc-editor.org/rfc/rfc7301#section-3.1), the ALPN extension | Port 443 offers `h2,http/1.1`; the result is shown, not judged; mail ports offer none |
+| [RFC 3207](https://www.rfc-editor.org/rfc/rfc3207), Proposed Standard | [4](https://www.rfc-editor.org/rfc/rfc3207#section-4), the STARTTLS command | Ports 25 and 587: greeting, EHLO, STARTTLS must be advertised, 220 reply, then TLS |
+
+Ports 465, 993, 995 and 853 start in TLS at once.
+
+### CA/Browser Forum Baseline Requirements
+
+The [TLS Baseline Requirements](https://cabforum.org/working-groups/server/baseline-requirements/requirements/) are not an IETF standard but bind publicly trusted authorities. The tool was checked against version 2.3.1, dated 4 October 2026.
+
+| Section | Requirement | What the tool does |
+| --- | --- | --- |
+| [6.1.5](https://cabforum.org/working-groups/server/baseline-requirements/requirements/#615-key-sizes) | RSA at least 2048 bits; ECDSA on P-256, P-384 or P-521; "No other algorithms or key sizes are permitted." | RSA and ECDSA rules match; Ed25519 and Ed448 still PASS |
+| [6.3.2](https://cabforum.org/working-groups/server/baseline-requirements/requirements/#632-certificate-operational-periods-and-key-pair-usage-periods) | Maximum validity by issuance date | Lifetime CHECK above the MUST NOT limit, by notBefore |
+| [7.1.2.7](https://cabforum.org/working-groups/server/baseline-requirements/requirements/#7127-subscriber-server-certificate-profile) | notBefore within 48 hours of signing | Justifies notBefore as the issuance estimate |
+| [7.1.2.7.12](https://cabforum.org/working-groups/server/baseline-requirements/requirements/#712712-subscriber-certificate-subject-alternative-name) | SAN present with a dNSName or iPAddress | "No DNS names" FAIL; IP entries do not count |
+| [7.1.3.2](https://cabforum.org/working-groups/server/baseline-requirements/requirements/#7132-signature-algorithmidentifier) | SHA-1 sunset | SHA-1 FAIL below the root |
+
+The requirements apply to public authorities only. The tool applies them to every certificate and says so in the lifetime finding.
+
+### What the tool does not check
+
+- **Revocation.** Neither OCSP nor CRLs are consulted, and no stapled OCSP response is requested ([RFC 9846, Section 4.5.1.1](https://www.rfc-editor.org/rfc/rfc9846#section-4.5.1.1); [RFC 5280, Section 6.1.3](https://www.rfc-editor.org/rfc/rfc5280#section-6.1.3) step (a)(3)). A revoked certificate can pass.
+- **Certificate Transparency.** Embedded signed certificate timestamps are not read. Browsers that enforce a CT policy can refuse a certificate the tool passes. CT is specified in [RFC 6962](https://www.rfc-editor.org/rfc/rfc6962), obsoleted by [RFC 9162](https://www.rfc-editor.org/rfc/rfc9162); both are Experimental.
+- **Signatures in a pasted chain.** Links are checked by name; no signature is verified, so a forged chain with matching names reads as complete.
+- **Extensions beyond names and the cA flag.** The page does not read key usage, extended key usage, name constraints or policies.
+- **Everything the server allows.** Only the version, cipher and group this one handshake negotiated are known.
+- **Browser trust.** Trust is the probe's root store, not a browser's, and browser distrust decisions are not modelled.
+
+### Where the tool differs: live probe
+
+- **Two root stores.** Port 443 is verified by the OpenSSL command line against the container's CA bundle; mail ports by Node.js against its bundled root list. A chain can verify on one and not the other.
+- **Strict SAN matching across transports.** Partial wildcards such as `w*.example.com` are rejected under [RFC 9525 section 6.3](https://www.rfc-editor.org/rfc/rfc9525#section-6.3). Common-name fallback is disabled. A mail-probe hostname mismatch maps to the shared name error and is shown once.
+- **Mail port chains are rebuilt.** Node returns the verified path, not the list the server sent, and the path can include a root from Node's store. A mail server that sends only its own certificate can then show two certificates, a "Root certificate sent" INFO, and no "Intermediate not sent" finding. Order findings on mail ports describe that path.
+
+### Where the tool differs: local reading
+
+- **Common name fallback.** RFC 9525 forbids it; the tool uses it when there are no DNS names, so "Names host" can PASS next to the "No DNS names" FAIL. The verdict is still FAIL.
+- **Lifetime counted one second short.** The tool divides notAfter minus notBefore by 86,400 seconds and rounds up. RFC 5280 and the Baseline Requirements count the period inclusively, so a certificate whose dates are exactly 398 days apart lasts 398 days and one second, which the requirements count as 399 days. The tool sees 398 and does not warn.
+- **Self-signed by name.** A certificate whose subject equals its issuer is read as self-signed. RFC 5280 calls that self-issued; self-signed also needs the signature to verify with its own key, which is not checked.
+- **SHA-1 on a self-signed leaf.** Section 4.5.1.3 exempts self-signed certificates; the tool exempts only a root after the first position, so a self-signed SHA-1 server certificate is FAIL.
+- **Distinguished names compared as strings**, not with the rules of RFC 5280, Section 7.1. Names that differ only in letter case or spacing read as a gap.
 
 ## Finding reference
 
-Every finding the tool can emit, by its id, with what it means for the people who connect to the host.
+Every finding the tool can emit, by its id, with what it means for the people who connect to the host. The Source column links the section a finding rests on. "none" marks a Tamperbox recommendation or a report of what the tool could not establish, not a rule from a specification. BR means the CA/Browser Forum TLS Baseline Requirements.
 
-| Id | Severity | Title | What it means | Fix |
-| --- | --- | --- | --- | --- |
-| trust | PASS | Verified by the probe | The chain verifies against the probe's trust store | |
-| trust | FAIL | One of the verification titles above | Browsers warn or refuse | See the table above |
-| trust | INFO | Trust not checked, Trust not established, or Pasted verification result | No trust verdict is available for a pasted chain, or the probe did not report success | Check the host name live |
-| name | PASS | Names host | One of the certificate's names covers the host | |
-| name | FAIL | Does not name host | Browsers warn that the connection is not private | Add the name, or serve the certificate issued for it |
-| san | FAIL | No DNS names | Browsers ignore the common name | Reissue with Subject Alternative Names |
-| expiry | FAIL | Expired N days ago | Full-page warning; API clients refuse | Renew and reload |
-| expiry | FAIL | Not valid yet | Refused until the start date, or the server clock is wrong | Check the clock or wait |
-| expiry | CHECK | Renew soon: N days left | Inside the last third; renewal should have run | Check the renewal job and the reload |
-| expiry | PASS | N days left | | |
-| lifetime | CHECK | Valid for N days | Longer than the public limit for its issue date; private authority | Use a public authority, or install the private root everywhere |
-| first | CHECK | Your certificate was not first | Pasted chain started with an issuer | Serve your certificate first |
-| order | CHECK | Chain is out of order | Present but misordered | Serve your certificate, then each issuer in turn |
-| order | FAIL | Chain has a gap | A link is missing | Serve the full chain |
-| incomplete | CHECK or FAIL | Intermediate not sent | Only the server's own certificate was sent | Serve the full-chain file |
-| root | INFO | Root certificate sent | Extra bytes per handshake | Remove the root from the chain file |
-| ca-expiry-n | CHECK | X expires first | An intermediate ends before your certificate | Renew onto the issuer's current chain |
-| key | FAIL | N-bit RSA key | Current clients refuse RSA under 2048 bits | Reissue with 2048-bit RSA or P-256 |
-| key | PASS | The key, by type | Meets current recommendations | |
-| key | INFO | The key, by type | Key strength could not be established | |
-| signature | FAIL | Signed with SHA-1 or MD5 | Refused since 2017 | Reissue; every current authority signs with SHA-256 or stronger |
-| protocol | FAIL | TLS 1.0 or 1.1 negotiated | Removed from browsers in 2020 | Enable 1.2 and 1.3, disable the rest |
-| protocol | PASS | TLS 1.2 or 1.3 negotiated | | |
-| group | PASS, CHECK or INFO | The key exchange group | Post-quantum hybrid, obsolete draft, or classical | See the post-quantum checker |
-| none | FAIL | No certificate | The server presented none | Configure TLS on this port |
+### Trust and names
+
+Whether clients accept the certificate for this host at all.
+
+| Id | Severity | Title | Source | What it means | Fix |
+| --- | --- | --- | --- | --- | --- |
+| trust | PASS | Verified by the probe | [RFC 5280, 6.1](https://www.rfc-editor.org/rfc/rfc5280#section-6.1) | The chain verifies against the probe's trust store | |
+| trust | FAIL | One of the verification titles above | [RFC 5280, 6.1.3](https://www.rfc-editor.org/rfc/rfc5280#section-6.1.3) | Browsers warn or refuse | See the table above |
+| trust | INFO | Trust not checked, Trust not established, or Pasted verification result | none | No trust verdict is available for a pasted chain, or the probe did not report success | Check the host name live |
+| name | PASS | Names host | [RFC 9525, 6.3](https://www.rfc-editor.org/rfc/rfc9525#section-6.3) | One of the certificate's names covers the host | |
+| name | FAIL | Does not name host | [RFC 9525, 6.6](https://www.rfc-editor.org/rfc/rfc9525#section-6.6) | Browsers warn that the connection is not private | Add the name, or serve the certificate issued for it |
+| san | FAIL | No DNS names | [BR 7.1.2.7.12](https://cabforum.org/working-groups/server/baseline-requirements/requirements/#712712-subscriber-certificate-subject-alternative-name) | Browsers ignore the common name | Reissue with Subject Alternative Names |
+| none | FAIL | No certificate | [RFC 9846, 4.5.1.3](https://www.rfc-editor.org/rfc/rfc9846#section-4.5.1.3) | The server presented none | Configure TLS on this port |
+
+### Validity dates
+
+Where the checked moment falls in the certificate's lifetime.
+
+| Id | Severity | Title | Source | What it means | Fix |
+| --- | --- | --- | --- | --- | --- |
+| expiry | FAIL | Expired N days ago | [RFC 5280, 4.1.2.5](https://www.rfc-editor.org/rfc/rfc5280#section-4.1.2.5) | Full-page warning; API clients refuse | Renew and reload |
+| expiry | FAIL | Not valid yet | [RFC 5280, 4.1.2.5](https://www.rfc-editor.org/rfc/rfc5280#section-4.1.2.5) | Refused until the start date, or the server clock is wrong | Check the clock or wait |
+| expiry | CHECK | Renew soon: N days left | none (Tamperbox) | Inside the last third; renewal should have run | Check the renewal job and the reload |
+| expiry | PASS | N days left | [RFC 5280, 4.1.2.5](https://www.rfc-editor.org/rfc/rfc5280#section-4.1.2.5) | | |
+| lifetime | CHECK | Valid for N days | [BR 6.3.2](https://cabforum.org/working-groups/server/baseline-requirements/requirements/#632-certificate-operational-periods-and-key-pair-usage-periods) | Longer than the public limit for its issue date; private authority | Use a public authority, or install the private root everywhere |
+
+### Chain order and completeness
+
+What the server sends with its certificate, and in what order.
+
+| Id | Severity | Title | Source | What it means | Fix |
+| --- | --- | --- | --- | --- | --- |
+| first | CHECK | Your certificate was not first | [RFC 9846, 4.5.1](https://www.rfc-editor.org/rfc/rfc9846#section-4.5.1) | Pasted chain started with an issuer | Serve your certificate first |
+| order | CHECK | Chain is out of order | [RFC 9846, 4.5.1](https://www.rfc-editor.org/rfc/rfc9846#section-4.5.1) | Present but misordered | Serve your certificate, then each issuer in turn |
+| order | FAIL | Chain has a gap | [RFC 9846, 4.5.1](https://www.rfc-editor.org/rfc/rfc9846#section-4.5.1) | A link is missing | Serve the full chain |
+| incomplete | CHECK or FAIL | Intermediate not sent | [RFC 9846, 4.5.1](https://www.rfc-editor.org/rfc/rfc9846#section-4.5.1) | Only the server's own certificate was sent | Serve the full-chain file |
+| root | INFO | Root certificate sent | [RFC 9846, 4.5.1](https://www.rfc-editor.org/rfc/rfc9846#section-4.5.1) | Allowed, but extra bytes per handshake | Remove the root from the chain file |
+| ca-expiry-n | CHECK | X expires first | [RFC 5280, 6.1.3](https://www.rfc-editor.org/rfc/rfc5280#section-6.1.3) | An intermediate ends before your certificate | Renew onto the issuer's current chain |
+
+### Key, signature and protocol
+
+The cryptography of the certificate and of this connection.
+
+| Id | Severity | Title | Source | What it means | Fix |
+| --- | --- | --- | --- | --- | --- |
+| key | FAIL | N-bit RSA key | [BR 6.1.5](https://cabforum.org/working-groups/server/baseline-requirements/requirements/#615-key-sizes) | Current clients refuse RSA under 2048 bits | Reissue with 2048-bit RSA or P-256 |
+| key | PASS | The key, by type | [BR 6.1.5](https://cabforum.org/working-groups/server/baseline-requirements/requirements/#615-key-sizes); none for Ed25519 and Ed448 | Meets current recommendations | |
+| key | INFO | The key, by type | none | Key strength could not be established | |
+| signature | FAIL | Signed with SHA-1 or MD5 | [RFC 9846, 4.5.1.3](https://www.rfc-editor.org/rfc/rfc9846#section-4.5.1.3) | Refused since 2017 | Reissue; every current authority signs with SHA-256 or stronger |
+| protocol | FAIL | TLS 1.0 or 1.1 negotiated | [RFC 8996, 4 and 5](https://www.rfc-editor.org/rfc/rfc8996#section-4) | Removed from browsers in 2020 | Enable 1.2 and 1.3, disable the rest |
+| protocol | PASS | TLS 1.2 or 1.3 negotiated | [RFC 9846](https://www.rfc-editor.org/rfc/rfc9846) | | |
+| group | PASS, CHECK or INFO | The key exchange group | none (Tamperbox); field from [RFC 9846, 4.3.7](https://www.rfc-editor.org/rfc/rfc9846#section-4.3.7) | Post-quantum hybrid, obsolete draft, or classical | See the post-quantum checker |
 
 ## Guide
 
@@ -347,16 +492,22 @@ See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for 
 
 - One connection, from one location, at one moment. Other servers behind the same name, other regions and other moments can differ.
 - Only the protocol, cipher and group this connection negotiated are known, not everything the server allows.
-- Revocation (OCSP and CRL) is not checked.
+- Revocation (OCSP and CRL) is not checked, and neither is Certificate Transparency.
 - Pasted certificates and pasted verification codes are reported as supplied, not independently verified.
 - Lifetime guidance uses the start date as an estimate of the issuance date; the actual issuance time is not recorded in a certificate.
+- The page's own rules do not verify signatures; a pasted chain is linked by names only.
 - The key exchange group, ALPN and the post-quantum link are reported for port 443 only.
 - Nothing is stored.
 
 ## References
 
-- [RFC 8446, TLS 1.3](https://www.rfc-editor.org/rfc/rfc8446)
-- [RFC 5280, X.509 certificates and CRLs](https://www.rfc-editor.org/rfc/rfc5280)
-- [RFC 6125, host name verification](https://www.rfc-editor.org/rfc/rfc6125)
-- [CA/Browser Forum TLS Baseline Requirements, section 6.3.2, certificate operational periods](https://cabforum.org/working-groups/server/baseline-requirements/requirements/#632-certificate-operational-periods-and-key-pair-usage-periods)
-- [RFC 8555, ACME](https://www.rfc-editor.org/rfc/rfc8555)
+- [RFC 9846, The Transport Layer Security (TLS) Protocol Version 1.3](https://www.rfc-editor.org/rfc/rfc9846). Proposed Standard, July 2026; obsoletes RFC 8446 (the earlier TLS 1.3 specification), RFC 5246 (TLS 1.2), 5077, 6961, 7627 and 8422. Sections used: [1.4](https://www.rfc-editor.org/rfc/rfc9846#section-1.4), [4.3.7](https://www.rfc-editor.org/rfc/rfc9846#section-4.3.7), [4.5.1](https://www.rfc-editor.org/rfc/rfc9846#section-4.5.1), [4.5.1.1](https://www.rfc-editor.org/rfc/rfc9846#section-4.5.1.1) (not applied), [4.5.1.2](https://www.rfc-editor.org/rfc/rfc9846#section-4.5.1.2), [4.5.1.3](https://www.rfc-editor.org/rfc/rfc9846#section-4.5.1.3) and [Appendix C.2](https://www.rfc-editor.org/rfc/rfc9846#appendix-C.2).
+- [RFC 5280, Internet X.509 Public Key Infrastructure Certificate and CRL Profile](https://www.rfc-editor.org/rfc/rfc5280). Proposed Standard; updated by RFC 6818, 8398, 8399, 9549, 9598, 9608, 9618, 9925 and 10007. Sections used: [4.1.2.5](https://www.rfc-editor.org/rfc/rfc5280#section-4.1.2.5), [4.1.2.5.1](https://www.rfc-editor.org/rfc/rfc5280#section-4.1.2.5.1), [4.2.1.6](https://www.rfc-editor.org/rfc/rfc5280#section-4.2.1.6), [4.2.1.9](https://www.rfc-editor.org/rfc/rfc5280#section-4.2.1.9), [6.1](https://www.rfc-editor.org/rfc/rfc5280#section-6.1), [6.1.3](https://www.rfc-editor.org/rfc/rfc5280#section-6.1.3) and [7.1](https://www.rfc-editor.org/rfc/rfc5280#section-7.1) (not applied).
+- [RFC 9525, Service Identity in TLS](https://www.rfc-editor.org/rfc/rfc9525). Proposed Standard, November 2023; obsoletes RFC 6125. Sections used: [2](https://www.rfc-editor.org/rfc/rfc9525#section-2), [4.1](https://www.rfc-editor.org/rfc/rfc9525#section-4.1), [6.3](https://www.rfc-editor.org/rfc/rfc9525#section-6.3) and [6.6](https://www.rfc-editor.org/rfc/rfc9525#section-6.6).
+- [RFC 8996, Deprecating TLS 1.0 and TLS 1.1](https://www.rfc-editor.org/rfc/rfc8996). Best Current Practice, BCP 195. Sections used: [4](https://www.rfc-editor.org/rfc/rfc8996#section-4) and [5](https://www.rfc-editor.org/rfc/rfc8996#section-5).
+- [RFC 6066, TLS Extensions: Extension Definitions](https://www.rfc-editor.org/rfc/rfc6066). Proposed Standard; updated by RFC 9846. Section used: [3](https://www.rfc-editor.org/rfc/rfc6066#section-3).
+- [RFC 7301, TLS Application-Layer Protocol Negotiation Extension](https://www.rfc-editor.org/rfc/rfc7301). Proposed Standard. Section used: [3.1](https://www.rfc-editor.org/rfc/rfc7301#section-3.1).
+- [RFC 3207, SMTP Service Extension for Secure SMTP over Transport Layer Security](https://www.rfc-editor.org/rfc/rfc3207). Proposed Standard. Section used: [4](https://www.rfc-editor.org/rfc/rfc3207#section-4).
+- [RFC 8555, Automatic Certificate Management Environment (ACME)](https://www.rfc-editor.org/rfc/rfc8555). Proposed Standard. Cited for context in the renewal guidance; no section is applied as a rule.
+- [RFC 6962, Certificate Transparency](https://www.rfc-editor.org/rfc/rfc6962), Experimental, obsoleted by [RFC 9162, Certificate Transparency Version 2.0](https://www.rfc-editor.org/rfc/rfc9162), Experimental. Cited only to say that CT is not checked.
+- [CA/Browser Forum, Baseline Requirements for the Issuance and Management of Publicly-Trusted TLS Server Certificates](https://cabforum.org/working-groups/server/baseline-requirements/requirements/). Industry requirements for public authorities, version 2.3.1, 4 October 2026. Sections used: [6.1.5](https://cabforum.org/working-groups/server/baseline-requirements/requirements/#615-key-sizes), [6.3.2](https://cabforum.org/working-groups/server/baseline-requirements/requirements/#632-certificate-operational-periods-and-key-pair-usage-periods), [7.1.2.7](https://cabforum.org/working-groups/server/baseline-requirements/requirements/#7127-subscriber-server-certificate-profile), [7.1.2.7.12](https://cabforum.org/working-groups/server/baseline-requirements/requirements/#712712-subscriber-certificate-subject-alternative-name) and [7.1.3.2](https://cabforum.org/working-groups/server/baseline-requirements/requirements/#7132-signature-algorithmidentifier).

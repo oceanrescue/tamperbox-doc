@@ -1,172 +1,179 @@
 ---
 title: Subdomain Finder
-description: How the finder lists every name on a publicly logged certificate for a domain, what Certificate Transparency can and cannot show, how names that look internal are flagged, and what to do about each finding.
-updated: 2026-10-20
+description: How Tamperbox extracts DNS names from public Certificate Transparency observations and labels risky-looking names.
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
-agentSummary: Method, finding reference and repair guide for the Tamperbox Subdomain Finder, which searches the public Certificate Transparency logs through crt.sh from the Tamperbox server (or reads pasted crt.sh JSON in the browser), lists every name under the domain with its earliest validity start, latest expiry, certificate count and issuers, and flags names that look like internal services, wildcard names and names with recent first certificates.
+agentSummary: Method, finding reference and repair guide for the Tamperbox Subdomain Finder.
 prerequisites:
-  - A domain, or crt.sh JSON (or any text with names in it) to paste
+  - a domain name or pasted crt.sh-style JSON or name text
 outputs:
-  - A verdict with the subdomain count, an overview, a filterable table of names with validity and issuers, and findings with fixes
+  - normalised names, wildcard entries, internal-looking labels, truncation state and source limitations
 limitations:
-  - Only names that appeared on a publicly logged certificate are listed; a wildcard hides the names under it; a name stays in the logs after its server is gone; nothing is resolved or probed
+  - Public observations are time-sensitive and do not prove ownership, intent or private configuration
 ---
 
-The tool page is [tamperbox.dev/subdomain-finder](https://tamperbox.dev/subdomain-finder). It opens on `harbor-supply.example`, a sample domain on the reserved `.example` zone, with a fixture standing in for the certificate logs: 19 names, among them staging, Jenkins, Grafana and a VPN. This page is the long version: where the names come from, how each column is computed, which names are flagged and why, and what to do about it.
+The tool page is [tamperbox.dev/subdomain-finder](https://tamperbox.dev/subdomain-finder). It opens with a deterministic local example; replace it to inspect your own target. This guide documents the actual input path, evidence contract, classifications and independent verification steps.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> a domain is sent to the Tamperbox server, which asks the public crt.sh search for every logged certificate naming the domain or a name under it; crt.sh therefore sees the domain. The rows are read and assessed in your browser. Pasted JSON or text never leaves the browser. The sample is answered in the browser. Nothing is stored.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> input cleanup, pasted-data parsing and report rendering happen in the browser. Live checks send only the validated public target to the Tamperbox server and the public services required for the lookup. The page stores no report; History is local to the current browser session.</div>
 
 ## What the tool answers
 
-1. **Which names under this domain have had a public certificate?** Every DNS name on a logged certificate, wildcards included.
-2. **Which of them still have a valid one?** The latest expiry of any certificate naming each one.
-3. **Which look like they should not be public?** Names that usually point at development, administration or internal tooling.
-4. **When did each first appear, and who issued for it?** The earliest validity start, the certificate count and the issuers.
+The checker answers which names appear in a bounded Certificate Transparency result or pasted certificate-name set beneath a domain. Its conclusion is deliberately narrower than an ownership or security claim. A displayed provider, product, name or passing check means that the listed public evidence matched a documented rule at the observation time.
 
-It does not resolve the names, does not connect to them and does not guess names that never had a certificate.
+Every conclusion is paired with evidence. The opening verdict is a summary for orientation, while Findings contains the actionable interpretation and the later result sections retain the underlying records, addresses, fields or names. If a conclusion matters operationally, verify that evidence through an authoritative account or an independent standards-aware client before changing production.
 
 ## Inputs
 
-### A domain
+### Accepted source
 
-`example.com`, or a full address pasted from the address bar, which becomes the domain. The search runs when you stop typing or on Enter. The server queries crt.sh for `%.example.com`, which matches the domain and every name under it.
+Enter a bare domain for a live certificate-transparency search, or paste crt.sh JSON for local parsing. A JSON object is accepted as one row; arrays contain multiple rows. The parser reads `name_value` and `common_name`, and infers the most common final two-label suffix for pasted rows. That heuristic is not a public-suffix-aware ownership boundary. Plain text produces an informational result and can offer Heal it to retain extracted names without inventing dates or issuers.
 
-### Pasted crt.sh JSON
+Text files are read in the browser. The resulting input follows the same classification rules as the field; reading a file locally does not make a domain or public-IP lookup offline. Cleanup keeps an already accepted record intact and otherwise tries unwrapping a single-line address. Unusable text remains visible for correction.
 
-The JSON array a crt.sh search returns with `output=json`, or one object from it. Each row's `name_value` lists the names on that certificate, one per line; `not_before`, `not_after`, `issuer_name` and `id` are read when present. The domain is inferred as the two-label suffix most names share, which suits `example.com` but not `example.co.uk`; enter the domain to be exact.
+### When work runs
 
-### Any other text
+Domain input runs after a 600-millisecond typing pause. Enter runs it immediately; pasted records run immediately. Drops and page-wide paste use the same input loader. Leaving the field applies cleanup and reruns only when cleanup changes the text. Each edit aborts the previous request and increments a generation marker. A slower old response therefore cannot replace a newer result, and clearing the source immediately clears copyable output.
 
-Text that is not JSON is reported as "Not crt.sh JSON: this is plain text with N names in it." Heal it can keep those names as rows, without dates or issuers. Text that starts like JSON but does not parse is "Not readable: Broken JSON at character N."
-
-### Files
-
-A `.json` or `.txt` file up to 5 MiB, dropped on the page or opened with Add a file, is read in the browser.
+The opening input uses the same parser and processing path as a replacement. The reserved `harbor-supply.example` certificate rows are a local synthetic example and send no CT request.
 
 ## Reading the result
 
-### Verdict and chips
+### Verdict and privacy
 
-"16 subdomains of example.com, 6 that look internal." with the number that still have a valid certificate. Other verdicts: "No names", "No subdomains in these results" (only the bare domain), and "Only wildcards". Chips count the names, the internal-looking ones and the wildcards.
+The verdict states what the available evidence supports and uses pass, check, fail or informational status consistently. Pass means the bounded rule succeeded. Check means a human should confirm context. Fail means a concrete operational rule was violated. Info describes a limitation, absence or neutral fact and must not be promoted into success or failure by an automated reader.
 
-### Findings, Take it further, History
+Two privacy lines distinguish browser-only work from live lookup work. The Checked line names the cleaned input and source mode. Copy result is hidden while work is pending, after an error and when input is empty, preventing a stale report from being exported as current.
 
-Findings worst first, passes folded. Take it further hands the first internal-looking name to the [Website Hosting Checker](https://tamperbox.dev/website-hosting) to see where it points, and, for a real domain, the first internal-looking name that still has a valid certificate to the [SSL Certificate Checker](https://tamperbox.dev/ssl-checker) and, with port 443, to [TCP Ping](https://tamperbox.dev/tcp-ping). History logs every Break it case and Heal it repair, with Revert and Reset input.
+### Findings and evidence
 
-### Overview
+Findings are ordered with failures first, then checks, informational notes and passes. Repeated passing details can fold into a disclosure so that exceptions remain visible. Each item states the observation and its consequence; any remediation is scoped to the evidence rather than presented as a universal configuration recipe.
 
-Names, valid now, look internal, wildcards, and the issuing organisations.
+Evidence sections follow Findings and precede History. They are the audit trail for the verdict. A provider label derived from a catalog remains an inference, while a literal record or response field remains an observation. This distinction matters when signatures are incomplete, white-labelled or stale.
 
-### Names in certificate logs
+### History and handoffs
 
-A table of every name, filterable by text and by view (All, Valid now, Look internal), with its status (Valid or Expired), first seen, last valid, certificate count and issuer. Copy names copies the names in the current view. Names are sorted by the labels nearest the domain, so `shop`, `shop.eu` and `api.shop` sit together; long names break only after a dot.
+History records intentional input replacements, including Break it examples and their repairs. Revert restores the prior input and runs it again, including live requests when applicable; Reset input returns to the value at the beginning of the recorded sequence. History is not monitoring, persistence or an account log.
+
+Check the rest carries the current input to other tools in Domains & hosting. Take it further sends the first flagged name to the [Website Hosting Checker](/tools/website-hosting/), [CDN and Proxy Detector](/tools/cdn-detector/) or [Website Technology Detector](/tools/website-technology/). No such links appear when there is no flagged name. These checks collect new evidence about that one name; they do not scan the entire certificate-name list. A receiving tool runs its own check; agreement is not guaranteed.
+
+Explicit tool links transfer the input through temporary browser `sessionStorage` and, when needed, a same-origin browser channel. The URL fragment contains a random transfer token, not the input. Transfers are accepted for less than one minute, consumed once, and bound to the destination path. The destination removes the token from its address. Ordinary documentation links and direct visits do not restore a previous input; if transfer storage is unavailable, the link still opens the tool.
+
 
 ## Method
 
-### 1. Where the names come from
+### Validation and collection
 
-Certificate Transparency is an append-only public record of issued TLS certificates. [RFC 6962 section 3](https://www.rfc-editor.org/rfc/rfc6962#section-3) describes how logs accept certificates and precertificates and return a signed promise to include them; browsers require that promise for publicly trusted certificates, so in practice every such certificate is logged. RFC 6962 is the version deployed logs implement; [RFC 9162](https://www.rfc-editor.org/rfc/rfc9162) is its successor and obsoletes it on paper. crt.sh is a public search over those logs. The names on a certificate are its subject alternative names ([RFC 5280 section 4.2.1.6](https://www.rfc-editor.org/rfc/rfc5280#section-4.2.1.6)), which is what `name_value` lists.
+Before collection, the same domain validation runs in the browser and on the server boundary. Requests are restricted to supported public DNS names and HTTPS roots, redirects are bounded, response sizes are capped and abort signals are propagated. These limits make the observation reproducible and prevent an entered value from becoming an unrestricted network fetch.
 
-### 2. The server's search
+Use the input modes above to determine which requests run. DNS evidence comes from a public recursive view and can reflect cache state. Local classification cannot add observations absent from the supplied evidence. A server lookup is a fresh observation, not confirmation that cached or pasted evidence is still current.
 
-The server requests `https://crt.sh/?q=%25.<domain>&output=json`, reads at most 2 MiB, checks that the answer is an array of rows with name values, and returns it. A crt.sh error or rate limit becomes "Certificate search is temporarily unavailable. Try again later." Names under `.example`, `.test`, `.invalid`, `.localhost` and other reserved names are refused by the server; the sample never reaches it.
+### Classification rules
 
-### 3. Reading the rows
+Live mode requests a bounded CT-search representation and parses certificate name values. Pasted JSON uses the same shape; plain text is split locally. Names are lower-cased, wildcard prefixes are retained separately, invalid or unrelated names are discarded and exact duplicates are removed. [RFC 9162 section 1](https://www.rfc-editor.org/rfc/rfc9162#section-1) describes CT as a way to audit certificate issuance; it does not define a complete current inventory.
 
-For each row and each name on it, a name is kept when it is the domain, ends with `.` plus the domain, or is `*.` plus the domain. Per name:
+No confidence percentage is invented. When sources disagree, the disagreement is a finding. When a source is unavailable, the affected conclusion becomes informational or inconclusive rather than silently using a previous result. Catalog matches are exact bounded rules; unknown is a valid outcome.
 
-- **Certificates**: the number of distinct certificates (by id) that list it.
-- **First seen**: the earliest `not_before`. This is when a certificate became valid, not when the log saw it.
-- **Last valid**: the latest `not_after`. The name is "Valid" when that is in the future.
-- **Issuers**: the organisation and common name from each issuer, for example `Let's Encrypt · R11`.
-- **Wildcard**: the name starts with `*.`.
+### Ordering and export
 
-### 4. Names that look internal
+The renderer calculates all findings from the current observation before updating the verdict, chips, evidence and landing cards. Status priority is fail, check, info, pass. Stable secondary ordering keeps repeated runs readable without changing severity.
 
-A name is flagged when a label of its subdomain part is one of: `dev`, `devel`, `staging`, `stage`, `stg`, `test`, `testing`, `qa`, `uat`, `preprod`, `internal`, `intranet`, `admin`, `vpn`, `jenkins`, `gitlab`, `git`, `jira`, `grafana`, `kibana`, `prometheus`, `sonar`, `vault`, `backup`, `old`, `legacy`, `beta` or `sandbox`, alone or joined by a dot, a hyphen or digits (`dev-api`, `stage2`). The words are about the name, not the service: a flagged name may be a perfectly public status page, and a dangerous service can have a harmless name. Wildcards are counted separately and not flagged.
-
-### 5. Findings
-
-- Flagged names, excluding wildcards: "N names suggest internal services" (check), naming the first six.
-- Wildcard names: "N wildcard certificate names" (info). A wildcard certificate covers exactly one label below it ([RFC 9525 section 6.3](https://www.rfc-editor.org/rfc/rfc9525#section-6.3): the wildcard must be the entire leftmost label and matches one label), so the hosts under it never appear by name.
-- Names whose earliest validity start is within the last 30 days: "N names with recent validity starts" (info). It is a validity date, not the moment the log recorded it.
-- No names at all: "No names in the logs" (info).
+The Markdown mirror and Copy result output preserve input, summary, findings and important evidence in text form. They do not embed secrets, browser state or the expanded educational cards. Agents should cite the observation time and limitation alongside any exported conclusion.
 
 ## Standards and conformance
 
-| Specification | Sections used | How the tool applies them | Where it stops |
-| --- | --- | --- | --- |
-| [RFC 6962](https://www.rfc-editor.org/rfc/rfc6962), Certificate Transparency | [3](https://www.rfc-editor.org/rfc/rfc6962#section-3) | Treats the logs as the public record of issued certificates | Logs are read through crt.sh; inclusion proofs and log signatures are not verified |
-| [RFC 9162](https://www.rfc-editor.org/rfc/rfc9162), Certificate Transparency 2.0 | Whole document | Cited as the successor that obsoletes RFC 6962 | Deployed logs and crt.sh still follow RFC 6962 |
-| [RFC 5280](https://www.rfc-editor.org/rfc/rfc5280), X.509 profile | [4.2.1.6](https://www.rfc-editor.org/rfc/rfc5280#section-4.2.1.6) | Names come from the subject alternative names crt.sh extracts | Certificates are not parsed here |
-| [RFC 9525](https://www.rfc-editor.org/rfc/rfc9525), Service Identity in TLS | [6.3](https://www.rfc-editor.org/rfc/rfc9525#section-6.3) | Explains that a wildcard name covers one label and hides the names under it | Obsoletes [RFC 6125](https://www.rfc-editor.org/rfc/rfc6125) |
-| [RFC 8659](https://www.rfc-editor.org/rfc/rfc8659), CAA | [4](https://www.rfc-editor.org/rfc/rfc8659#section-4) | Cited in the guide for limiting which authorities may issue | CAA records are not read here |
+### Applied specifications
+
+| Source | Rule used | Boundary |
+| --- | --- | --- |
+| [RFC 9162 section 1](https://www.rfc-editor.org/rfc/rfc9162#section-1) | CT logs make certificate activity auditable | The tool consumes a search view, not every log directly |
+| [RFC 9162 section 2.1.1](https://www.rfc-editor.org/rfc/rfc9162#section-2.1.1) | Logs accept certificate-chain submissions | Observed names can be historical |
+| [RFC 6125 section 6.4](https://www.rfc-editor.org/rfc/rfc6125#section-6.4) | Wildcard identifiers have constrained matching semantics | Wildcards are displayed distinctly and never expanded into hosts |
+| [RFC 1034 section 4.3.2](https://www.rfc-editor.org/rfc/rfc1034#section-4.3.2) | DNS existence is answered by current resolution | CT names are not resolved by this tool |
+
+These references define the records and message semantics, not the provider catalogs. A catalog is product logic and can lag branding, acquisitions or custom deployments. Where a standard permits several valid configurations, the tool reports the observed form and avoids declaring one commercial pattern universally correct.
+
+### Where conformance stops
+
+The checker is an observer, not an authoritative DNS server, browser, certificate monitor, mail receiver or provider control plane. It does not claim protocol conformance for the target. It applies selected validation and interpretation rules to bounded evidence and exposes the boundary where a fuller protocol operation would begin.
+
+The phrase “public” refers to the server's Internet view. Private split-horizon answers, authenticated dashboards and regional routing can differ. Cached answers can remain until TTL expiry, and HTTP intermediaries can transform what the origin sent.
 
 ## Finding reference
 
-| Finding | Severity | What it means | Fix |
+### Emitted findings
+
+| Finding | Severity | Meaning | Repair or next check |
 | --- | --- | --- | --- |
-| N names suggest internal services | CHECK | Anyone can find these names in the logs; scanners do so within minutes of issuance | Confirm each should be public; put the rest behind a VPN or access proxy |
-| N wildcard certificate names | INFO | Names under the wildcard are not listed ([RFC 9525 section 6.3](https://www.rfc-editor.org/rfc/rfc9525#section-6.3)) | Keep the wildcard's private key on as few servers as possible |
-| N names with recent validity starts | INFO | Certificates for these names became valid in the last 30 days | Confirm you requested them |
-| No names in the logs | INFO | No logged certificate names this domain | Check the spelling; a private CA does not log |
-| Broken JSON at character N | FAIL | The pasted JSON cannot be read, usually cut off | Copy the whole response again |
-| Expected crt.sh JSON | INFO | Plain text; names can be kept without dates | Heal it keeps the names |
+| Names found | Pass | Unique in-scope names were extracted | Resolve and verify a name before relying on it |
+| Looks internal | Check | A label resembles admin, staging, dev, vpn or another sensitive role | Confirm exposure and certificate need with the owner |
+| Wildcard observed | Info | A certificate identifier covers a label level | Do not assume every possible expanded name exists |
+| Results truncated | Info | The configured limit was reached | Narrow the search or query logs independently |
+| Broken JSON | Fail | Pasted structured input cannot be parsed | Export valid JSON or paste names as text |
+| Expected crt.sh JSON | Info | Structured input had the wrong top-level shape | Supply an array containing name_value fields |
+| No names found | Info | No usable in-scope name was extracted | Check the domain, source availability and other inventories |
+
+Wording can include the observed name, count, provider or status. Automated consumers should use the supplied status and evidence rather than parsing the English title as a permanent identifier. A missing finding is not evidence that the corresponding external condition is absent when its source could not be collected.
+
+### Status handling
+
+| Status | Consumer action | What not to infer |
+| --- | --- | --- |
+| Pass | Preserve the evidence and continue normal review | Permanent correctness, ownership or availability |
+| Check | Confirm intent and inspect the named evidence | Definite compromise or outage |
+| Fail | Prioritise the concrete broken rule and verify independently | That every user sees the same failure |
+| Info | Carry the limitation or neutral fact with the report | Success merely because no failure was emitted |
 
 ## Guide
 
-### Internal names in the logs
+### Verify independently
 
-1. For each flagged name, decide whether it should be reachable from the internet. `dig +short staging.example.com` shows whether it still resolves; Take it further opens the hosting check with it.
-2. For internal tools, require a login before anything else: a VPN, or an access proxy that authenticates users before passing requests on.
-3. If you want internal names kept out of the logs, use a wildcard certificate for that area, or a private certificate authority for machines that only internal clients reach.
-4. Remove DNS records for services that are gone, so an old name cannot be claimed by someone else on a platform that still points there.
+Start with an authoritative or widely used command-line client. For DNS, use `dig` with the exact record type and compare every returned owner, target and TTL. Add `+trace` only when delegation matters; a trace and a recursive answer solve different questions. For HTTPS, use `curl -I --location https://host/` and retain each hop and response field. For certificates, use an established TLS client and a CT monitor you trust.
 
-### Watch for certificates you did not request
+Repeat from another network when geography or split routing could matter. Save the observation time and the original evidence before editing. After a DNS change, wait at least the prior TTL and then query both the intended authorities and independent recursive resolvers.
 
-Publish CAA records ([RFC 8659 section 4](https://www.rfc-editor.org/rfc/rfc8659#section-4)) naming the authorities you use, and check the logs after each issuance. `curl -s 'https://crt.sh/?q=%25.example.com&output=json'` reproduces the search; the newest rows are what to compare with your requests.
+### Repair safely
 
-### Confirm a name still exists
+Do not delete an unfamiliar record or reroute a public name merely because a catalog labels it. First identify the owning service, deployment repository or provider account. Confirm whether the item is current, a migration remnant, a failover path or a delegated responsibility. Make the smallest reversible change, keep the prior value, and have a rollback trigger.
 
-`dig +short name.example.com A` and `dig +short name.example.com AAAA`. A name with no record and an expired certificate is history; a name that resolves and has a valid certificate is a live service.
+Re-run this page after propagation, then verify the user-visible service. A clean public lookup cannot prove application health. Conversely, an informational unknown does not require a speculative change.
 
-### Break it cases
+### Diagnose conflicting evidence
 
-| Case | What it loads | What it shows |
-| --- | --- | --- |
-| Not JSON | Your names as addresses in a plain-text note | The plain-text reading and Heal it's "Keep the names" |
-| Empty result | `[]` | No names |
-| Broken JSON | Your rows, cut off before the end | The parse error and its position |
-| Wildcards only | Your wildcard rows alone | Only wildcards |
+When two signals disagree, ask whether they describe different layers: apex versus www, resolver cache versus authority, CDN edge versus origin, entered host versus redirected host, or certificate history versus current DNS. Compare literal evidence before comparing labels. The disagreement itself often reveals a migration or intermediary.
+
+If a lookup fails, preserve the error and retry once. Repeated timeouts are not equivalent to empty data. Use the specialist tool linked by the finding for deeper parsing rather than converting an inconclusive aggregate result into a failure.
+
+### Break it and heal it
+
+The Break it controls create documented edge cases from the visitor's own input or a reserved fixture. They are teaching states, not scans. Heal it restores a safe derived value when the repair is deterministic. Revert remains available when several changes have been made.
+
+Use these cases to learn how invalid, missing, mixed or stale evidence appears before diagnosing production. The control never edits DNS, hosting, certificates or provider accounts.
 
 ## Worked example
 
-The page opens on `harbor-supply.example`, answered in the browser from a fixture of 19 names. Validity is computed against today's date, so the sample's certificates age like real ones.
+The opening fixture is `harbor-supply.example`, a reserved synthetic dataset. It always demonstrates ordinary, wildcard and internal-looking names without depending on a sometimes slow third-party CT search. Entering a real domain switches to the live lookup.
 
-**16 subdomains of harbor-supply.example, 6 that look internal.** The internal-looking names are `dev-api`, `grafana`, `jenkins`, `old`, `staging` and `vpn`; `*.harbor-supply.example` and `*.staging.harbor-supply.example` are wildcards. `grafana` and `old` show expired certificates, a reminder that the logs keep history; the other names show whether their latest certificate is still valid on the day you look. Take it further opens the hosting check with `dev-api.harbor-supply.example`, which the sample zone answers with no address: a name in the logs that no longer resolves. Replace the sample with your own domain and every section, card and link is rewritten for it.
+Read the example from verdict to Findings, then compare the literal evidence. Open one Break it case and use Heal it or Revert. Finally, replace the default with a domain you are authorised to assess. This sequence demonstrates both the successful path and the failure contract without implying that the named public domain endorses the tool.
 
 ## For agents
 
-The Tamperbox MCP server has a `subdomain-finder` operation. Call it with the domain and an optional `limit` (default 200, at most 1000); it returns the names, the wildcards separately, the total, and whether the list was truncated. Keep these with any conclusion:
+Agents can discover the `subdomain_finder` operation through Tamperbox MCP. The browser page id `subdomain-finder` is not the operation name. The server operation and browser renderer can expose different fields; inspect the operation schema before supplying arguments. Preserve the result's distinction between observed evidence, catalog inference and limitation. State whether the run was live or pasted, include the cleaned target and observation time, and never turn “not found” into “does not exist” unless the method truly establishes that condition.
 
-- Certificate Transparency is historical and incomplete; names may be expired, unused or no longer controlled by the domain owner.
-- Wildcards do not prove that concrete hosts exist.
-- No DNS lookups, HTTP probes, brute force or port scans are made on the names; do not ask an agent to scan them without the owner's permission.
+Choose a specialist operation when the task is narrow. Use this page's report when its combined view or educational findings add value. Do not pass credentials, private hostnames or customer data into a public lookup. If a repair would change production, present the exact evidence, expected effect, propagation window and rollback before acting.
 
-See [Connect an MCP client](/mcp/connect/) and [Security and privacy](/reference/security/).
+Machine readers should branch on status and structured fields where available, not English punctuation. Treat network and parse errors as inconclusive. Re-run after a meaningful interval rather than repeatedly polling a third-party source.
 
 ## Limits
 
-- Only names that were on a publicly logged certificate appear; private CAs and plain HTTP sites leave no trace.
-- crt.sh can be slow or unavailable; the page says so rather than showing an empty list.
-- Pasted rows infer the domain from the last two labels.
-- Flags are words in names, not evidence about the service.
-- Nothing is stored.
+CT records certificates, not present DNS or ownership. A name may be expired, revoked, transferred, private behind split DNS or never deployed. Not every certificate is necessarily visible through one search service, rate limits can interrupt live lookup, and wildcard entries cannot be enumerated into real hosts. No connection or port scan occurs.
+
+All outputs are point-in-time observations. Resolver caching, negative caching, anycast, geo steering, redirects and intermittent upstream failures can change a later run. The service does not retain a monitoring history or notify on change. Local History is an interaction aid, not durable evidence.
+
+No result grants permission to probe a target or modify it. Use authorised accounts and owner-approved procedures for deeper checks. Where business, security or legal decisions depend on attribution, obtain confirmation from the responsible provider or domain operator.
 
 ## References
 
-- [RFC 6962, Certificate Transparency](https://www.rfc-editor.org/rfc/rfc6962): section 3. Obsoleted by [RFC 9162](https://www.rfc-editor.org/rfc/rfc9162), which deployed logs have not yet adopted.
-- [RFC 5280, Internet X.509 Public Key Infrastructure Certificate and CRL Profile](https://www.rfc-editor.org/rfc/rfc5280): section 4.2.1.6.
-- [RFC 9525, Service Identity in TLS](https://www.rfc-editor.org/rfc/rfc9525): section 6.3. Obsoletes [RFC 6125](https://www.rfc-editor.org/rfc/rfc6125).
-- [RFC 8659, DNS Certification Authority Authorization (CAA) Resource Record](https://www.rfc-editor.org/rfc/rfc8659): section 4.
-- [crt.sh](https://crt.sh/), the public log search the server queries.
+- [RFC 1034](https://www.rfc-editor.org/rfc/rfc1034), Domain Names — Concepts and Facilities, especially [section 4.3.2](https://www.rfc-editor.org/rfc/rfc1034#section-4.3.2) for resolver behavior.
+- [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035), Domain Names — Implementation and Specification, especially [section 3.2.1](https://www.rfc-editor.org/rfc/rfc1035#section-3.2.1) for resource-record types and classes.
+- [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110), HTTP Semantics, especially [section 3.7](https://www.rfc-editor.org/rfc/rfc9110#section-3.7) for intermediaries and [section 15](https://www.rfc-editor.org/rfc/rfc9110#section-15) for status codes when HTTP evidence is collected.
+- [Tamperbox Subdomain Finder](https://tamperbox.dev/subdomain-finder), the interactive tool and current Markdown mirror.

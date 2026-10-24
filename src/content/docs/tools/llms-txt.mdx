@@ -1,9 +1,9 @@
 ---
 title: llms.txt Checker & Generator
 description: How the llms.txt checker fetches and reads a site's llms.txt, the outline an agent builds from it, every rule it applies, how it compares the file with the sitemap and drafts a new one, and how to fix each finding.
-updated: 2026-10-20
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
-agentSummary: Method, finding reference and repair guide for the Tamperbox llms.txt checker and generator, which fetches /llms.txt, the home page, robots.txt and up to two sitemaps from the Tamperbox server, or reads a pasted file in the browser, checks it against the llmstxt.org proposal, compares it with the sitemap and drafts a file from what the site publishes.
+agentSummary: Method, finding reference and repair guide for the Tamperbox llms.txt checker and generator, which fetches /llms.txt, the home page, robots.txt and up to two top-level sitemaps with up to four children each from the Tamperbox server, or reads a pasted file in the browser, checks it against the llmstxt.org proposal, compares it with the sitemap and drafts a file from what the site publishes.
 prerequisites:
   - A public host name, or an llms.txt file to paste
 outputs:
@@ -12,9 +12,9 @@ limitations:
   - llms.txt is a proposal some AI tools read and many do not; links are checked for form, not requested; the draft names pages from the site's own links and paths
 ---
 
-The tool page is [tamperbox.dev/llms-txt](https://tamperbox.dev/llms-txt). It opens on a sample shop answered by a fixture, says whether its llms.txt follows the format and what an agent would read from it, and drafts a file from the site. This page is the long version: what is fetched, every rule, how the outline and the draft are made, and how to fix each finding.
+The tool page is [tamperbox.dev/llms-txt](https://tamperbox.dev/llms-txt). It checks `tamperbox.dev` live when opened,  says whether its llms.txt follows the format and what an agent would read from it, and drafts a file from the site. This page is the long version: what is fetched, every rule, how the outline and the draft are made, and how to fix each finding.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> a pasted llms.txt is read in your browser and never uploaded. A host name is sent to the Tamperbox server, which fetches <code>/llms.txt</code>, the home page, <code>/robots.txt</code> and up to two sitemaps without cookies; the file is read and the draft written in your browser. Nothing is stored. Sample hosts on the reserved <code>.example</code> zone are answered in the browser from a fixture.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> a pasted llms.txt is read in your browser and never uploaded. A host name is sent to the Tamperbox server, which fetches <code>/llms.txt</code>, the home page, <code>/robots.txt</code> and up to two top-level sitemaps, each with up to four index children, without cookies; the file is read and the draft written in your browser. Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history. Sample hosts on the reserved <code>.example</code> zone are answered in the browser from a fixture.</div>
 
 ## What the tool answers
 
@@ -32,7 +32,7 @@ The tool page is [tamperbox.dev/llms-txt](https://tamperbox.dev/llms-txt). It op
 
 ### A pasted file
 
-Text with a newline, or starting with `#`, `>`, a list link `- [` or a link `[Name](`, is read as llms.txt, in the browser. Nothing is fetched, so there is no draft and no sitemap comparison, and relative links cannot be resolved unless a host was checked just before. Files up to 2 MiB (`.txt`, `.md`) can be dropped or opened.
+Text with a newline, or starting with `#`, `>`, a list link `- [` or a link `[Name](`, is read as llms.txt, in the browser. Nothing is fetched, so there is no draft and no sitemap comparison, and relative links cannot be resolved unless the current programmatic load retains a base from the preceding host lookup; direct typing or pasting into the field clears that base. Files up to 2 MiB (`.txt`, `.md`) can be dropped or opened.
 
 A pasted address loses quotes, brackets and trailing punctuation and keeps the host; text that fits nothing stays as pasted.
 
@@ -44,17 +44,13 @@ A pasted address loses quotes, brackets and trailing punctuation and keeps the h
 
 ### Findings
 
-Worst first, line findings prefixed with their line; passes fold.
+Worst first, line findings prefixed with their line; passing findings remain visible.
 
-### History
+### Related checks and input transfer
 
-Every Break it, Heal it and **Check the draft** change, newest first, with Revert and Reset input. After a break with no repair, Heal it offers "Restore input before this break".
+Use Check the rest to open another website tool with the current address. Pasted files are not transferred through these links. Transfers temporarily use browser `sessionStorage` with a one-use random token in the URL fragment; the input itself is not in the URL. The destination accepts a transfer for less than one minute and removes the token. Manual checks still wait for their run button or Enter.
 
-### Take it further
-
-- **Redirect chain of llms.txt** opens the [redirect checker](https://tamperbox.dev/redirect-checker) on `https://host/llms.txt`.
-- **Does the first linked page answer?** opens the [website down checker](/tools/website-down-checker/) on the file's first link, resolved to a full address: this tool checks link form, not whether the pages exist.
-- **Certificate of a linked host outside the site** opens the [SSL certificate checker](/tools/ssl-checker/) on the first linked host that is not the site or its subdomain (documentation hosted elsewhere, for example), when there is one.
+To inspect a value from the result, copy that specific address into the relevant tool. A separate check collects new evidence and can return a different result; do not interpret navigation as confirmation of the original verdict.
 
 ### What an agent reads
 
@@ -72,7 +68,7 @@ A complete llms.txt built from the site, with a note saying how many link names 
 
 ### Fetching
 
-For a host, three fetches start together on `https://host`: `/llms.txt` (up to 5 redirects, first 2 MiB), the home page (up to 10 redirects, first 512 KiB of HTML) and `/robots.txt`. Then up to two sitemaps are read: those robots.txt lists, or `/sitemap.xml`, plus up to four children of a sitemap index. The home page and sitemaps feed the draft and the coverage check; if they fail, the file is still checked.
+For a host, three fetches start together on `https://host`: `/llms.txt` (up to 5 redirects, first 2 MiB), the home page (up to 10 redirects, first 512 KiB of HTML) and `/robots.txt`. Then up to two sitemaps are read: those robots.txt lists, or `/sitemap.xml`, plus up to four children of each top-level sitemap index. The home page and sitemaps feed the draft and the coverage check; if they fail, the file is still checked.
 
 | Response for /llms.txt | Severity |
 | --- | --- |
@@ -127,7 +123,7 @@ Headings, block quotes, list items and inline links are recognised by their Comm
 
 ### Sitemaps protocol and RFC 9309
 
-Sitemaps are found through robots.txt Sitemap lines ([RFC 9309, section 2.2.4](https://www.rfc-editor.org/rfc/rfc9309#section-2.2.4)) or at `/sitemap.xml`, and read as the [Sitemaps protocol](https://www.sitemaps.org/protocol.html) defines; the [robots.txt checker](/tools/robots-txt-checker/) validates them fully.
+Sitemaps are found through robots.txt Sitemap lines ([RFC 9309, section 2.2.4](https://www.rfc-editor.org/rfc/rfc9309#section-2.2.4)) or at `/sitemap.xml`, and read as the [Sitemaps protocol](https://www.sitemaps.org/protocol.html) defines; the [robots.txt checker](/tools/robots-txt-checker/) checks a bounded set of their syntax and entries.
 
 ## Finding reference
 
@@ -161,7 +157,7 @@ Exempt `/llms.txt` from the catch-all route, so the file is served before the ap
 
 ### Format problems
 
-Use Heal it for the name, extra H1s, relative links and links outside lists; each rewrites the whole file and logs the change. For list items without links and empty sections, add the links by hand. Then check again.
+Use Heal it for the name, extra H1s, relative links and links outside lists; each rewrites the whole file for review. For list items without links and empty sections, add the links by hand. Then check again.
 
 ### Choosing what to link
 
@@ -181,30 +177,28 @@ The first three are built from your own file when you entered a host or pasted o
 
 ## Worked example
 
-The page opens on `www.harbor-supply.example`, a sample shop on the reserved `.example` zone; its llms.txt, home page, robots.txt and sitemaps are answered by a fixture.
+The page opens with a live check of `tamperbox.dev`. It fetches llms.txt and supporting site material to build the outline and, when the home page is available, a draft. Link counts, findings and suggested sections depend on the current site.
 
-- The verdict: llms.txt with 5 links in 3 sections, and 3 things to fix.
-- Findings: a relative link (line 7), a link outside a list (line 11), a list item without a link (line 13); the summary is written as plain text, so "No summary" is INFO and the outline shows the note in its place; 12 sitemap pages are not linked.
-- Heal it offers to make links absolute and to put links in a list.
-- The draft lists 18 pages in 5 sections, 11 named from the shop's own navigation links and 7 from their paths, with legal pages under Optional.
-- Take it further offers the redirect chain of the file and whether its first linked page answers.
+Read the outline first: the name, summary, notes and H2 link lists should describe what a reader can learn. A file can be syntactically readable yet omit the task-specific pages an agent needs. Compare the draft's navigation-derived names with names inferred from URL paths; rename ambiguous entries before using them.
+
+Use **Check the draft** to load the generated text into the parser. This is a local input replacement, not publication. Review every destination and remove irrelevant links before saving the file at the site's root. A missing or blocked supporting sitemap can reduce coverage without making the existing llms.txt invalid. The checker does not request the linked pages, so verify important destinations independently before presenting the file as ready to publish.
 
 ## For agents
 
-The Tamperbox MCP server can fetch the same files; search its catalog for the site file operation and call it with the host and `llms.txt`. Keep these warnings:
+Use the Tamperbox MCP `search` tool to inspect the schema, then `execute` with `tamperbox.request` to call `POST /v1/tools/llms_txt`. Supply the required `domain` field as a public domain name. The operation is named `llms_txt`; the browser page’s hyphenated identifier is not the API operation name.
 
-- llms.txt is a proposal; its absence breaks nothing.
-- Links were checked for form, not fetched.
-- The draft is a starting point to review, not a file to publish unread.
+The operation fetches llms.txt and returns `evidence` and a parsed `report`. It does not fetch the home page and sitemap collection to generate the browser’s draft or coverage comparison. Links are parsed, not requested.
 
-See [Connect an MCP client](/mcp/connect/) and [Security and privacy](/reference/security/).
+Keep the input, observation time, source limitations and inconclusive results with any summary. Browser fixtures are demonstrations, not live MCP targets. Do not turn missing evidence into a passing check or infer that an inaccessible resource has been deleted.
+
+See [Connect an MCP client](/mcp/connect/), [Code mode](/mcp/code-mode/) and [Security and privacy](/reference/security/).
 
 ## Limits
 
-- One fetch each of llms.txt (2 MiB), the home page (512 KiB) and robots.txt, and up to two sitemaps with four children.
+- One fetch each of llms.txt (2 MiB), the home page (512 KiB) and robots.txt, and up to two top-level sitemaps with up to four children each.
 - Links are not requested.
 - The parser is line-based CommonMark; multi-line list items and reference links are not read as links.
-- Live checks are rate limited. Nothing is stored.
+- Live checks are rate limited. Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history.
 
 ## References
 
