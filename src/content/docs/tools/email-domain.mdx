@@ -1,7 +1,7 @@
 ---
 title: MX Lookup & Email Domain Checker
 description: How Tamperbox validates a mail domain, reads MX and address fallback records, identifies null MX, and explains what public routing evidence proves.
-updated: 2026-10-21
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox MX Lookup and Email Domain Checker, including null MX and address fallback.
 prerequisites:
@@ -39,6 +39,10 @@ Pasting anywhere outside another field replaces the source. Dropping or opening 
 ### When the lookup runs
 
 The live lookup runs after typing pauses for 700 milliseconds, on Enter, on leaving the field, after a file or page-wide paste, and when Refresh lookup is pressed. A newer edit aborts the previous request and increments a generation counter, so a slow older answer cannot repaint a newer or cleared input.
+
+### Reserved synthetic input
+
+Entering `harbor-supply.example` uses a fixed local mail-routing fixture instead of sending DNS requests. It contains one synthetic MX route and an unknown provider. This exception is for the documented reserved example only; other domains use the live server path. The checked line labels the synthetic run, and its records cannot demonstrate real delivery or provider ownership.
 
 ## Reading the result
 
@@ -155,7 +159,7 @@ Those values are observations, not durable claims. The page runs the real lookup
 
 ## For agents
 
-Agents can run the same live check through the Tamperbox MCP operation mapped to `email-domain`, or interpret pasted MX evidence with the bounded analysis operation. Preserve the evidence contract: report publication, observation time and limitations; never convert a routing pass into “mailbox exists” or “delivery works.”
+Agents can run the same live check through the Tamperbox MCP operation `email_domain`, or interpret pasted MX evidence with the bounded analysis operation. Preserve the evidence contract: report publication, observation time and limitations; never convert a routing pass into “mailbox exists” or “delivery works.”
 
 When automating, treat `dns_error` and `invalid_mx` as inconclusive, not negative. Keep `null_mx`, `nxdomain` and `no_mail` distinct. Cite the MX targets and preferences behind a conclusion, and carry provider attribution as a separate inference.
 

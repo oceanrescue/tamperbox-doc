@@ -1,7 +1,7 @@
 ---
 title: Email Provider Lookup
 description: How Tamperbox attributes public MX hostnames to mailbox services and gateways, handles mixed routes, and preserves uncertainty about the downstream mailbox host.
-updated: 2026-10-21
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, provider-signature reference and investigation guide for the Tamperbox Email Provider Lookup, with explicit gateway and uncertainty boundaries.
 prerequisites:
@@ -37,6 +37,10 @@ A maximum of 1,024 source characters is accepted. The canonical DNS name may be 
 Pasting `https://example.com/about`, `person@example.com`, `mailto:person@example.com`, or a quoted variant keeps only `example.com`, and the page announces the transformation. Text that yields no valid domain remains unchanged so the specific parser refusal is visible. Ordinary typing is never silently rewritten.
 
 The drop zone accepts a text file, a page-wide file drop and paste outside another field. File bytes are read in the browser and are not uploaded; only a valid domain derived from the text can be sent for DNS lookup.
+
+### Reserved synthetic input
+
+Entering `harbor-supply.example` uses a fixed local mail-routing fixture instead of sending DNS requests. It contains one synthetic MX route and an unknown provider. This exception is for the documented reserved example only; other domains use the live server path. The checked line labels the synthetic run, and its records cannot demonstrate real delivery or provider ownership.
 
 ### Lookup timing and cancellation
 
@@ -174,7 +178,7 @@ The default was selected because it teaches the most important distinction in th
 
 ## For agents
 
-Agents can run the live provider operation through Tamperbox MCP or analyse pasted MX records through the bounded capability operation. Always return the exact supporting hostnames, roles and preferences. Say “likely” for mailbox attribution and “gateway” for an edge service; never erase the limitation by shortening either to “uses provider X.”
+Agents can run the live `email_provider` operation through Tamperbox MCP or analyse pasted MX records through the bounded capability operation. Always return the exact supporting hostnames, roles and preferences. Say “likely” for mailbox attribution and “gateway” for an edge service; never erase the limitation by shortening either to “uses provider X.”
 
 Treat `mixed`, `unknown` and `inconclusive` as useful outcomes. Do not enrich them with unrelated web hosting, SPF or nameserver guesses unless the user explicitly asks for a broader investigation and the evidence is labelled separately. Never infer that an account exists.
 
