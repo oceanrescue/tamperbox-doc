@@ -1,0 +1,202 @@
+---
+title: CAA Lookup
+description: How the CAA Lookup finds the CAA records that govern a name, climbing to the closest parent that has some, reads which certificate authorities may issue ordinary and wildcard certificates, compares them with certificates already in the public logs, and how to write and confirm a policy.
+updated: 2026-10-24
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and guide for the Tamperbox CAA Lookup, which asks Cloudflare for CAA records over DNS over HTTPS, climbing parent names until it finds some (stopping below the top-level domain), or reads pasted records in the browser, then reports who may issue ordinary and wildcard certificates, unknown critical tags, empty issue values, unknown CA identifiers, a missing iodef contact, and logged issuers from a crt.sh search that the policy no longer allows.
+prerequisites:
+  - A DNS name, or CAA records to paste
+outputs:
+  - A verdict naming the CAs allowed, findings, who may issue ordinary and wildcard certificates, where refusals are reported, each record explained, and the answer as dig-style text
+limitations:
+  - CAs check CAA only at issuance; the certificate-log search can miss certificates or be unavailable, and a logged issuer outside the policy is not proof of mis-issuance; account and validation-method parameters are not evaluated
+---
+
+The tool page is [tamperbox.dev/caa-lookup](https://tamperbox.dev/caa-lookup). It opens on `harbor-supply.example`, a sample domain on the reserved `.example` zone that allows two certificate authorities, with sample certificate-log data beside it. This page is the long version: how a CA finds the records that apply, what each tag means, how the tool compares the policy with the certificates already issued, and how to write a policy that matches the services you use.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> a name is sent to the Tamperbox server, which asks Cloudflare for CAA records over DNS over HTTPS, one name at a time up the tree, and searches public certificate logs (crt.sh) for the registrable domain. Pasted records are read in your browser; nothing is looked up for them. Sample names under <code>.example</code> are answered in the browser. Ordinary lookup results are not persisted by this page. An explicit handoff temporarily stores its value in session storage for one-use transfer.</div>
+
+## What the tool answers
+
+CAA records name the certificate authorities that may issue certificates for a domain ([RFC 8659](https://www.rfc-editor.org/rfc/rfc8659)). Every publicly trusted CA must check them before issuing. The tool answers:
+
+1. **Which records apply to this name?** Its own, or those of the closest parent that has some.
+2. **Who may issue ordinary certificates, and who wildcard ones?**
+3. **Where are refused requests reported?** The iodef contact.
+4. **Does anything block issuance by accident?** An unknown critical tag, or an empty issue value.
+5. **Do the certificates already issued fit the policy?** Issuers in the public certificate logs that the policy would now refuse.
+
+It does not ask a CA what it would do, does not evaluate account or validation-method parameters, and cannot revoke anything: CAA governs issuance only.
+
+## Inputs
+
+### A name
+
+`example.com`, `www.example.com`, `api.shop.example.com`. The lookup runs when you stop typing, or on Enter. A pasted address or email address is reduced to its host or domain.
+
+### Pasted records
+
+Anything with a space or a quote is read as records, in the browser: dig answers, zone file lines, or bare `flags tag "value"` lines. A record that is not flags, tag and value is refused: "A CAA record is flags, tag and value, such as 0 issue "letsencrypt.org"." No parent is climbed and no certificate log is searched for pasted records.
+
+### Files
+
+Drop a `.txt` file anywhere on the page.
+
+## Reading the result
+
+### Verdict and chips
+
+"Let's Encrypt and Sectigo may issue for example.com." with "by the records at example.com" when they were inherited, and a line naming the CAs seen in the certificate logs. "No CAA records: any certificate authority may issue.", "No CA may issue ordinary certificates", or "Critical CAA tag needs review:" otherwise. The chips count the CAs and name each logged issuer the policy would refuse.
+
+### Where your input goes
+
+Pasted records stay in the browser; a name means CAA queries and one certificate-log search from our server.
+
+### Findings
+
+Failures, checks and notes first, the pass last.
+
+### CAA records
+
+A summary of who may issue ordinary certificates, who may issue wildcard certificates, and where refusals are reported; then one row per record with its tag, value (marked Critical when the flag is set) and meaning.
+
+### DNS response
+
+The answer as dig-style text, with a copy button.
+
+### History and Heal it
+
+History logs every Break it and Heal it change. For pasted records with an unknown critical tag, Heal it removes that record.
+
+### Take it further
+
+For a live name, the certificate the name serves now to the SSL Certificate Checker, where the issuer can be compared with the policy; the registrable domain to the Subdomain Finder, which lists every name in its certificates; and the zone that holds the records to the DNSSEC Checker, since CAs are asked to validate CAA with DNSSEC.
+
+## Method
+
+### 1. Finding the relevant records
+
+The server asks Cloudflare for CAA records at the name; the resolver follows aliases, as the RFC asks. If the name exists but has none, the page asks the parent, then its parent, and stops at the first name that has some. [RFC 8659 section 3](https://www.rfc-editor.org/rfc/rfc8659#section-3): "The search for a CAA RRset climbs the DNS name tree from the specified label up to, but not including, the DNS root "." until a CAA RRset is found." Records found at a parent are shown as inherited.
+
+### 2. Reading each record
+
+Each record is flags, tag and value ([RFC 8659 section 4.1.1](https://www.rfc-editor.org/rfc/rfc8659#section-4.1.1)). Bit 0 of the flags (value 128) is the issuer critical flag. Known tags are `issue`, `issuewild`, `iodef`, `issuemail` ([RFC 9495](https://www.rfc-editor.org/rfc/rfc9495)), `contactemail` and `contactphone`. The CA identifier is the value up to the first `;`; parameters after it are kept but not evaluated. Identifiers are named from a catalog of 16 (Let's Encrypt, Google Trust Services, Amazon, Sectigo and Comodo, DigiCert, GlobalSign, GoDaddy, ZeroSSL, SSL.com, Buypass, Entrust, HARICA, Certum).
+
+### 3. The policy
+
+- **Ordinary certificates**: the CAs named by `issue` records; any CA when there are none.
+- **Wildcard certificates**: the CAs named by `issuewild` records when there are any, otherwise the `issue` rule. [RFC 8659 section 4.3](https://www.rfc-editor.org/rfc/rfc8659#section-4.3): "If at least one issuewild Property is specified in the Relevant RRset for a Wildcard Domain Name, each issue Property MUST be ignored when processing a request for that Wildcard Domain Name."
+- **Refusals reported to**: the `iodef` values ([section 4.4](https://www.rfc-editor.org/rfc/rfc8659#section-4.4)).
+
+### 4. Rules
+
+- **No CAA records** (info): any CA may issue. The default for most of the web, not an error.
+- **Critical flag on an unknown tag** (fail). [RFC 8659 section 4.1](https://www.rfc-editor.org/rfc/rfc8659#section-4.1): "A CA MUST NOT issue certificates for any FQDN if the Relevant RRset for that FQDN contains a CAA critical Property for an unknown or unsupported Property Tag." A tag this tool does not know may be one a CA does not know either.
+- **No CA may issue ordinary certificates** (info): an `issue` record with no CA, such as `0 issue ";"`. [Section 4.2](https://www.rfc-editor.org/rfc/rfc8659#section-4.2): owners "can use an issue Property Tag with no issuer-domain-name to request no issuance."
+- **identifier is not a known CA identifier** (info): the value is not in the catalog. It may still be valid.
+- **No iodef contact** (info): CAs that refuse a request have nowhere to report it.
+- **Ordinary certificate issuance is unrestricted** (info): records exist, but none of them is an `issue` record.
+- **Issuance is limited** (pass): N CAs may issue ordinary certificates.
+
+### 5. Comparing with the certificate logs
+
+For a looked-up name, the server searches crt.sh for certificates under the registrable domain. Only entries for exactly this name, or the wildcard covering it, are kept, and only when the name still has at least one valid certificate; every issuer the logs show for such an entry is counted, including issuers of its earlier certificates, and named from the same catalog. Each issuer that the policy would refuse for that kind of certificate gives a check, "CA issued certificates here but is not allowed" (or "issued wildcard certificates"). It is a check, not a failure: the certificate may predate the record, or come from a service issuing on your behalf, and its next renewal with that CA will be refused.
+
+When the search does not answer (crt.sh limits its rate and is sometimes down), an info finding says "Certificate logs not checked", and the verdict says so, so a missing comparison is never read as a clean one. When the public suffix data needed to find the registrable domain cannot load, a check says "Certificate comparison not checked".
+
+## Standards and conformance
+
+| Specification | Sections used | How the tool applies it | Where it stops |
+| --- | --- | --- | --- |
+| [RFC 8659](https://www.rfc-editor.org/rfc/rfc8659) | [3](https://www.rfc-editor.org/rfc/rfc8659#section-3), [4.1](https://www.rfc-editor.org/rfc/rfc8659#section-4.1), [4.1.1](https://www.rfc-editor.org/rfc/rfc8659#section-4.1.1), [4.2](https://www.rfc-editor.org/rfc/rfc8659#section-4.2), [4.3](https://www.rfc-editor.org/rfc/rfc8659#section-4.3), [4.4](https://www.rfc-editor.org/rfc/rfc8659#section-4.4), [5.1](https://www.rfc-editor.org/rfc/rfc8659#section-5.1) | Tree climbing, the critical flag, issue, issuewild precedence and iodef as specified | The climb stops below the top-level domain, where the RFC includes it; TLDs rarely publish CAA. Obsoletes [RFC 6844](https://www.rfc-editor.org/rfc/rfc6844) |
+| [RFC 8657](https://www.rfc-editor.org/rfc/rfc8657) | | `accounturi` and `validationmethods` parameters are shown in the value | Not evaluated: a policy that limits an account still reads as "may issue" |
+| [RFC 9495](https://www.rfc-editor.org/rfc/rfc9495) | | `issuemail` is a known tag and explained | S/MIME issuance is not summarised |
+| [CA/Browser Forum Baseline Requirements](https://cabforum.org/working-groups/server/baseline-requirements/documents/) | 3.2.2.8, CAA records processing | The reason every public CA checks CAA | The tool does not model CA-specific exceptions |
+
+[RFC 8659 section 5.1](https://www.rfc-editor.org/rfc/rfc8659#section-5.1): "The use of DNSSEC to authenticate CAA RRs is strongly RECOMMENDED but not required." The tool does not validate the records it reads; the DNSSEC Checker reads the zone's chain.
+
+## Finding reference
+
+### Policy findings
+
+| Finding | Severity | Source | What it means | Fix |
+| --- | --- | --- | --- | --- |
+| Issuance is limited | pass | [RFC 8659 4.2](https://www.rfc-editor.org/rfc/rfc8659#section-4.2) | Only the named CAs may issue | Add a CA before you switch to it |
+| Critical flag on an unknown tag | fail | [RFC 8659 4.1](https://www.rfc-editor.org/rfc/rfc8659#section-4.1) | Every CA that does not know the tag refuses to issue | Set the flag to 0, or remove the record |
+| CA issued certificates here but is not allowed | check | [RFC 8659 3](https://www.rfc-editor.org/rfc/rfc8659#section-3) | The current policy does not authorize that observed issuer for the certificate type | Allow the CA, or move that service to an allowed CA |
+
+### Incomplete and informational evidence
+
+| Finding | Severity | Source | What it means | Fix |
+| --- | --- | --- | --- | --- |
+| Certificate comparison not checked | check | | The apex could not be computed; logs were not searched | Reload |
+| No CAA records | info | [RFC 8659 3](https://www.rfc-editor.org/rfc/rfc8659#section-3) | Any CA may issue | Publish issue records for the CAs you use |
+| No CA may issue ordinary certificates | info | [RFC 8659 4.2](https://www.rfc-editor.org/rfc/rfc8659#section-4.2) | Every ordinary request is refused | Replace with an issue record if the name needs certificates |
+| identifier is not a known CA identifier | info | [RFC 8659 4.2](https://www.rfc-editor.org/rfc/rfc8659#section-4.2) | Possibly a typo, possibly a CA the catalog lacks | Check the CA's documentation |
+| No iodef contact | info | [RFC 8659 4.4](https://www.rfc-editor.org/rfc/rfc8659#section-4.4) | No reporting destination is published; reporting is not guaranteed even with iodef | Add `0 iodef "mailto:…"` |
+| Ordinary certificate issuance is unrestricted | info | [RFC 8659 3](https://www.rfc-editor.org/rfc/rfc8659#section-3) | Records exist but none restricts issue | Add issue records |
+| Certificate logs not checked | info | | The comparison was not made | Look the name up again later |
+| The name does not exist | fail | [RFC 2308 2.1](https://www.rfc-editor.org/rfc/rfc2308#section-2.1) | No name to issue for | Check the name |
+| The resolver could not answer | fail | [RFC 1035 4.1.1](https://www.rfc-editor.org/rfc/rfc1035#section-4.1.1) | CAs that see this failure may refuse to issue | Check the DNSSEC chain |
+
+## Guide
+
+### Write a policy
+
+1. List every service that gets certificates for your names: your web host or CDN, your mail host, a status page, a help desk. The [SSL Certificate Checker](https://tamperbox.dev/ssl-checker) shows the issuer of what each serves; the [Subdomain Finder](https://tamperbox.dev/subdomain-finder) lists the names in your certificates.
+2. Publish one `issue` record per CA at the registrable domain: `example.com. 3600 IN CAA 0 issue "letsencrypt.org"`.
+3. Add `issuewild` only if wildcard certificates come from a different CA, and `0 iodef "mailto:security@example.com"` for reports.
+4. Look a deep subdomain up here to confirm it inherits the policy, and check that no logged issuer is flagged.
+
+Confirm from a terminal: `dig +short CAA example.com` lists `flags tag "value"` lines; `dig +short CAA www.example.com` returns nothing when the name inherits.
+
+### A renewal was refused
+
+Look the exact name up here. If the CA that refused is not in the policy, add it; if the policy is inherited from a parent you do not control, publish records at the name itself, which then take precedence. If a critical tag is flagged, set its flag to 0.
+
+### Changing CA
+
+Add the new CA's `issue` record first, issue with it, and only then remove the old one.
+
+### Break it cases
+
+| Case | What it loads | What it shows |
+| --- | --- | --- |
+| Inherited from the parent | `shop.harbor-supply.example` | The parent's records, marked inherited |
+| No CAA records | a sample domain with none | "Any certificate authority may issue" |
+| Critical unknown tag | your records plus `128 tbs "unknown"` | The critical-tag failure, and Heal it removing it |
+| Nobody may issue | `0 issue ";"` at your name | "No CA may issue ordinary certificates" |
+
+## Worked example
+
+`harbor-supply.example` publishes four records: `0 issue "letsencrypt.org"`, `0 issue "sectigo.com"`, `0 issuewild "sectigo.com"` and `0 iodef "mailto:security@harbor-supply.example"`. Ordinary certificates may come from Let's Encrypt or Sectigo, wildcard certificates from Sectigo only, and refusals are reported by mail. The sample's certificate-log data shows current certificates for this name from Sectigo and Let's Encrypt, both allowed, so the verdict reads "Let's Encrypt and Sectigo may issue for harbor-supply.example." with that comparison under it, and Findings carries one pass. Other certificates in the sample logs, for subdomains, are not counted against this name. Press "Inherited from the parent" to see `shop.harbor-supply.example` governed by these records, and "Critical unknown tag" to see the one mistake that blocks every CA.
+
+## For agents
+
+The Tamperbox MCP server exposes `caa_lookup` with a `name`. Unlike this page, the operation reads the CAA records at the name itself: parent-domain inheritance is not evaluated, so call it again for each parent when the name has none. It returns an `evidence` object containing the question, status, flags, answer and authority, plus `records` for the requested type. Keep these warnings with any conclusion:
+
+- Authorization does not prove that a certificate was issued or is trusted.
+- CAs check CAA only at issuance; existing certificates are unaffected.
+- One answer from one resolver at one moment.
+
+See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/).
+
+The operation also returns `policy`, `checks` and an explicit exact-name scope. It does not perform the page’s certificate-log comparison.
+
+## Limits
+
+- The climb stops below the top-level domain.
+- Account and validation-method parameters are not evaluated.
+- The certificate-log search can miss recent or private certificates, and can be unavailable.
+- A logged issuer outside the policy is not proof of mis-issuance.
+- Pasted records are read as text, with no climbing and no log search.
+- Sample names under `.example` are answered in the browser.
+
+## References
+
+- [RFC 8659](https://www.rfc-editor.org/rfc/rfc8659): DNS Certification Authority Authorization (CAA) resource record. Sections 3, 4.1, 4.1.1, 4.2, 4.3, 4.4, 5.1. Obsoletes [RFC 6844](https://www.rfc-editor.org/rfc/rfc6844).
+- [RFC 8657](https://www.rfc-editor.org/rfc/rfc8657): CAA record extensions for account URI and ACME method binding.
+- [RFC 9495](https://www.rfc-editor.org/rfc/rfc9495): CAA processing for email addresses.
+- [CA/Browser Forum Baseline Requirements](https://cabforum.org/working-groups/server/baseline-requirements/documents/): section 3.2.2.8, CAA records processing.
+- [crt.sh](https://crt.sh/): the certificate-log search the comparison uses.
+- [RFC 2308](https://www.rfc-editor.org/rfc/rfc2308) section 2.1 and [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035) section 4.1.1, for the failure states.

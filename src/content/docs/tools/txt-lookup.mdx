@@ -1,0 +1,203 @@
+---
+title: TXT Record Lookup
+description: How the TXT Record Lookup reads every TXT record at a name, names what each one is for, measures the strings it is split into, flags duplicate SPF records and over-long strings, and how to fix and confirm each one.
+updated: 2026-10-24
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and guide for the Tamperbox TXT Record Lookup, which asks Cloudflare for the TXT records at a name over DNS over HTTPS or reads pasted records in the browser, names each record by its prefix (SPF, DMARC, DKIM key, MTA-STS, TLS reporting, BIMI or one of 35 verification tokens), and flags more than one SPF record and character-strings over 255 characters.
+prerequisites:
+  - A DNS name, or TXT records to paste (a dig answer, zone file lines or bare values)
+outputs:
+  - A verdict naming the records found, findings, one row per record with its kind, length and string count, and the answer as dig-style text
+limitations:
+  - Records are named from their prefix, not evaluated; SPF and DMARC policies are checked by their own tools; records at prefixed names such as _dmarc need that full name
+---
+
+The tool page is [tamperbox.dev/txt-lookup](https://tamperbox.dev/txt-lookup). It opens on `harbor-supply.example`, a sample domain on the reserved `.example` zone, answered in the browser: an SPF record, seven verification tokens and one value the tool does not recognise. This page is the long version: how records are read and named, the two rules the tool enforces, and how to publish a TXT record that receivers read the way you wrote it.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> a name is sent to the Tamperbox server, which asks Cloudflare for its TXT records over DNS over HTTPS and returns them. Pasted records are parsed in your browser and never uploaded. Sample names under <code>.example</code> are answered in the browser. Ordinary lookup results are not persisted by this page. An explicit handoff temporarily stores its value in session storage for one-use transfer.</div>
+
+## What the tool answers
+
+A TXT record is free text attached to a name ([RFC 1035 section 3.3.14](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.14)): "the semantics of the text depends on the domain where it is found." In practice almost every TXT record is read by one machine for one purpose. The tool answers:
+
+1. **What does this name publish?** Every TXT record, in full.
+2. **What is each record for?** SPF, DMARC, a DKIM key, MTA-STS, TLS reporting, BIMI, a verification token for a known service, or something else.
+3. **Is any value split wrongly?** How long each value is, how many strings it is stored in, and whether any one string is over the 255-character limit.
+4. **Is there more than one SPF record?** The one structural mistake in TXT data that breaks mail for a whole domain.
+
+It does not evaluate an SPF or DMARC policy, does not prove that a verification token is still in use, and does not look below the name you give: a DMARC record lives at `_dmarc.<domain>` and a DKIM key at `<selector>._domainkey.<domain>`, so the apex does not show them.
+
+## Inputs
+
+### A name
+
+`example.com`, `_dmarc.example.com`, `selector1._domainkey.example.com`. The lookup runs when you stop typing, or at once on Enter. The name is validated in the browser and on the server (at most 253 characters, labels of letters, digits, hyphens and underscores). A pasted web address or email address is reduced to its host or domain, and the hint names what was kept; text that does not reduce stays as pasted.
+
+### Pasted records
+
+Anything with a space or a quote in it is read as records, in the browser. Three shapes are accepted:
+
+- a dig answer: `example.com. 300 IN TXT "v=spf1 -all"`;
+- zone file lines, with the class and TTL in either order;
+- bare values, one per line, which are taken as TXT data with no owner name.
+
+Comments after a `;` outside quotes are dropped. The page cannot know whether DNS serves pasted records today; the verdict says "Read from the pasted records."
+
+### Files
+
+Drop a `.txt` file anywhere on the page. It is read in the browser.
+
+## Reading the result
+
+### Verdict and chips
+
+"9 TXT records at example.com: SPF, 7 verification tokens, 1 other." when nothing is wrong; the first failure otherwise, for example "2 SPF records:". The line under it says who answered. The chips count the records and, when there are any, the problems.
+
+### Where your input goes
+
+Pasted records stay in the browser; a name means one TXT query from our server. Both are true for every input.
+
+### Findings
+
+The failures, worst first, or one pass saying how many records were read.
+
+### TXT records
+
+One row per record: its kind as a tag, its length in characters, how many strings it is stored in, and the joined value. A row with an over-long string is marked as failing.
+
+### DNS response
+
+The answer as dig-style text, with a copy button.
+
+### History and Heal it
+
+History logs every Break it and Heal it change. For pasted records with an over-long string, Heal it splits every value into quoted strings of 255 characters or fewer.
+
+### Take it further
+
+The owner name of each recognised record is handed to the specialist for a fresh lookup: the SPF owner to the SPF Checker, a DMARC record (or a domain that publishes SPF) to the DMARC Checker, a DKIM key at its full name to the DKIM Checker, an MTA-STS record to the MTA-STS Checker, a BIMI record to the BIMI Checker. Each opens the other tool with the value in its box; the input stays out of the URL; a temporary random fragment identifies a one-use transfer held in session storage.
+
+## Method
+
+### 1. Reading the strings
+
+A TXT record holds one or more character-strings. [RFC 1035 section 3.3](https://www.rfc-editor.org/rfc/rfc1035#section-3.3) defines one as "a single length octet followed by that number of characters", up to 256 octets including the length octet: 255 characters of text. Resolvers and our server print each string in double quotes, so the page reads every quoted string, unescapes nothing it does not need to, and joins them with no separator to get the record's value. That matches [RFC 7208 section 3.3](https://www.rfc-editor.org/rfc/rfc7208#section-3.3): the strings "MUST be treated as if those strings are concatenated together without adding spaces." A record with no quotes is taken as one value.
+
+### 2. Naming each record
+
+The joined value is compared with these prefixes, in order; the first match names the record.
+
+| Kind | Rule | Where the record should live |
+| --- | --- | --- |
+| SPF | starts with `v=spf1`, case-insensitive, followed by a word break | the domain that sends, [RFC 7208 section 4.5](https://www.rfc-editor.org/rfc/rfc7208#section-4.5) |
+| DMARC | starts with `v=DMARC1` | `_dmarc.<domain>`, [RFC 7489 section 6.1](https://www.rfc-editor.org/rfc/rfc7489#section-6.1) |
+| DKIM key | starts with `v=DKIM1`, or carries a `p=` of 40 or more base64 characters | `<selector>._domainkey.<domain>`, [RFC 6376 section 3.6.2.1](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.2.1) |
+| MTA-STS | starts with `v=STSv1` | `_mta-sts.<domain>`, [RFC 8461 section 3.1](https://www.rfc-editor.org/rfc/rfc8461#section-3.1) |
+| TLS reporting | starts with `v=TLSRPTv1` | `_smtp._tls.<domain>`, [RFC 8460 section 3](https://www.rfc-editor.org/rfc/rfc8460#section-3) |
+| BIMI | starts with `v=BIMI1` | `<selector>._bimi.<domain>` |
+| Service verification | starts with one of 35 catalogued prefixes, for example `google-site-verification=`, `MS=ms`, `facebook-domain-verification=`, `apple-domain-verification=` | the name the service asked for, usually the apex |
+| Other | anything else | |
+
+The verdict counts the kinds, puts the tokens together as "N verification tokens", and counts the rest as "other". A verification token says only that someone once proved control of the domain to that service; it does not prove a current account.
+
+### 3. Rule: one SPF record per name
+
+[RFC 7208 section 3.2](https://www.rfc-editor.org/rfc/rfc7208#section-3.2): "A domain name MUST NOT have multiple records that would cause an authorization check to select more than one record." And [section 4.5](https://www.rfc-editor.org/rfc/rfc7208#section-4.5): "If the resultant record set includes more than one record, check_host() produces the "permerror" result." Two or more records named SPF on this page give a fail, "N SPF records". Every receiver that evaluates SPF for the domain gets permerror instead of a pass or fail, so SPF cannot contribute a pass to DMARC; mail then depends on an aligned DKIM signature.
+
+### 4. Rule: no character-string over 255 characters
+
+Any quoted string longer than 255 characters gives a fail, "A KIND string is N characters". A DNS server cannot store it as one string, so a provider's control panel either refuses it, cuts it, or splits it on its own; the record receivers read is then not the one you wrote. The fix is to split the value into several quoted strings in the same record, which receivers join back together (step 1). The tool does not limit the total length of a record: long DKIM keys are normally stored as two or three strings.
+
+### What the tool does not judge
+
+The content of a record is not evaluated: an SPF record with eleven lookups or a DMARC record with a typo pass here. [RFC 7208 section 3.4](https://www.rfc-editor.org/rfc/rfc7208#section-3.4) also asks that an SPF answer stay small enough to fit in 512 octets; the page shows lengths but does not apply that limit. Use the [SPF Checker](https://tamperbox.dev/spf-checker) and the [DMARC Checker](https://tamperbox.dev/dmarc-checker) for the content.
+
+## Standards and conformance
+
+| Specification | Sections used | How the tool applies it | Where it stops |
+| --- | --- | --- | --- |
+| [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035) | [3.3](https://www.rfc-editor.org/rfc/rfc1035#section-3.3), [3.3.14](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.14) | Each quoted string is measured against the 255-character limit; strings are joined for the value | Escapes inside strings are shown as the server prints them |
+| [RFC 7208](https://www.rfc-editor.org/rfc/rfc7208) | [3.2](https://www.rfc-editor.org/rfc/rfc7208#section-3.2), [3.3](https://www.rfc-editor.org/rfc/rfc7208#section-3.3), [4.5](https://www.rfc-editor.org/rfc/rfc7208#section-4.5) | More than one SPF record is a fail; strings are joined without spaces | SPF is detected with a word break after `v=spf1`, slightly more lenient than the "space or end" the RFC requires; terms are not evaluated |
+| [RFC 7489](https://www.rfc-editor.org/rfc/rfc7489) | [6.1](https://www.rfc-editor.org/rfc/rfc7489#section-6.1) | A `v=DMARC1` value is named DMARC and handed to the DMARC Checker | Tags are not parsed here |
+| [RFC 6376](https://www.rfc-editor.org/rfc/rfc6376) | [3.6.2.1](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.2.1) | A key at `<selector>._domainkey` is handed to the DKIM Checker | Keys are not decoded here |
+| [RFC 8461](https://www.rfc-editor.org/rfc/rfc8461) and [RFC 8460](https://www.rfc-editor.org/rfc/rfc8460) | [3.1](https://www.rfc-editor.org/rfc/rfc8461#section-3.1), [3](https://www.rfc-editor.org/rfc/rfc8460#section-3) | `v=STSv1` and `v=TLSRPTv1` values are named | The policy file and report addresses are checked by the MTA-STS Checker |
+
+## Finding reference
+
+| Finding | Severity | Source | What it means for receivers | Fix |
+| --- | --- | --- | --- | --- |
+| N TXT records read | pass | [RFC 1035 3.3.14](https://www.rfc-editor.org/rfc/rfc1035#section-3.3.14) | Every record is well formed | None |
+| N SPF records | fail | [RFC 7208 3.2](https://www.rfc-editor.org/rfc/rfc7208#section-3.2), [4.5](https://www.rfc-editor.org/rfc/rfc7208#section-4.5) | SPF returns permerror for every message from the domain | Merge into one record |
+| A KIND string is N characters | fail | [RFC 1035 3.3](https://www.rfc-editor.org/rfc/rfc1035#section-3.3) | The record receivers read differs from the one you wrote, or was refused | Split into strings of 255 characters or fewer |
+| No TXT record at name | info | [RFC 2308 2.2](https://www.rfc-editor.org/rfc/rfc2308#section-2.2) | Nothing to read here; a service looking for its token finds none | Publish at the exact name the service gave |
+| The name does not exist | fail | [RFC 2308 2.1](https://www.rfc-editor.org/rfc/rfc2308#section-2.1) | No record of any type at this name | Check the name; add the record |
+| The resolver could not answer | fail | [RFC 1035 4.1.1](https://www.rfc-editor.org/rfc/rfc1035#section-4.1.1) | Validating resolvers return nothing for the name | Check the zone's DNSSEC chain |
+
+## Guide
+
+### Two SPF records
+
+Usually a second service told you to "add this TXT record" and you did, next to the one you had. Merge them: keep one `v=spf1` record with every `include:`, `ip4:` and `ip6:` term from both and one `all` at the end, then delete the other. Paste both into the [SPF Checker](https://tamperbox.dev/spf-checker), which merges them and counts the DNS lookups the result costs. Confirm with `dig +short TXT example.com`: exactly one line starts with `"v=spf1`.
+
+### A string over 255 characters
+
+Most providers split long values for you when you paste them whole; a few store them as typed and fail later. Write the record as quoted pieces of at most 255 characters each, side by side in one record:
+
+```text
+example.com. 3600 IN TXT "v=spf1 include:_spf.google.com include:mailgun.org ... " "include:sendgrid.net -all"
+```
+
+Then look the name up here: the record shows "in 2 strings" and no failure. `dig +short TXT example.com` prints the pieces in quotes; that is how it should look.
+
+### A verification token the service cannot find
+
+Tokens live where the service says, often the apex, sometimes a prefixed name such as `_github-challenge-<org>.example.com`. Look that exact name up here. If the token is there and the service still fails, the record may have been added minutes ago: resolvers cache an empty answer for the zone's negative TTL (the last field of its SOA).
+
+### Records that live at prefixed names
+
+A DMARC record is at `_dmarc.example.com`, a DKIM key at `selector1._domainkey.example.com`, MTA-STS at `_mta-sts.example.com`. The Break it case "The DMARC name" looks up the DMARC name of your domain.
+
+### Break it cases
+
+| Case | What it loads | What it shows |
+| --- | --- | --- |
+| One string too long | your SPF record, pasted back as one string over 255 characters | The length failure, and Heal it splitting the string |
+| Two SPF records | your records plus a second SPF record | "2 SPF records" |
+| The DMARC name | `_dmarc.` plus your registrable domain | The DMARC record, handed on to the DMARC Checker |
+| No TXT records | `nohost.` in front of your name | A name that does not exist |
+
+## Worked example
+
+`harbor-supply.example` publishes nine TXT records: one SPF record that includes four sending services and one address, seven verification tokens for services the catalogue knows (two for Google, then Microsoft 365, Atlassian, Stripe, DocuSign and Meta), and one token for a service it does not, shown as Other. The verdict reads "9 TXT records at harbor-supply.example: SPF, 7 verification tokens, 1 other." with "The sample zone answered." under it, since no resolver was asked. There is nothing to fix; Take it further offers the SPF owner name to the SPF Checker and the domain to the DMARC Checker, both of which answer the sample in the browser too.
+
+Press "Two SPF records" and the page loads the same nine records plus a second SPF record, as pasted text: the verdict turns to "2 SPF records:" and the cards explain permerror. Press "One string too long" and the SPF record comes back as one string of more than 255 characters; Heal it splits it, and Revert brings the break back.
+
+## For agents
+
+The Tamperbox MCP server exposes `txt_lookup` with a `name`. It returns an `evidence` object containing the question, status, flags, answer and authority, plus `records` for the requested type, with each record's text as the resolver returned it. Keep these warnings with any conclusion:
+
+- A verification string does not prove a current service account.
+- The record's kind comes from its prefix; SPF and DMARC content is not evaluated (use the SPF and DMARC operations).
+- One answer from one resolver at one moment.
+
+See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/).
+
+## Limits
+
+The DNS wire limit is 255 octets per character-string. The current page measures JavaScript string length and splits pasted text into 255-character pieces; for non-ASCII text or escape sequences this is not a wire-byte validator. Confirm the encoded record with your DNS provider.
+
+- Kinds come from prefixes and a catalogue of 35 token formats; an unknown token shows as Other.
+- No policy evaluation: an SPF record that would fail evaluation still passes here.
+- Records at prefixed names are found only when you ask for that name.
+- Pasted records are read as text; the page cannot say whether DNS serves them.
+- Sample names under `.example` are answered in the browser.
+
+## References
+
+- [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035): sections 3.3 (character-strings) and 3.3.14 (TXT RDATA).
+- [RFC 7208](https://www.rfc-editor.org/rfc/rfc7208): SPF. Sections 3.2 (multiple records), 3.3 (multiple strings), 3.4 (record size), 4.5 (selecting records).
+- [RFC 7489](https://www.rfc-editor.org/rfc/rfc7489): DMARC. Section 6.1, the `_dmarc` name.
+- [RFC 6376](https://www.rfc-editor.org/rfc/rfc6376): DKIM. Section 3.6.2.1, the `_domainkey` namespace.
+- [RFC 8461](https://www.rfc-editor.org/rfc/rfc8461): MTA-STS. Section 3.1, the `_mta-sts` record.
+- [RFC 8460](https://www.rfc-editor.org/rfc/rfc8460): SMTP TLS reporting. Section 3, the `_smtp._tls` record.
+- [RFC 2308](https://www.rfc-editor.org/rfc/rfc2308): negative caching. Sections 2.1 and 2.2.

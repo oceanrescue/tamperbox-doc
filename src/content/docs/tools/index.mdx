@@ -20,29 +20,59 @@ Each tool's documentation has the same shape, so a finding on the page always ha
 | Method | Every rule the tool applies, in the order it applies them, with the exact wording of each finding | "Read the method" on the What does it mean and Tool limitations cards |
 | Finding reference | One row per finding: severity, what it means for whoever receives the output, the fix | The finding itself |
 | Guide | Step by step, for each situation the tool can put you in, including how to verify the fix | "Step by step on docs" on the How to fix it card |
-| Worked example | The live default or controlled sample the page opens on, read end to end, and what each Break it case shows | "Worked examples on docs" |
+| Worked example | The live default or an explicitly loaded controlled sample, read end to end, and what each Break it case shows | "Worked examples on docs" |
 | For agents | How to run the same check through the MCP server and what the result does not prove | The For agents band on the page |
 
 <div class="tb-doc-grid">
+  <a class="tb-doc-card" href="/tools/dns-lookup/"><strong>DNS Lookup</strong><span>Any record type from a public resolver or the zone itself, with status, flags and the DNSSEC answer bit.</span></a>
+  <a class="tb-doc-card" href="/tools/txt-lookup/"><strong>TXT Record Lookup</strong><span>Every TXT record on a name, named by what it is for, with its strings measured against the 255-character limit.</span></a>
+  <a class="tb-doc-card" href="/tools/cname-lookup/"><strong>CNAME Lookup</strong><span>The alias chain from a name to its address, with dangling targets, apex aliases and loops caught.</span></a>
+  <a class="tb-doc-card" href="/tools/ns-lookup/"><strong>NS Lookup</strong><span>The nameservers a zone delegates to, the provider behind each, and the unfinished migration.</span></a>
+  <a class="tb-doc-card" href="/tools/soa-lookup/"><strong>SOA Lookup</strong><span>A zone’s SOA field by field, the serial read as a date, and the four timers checked.</span></a>
+  <a class="tb-doc-card" href="/tools/aaaa-lookup/"><strong>AAAA Lookup</strong><span>A name’s IPv6 addresses, sorted by kind, with the network behind each and the IPv4 question answered.</span></a>
+  <a class="tb-doc-card" href="/tools/srv-lookup/"><strong>SRV Lookup</strong><span>The servers a service names, in priority order, with each one’s share of connections.</span></a>
+  <a class="tb-doc-card" href="/tools/caa-lookup/"><strong>CAA Lookup</strong><span>Which certificate authorities may issue for a name, inherited from parents, against the certificates already logged.</span></a>
+  <a class="tb-doc-card" href="/tools/dns-propagation/"><strong>DNS Propagation Checker</strong><span>Twelve public resolvers against the zone’s own answer, with the cache time left on every old answer.</span></a>
+  <a class="tb-doc-card" href="/tools/json-to-yaml/"><strong>JSON to YAML Converter</strong><span>Convert locally, reject duplicate keys and unsafe integers, and verify the resulting data.</span></a>
+  <a class="tb-doc-card" href="/tools/yaml-to-json/"><strong>YAML to JSON Converter</strong><span>Resolve compatible YAML values, inspect presentation loss, and test aliases and numeric limits.</span></a>
+  <a class="tb-doc-card" href="/tools/cdn-detector/"><strong>CDN Detector</strong><span>How Tamperbox combines DNS, network and HTTPS response clues to identify a likely content delivery network.</span></a>
+  <a class="tb-doc-card" href="/tools/dns-provider/"><strong>DNS Provider Lookup</strong><span>How Tamperbox groups authoritative nameservers, recognises providers, and flags fragile or mixed delegation.</span></a>
+  <a class="tb-doc-card" href="/tools/domain-health/"><strong>Domain Health Check</strong><span>How Tamperbox combines DNS, mail, TLS, HTTP and security-header observations into one bounded health report.</span></a>
+  <a class="tb-doc-card" href="/tools/website-hosting/"><strong>Website Hosting Checker</strong><span>How Tamperbox follows website DNS, maps public addresses to networks, and compares the apex with www.</span></a>
+  <a class="tb-doc-card" href="/tools/website-technology/"><strong>Website Technology Detector</strong><span>How Tamperbox identifies web technologies from bounded HTML and response-header signatures without executing the page.</span></a>
+  <a class="tb-doc-card" href="/tools/saas-stack/"><strong>SaaS Stack Detector</strong><span>How Tamperbox reads public TXT records for service-verification tokens and SPF senders without claiming that an account is active.</span></a>
+  <a class="tb-doc-card" href="/tools/subdomain-finder/"><strong>Subdomain Finder</strong><span>How Tamperbox extracts DNS names from public Certificate Transparency observations and labels risky-looking names.</span></a>
+  <a class="tb-doc-card" href="/tools/email-domain/"><strong>MX Lookup &amp; Email Domain Checker</strong><span>How Tamperbox validates a mail domain, reads MX and address fallback records, identifies null MX, and explains what public routing evidence proves.</span></a>
+  <a class="tb-doc-card" href="/tools/email-provider/"><strong>Email Provider Lookup</strong><span>How Tamperbox attributes public MX hostnames to mailbox services and gateways, handles mixed routes, and preserves uncertainty about the downstream mailbox host.</span></a>
   <a class="tb-doc-card" href="/tools/ssl-checker/"><strong>SSL Certificate Checker</strong><span>The certificate a server really sends, its chain on one time axis, the names it covers, the connection it negotiated.</span></a>
+  <a class="tb-doc-card" href="/tools/dane-checker/"><strong>DANE &amp; TLSA Checker</strong><span>The TLSA records of every mail server, whether DNSSEC protects them, and which one matches the certificate the server presents.</span></a>
+  <a class="tb-doc-card" href="/tools/security-headers/"><strong>Security Headers Checker</strong><span>The six headers a response sends to protect visitors, the rule behind each point of the grade, and the lines to send instead.</span></a>
+  <a class="tb-doc-card" href="/tools/security-txt-checker/"><strong>security.txt Checker</strong><span>A site's security.txt read the way a researcher reads it, checked against RFC 9116, with a corrected file to publish.</span></a>
+  <a class="tb-doc-card" href="/tools/post-quantum-checker/"><strong>Post-Quantum TLS Checker</strong><span>Two handshakes on port 443: the key exchange group a server chooses, and whether it takes ML-KEM when nothing else is offered.</span></a>
   <a class="tb-doc-card" href="/tools/dkim-checker/"><strong>DKIM Record Checker</strong><span>Every DKIM key a domain publishes, measured from the key bytes, with the selector found for you.</span></a>
   <a class="tb-doc-card" href="/tools/spf-checker/"><strong>SPF Checker</strong><span>Every DNS lookup an SPF record costs, the include tree behind it, and a flattening plan that replaces only what it must.</span></a>
   <a class="tb-doc-card" href="/tools/dmarc-checker/"><strong>DMARC Checker &amp; Generator</strong><span>The policy graded tag by tag, and the next record on the path from p=none to reject, with every change kept in History.</span></a>
   <a class="tb-doc-card" href="/tools/mta-sts-checker/"><strong>MTA-STS &amp; TLS-RPT Checker</strong><span>The chain a sending server follows: the record, the policy file, MX coverage and TLS reports, with a policy that covers every server.</span></a>
   <a class="tb-doc-card" href="/tools/bimi-checker/"><strong>BIMI Record Checker</strong><span>The record, the SVG logo, the mark certificate and the DMARC policy behind a logo in the inbox.</span></a>
   <a class="tb-doc-card" href="/tools/email-header-analyzer/"><strong>Email Header Analyzer</strong><span>A message's route hop by hop, the receiver's authentication results, and the identities compared, all in the browser.</span></a>
-  <a class="tb-doc-card" href="/tools/dnssec-checker/"><strong>DNSSEC Checker</strong><span>The resolver's verdict and the chain of trust from the root, with every DS linked to the key it names.</span></a>
-  <a class="tb-doc-card" href="/tools/dane-checker/"><strong>DANE &amp; TLSA Checker</strong><span>Each mail server's TLSA record compared with the certificate it presents, with the DNSSEC state of the answer.</span></a>
-  <a class="tb-doc-card" href="/tools/reverse-dns/"><strong>Reverse DNS Lookup</strong><span>Each address's PTR name and whether it points back, the forward-confirmation test mail receivers apply.</span></a>
-  <a class="tb-doc-card" href="/tools/domain-availability/"><strong>Domain Availability Checker</strong><span>Whether a name is registered, since when and until when, and what holds it, from the registry over RDAP.</span></a>
-  <a class="tb-doc-card" href="/tools/whois-lookup/"><strong>WHOIS &amp; RDAP Lookup</strong><span>A domain's or address's registry record: registrar, dates, locks, nameservers, DNSSEC and the abuse contact.</span></a>
+  <a class="tb-doc-card" href="/tools/redirect-checker/"><strong>Redirect Checker</strong><span>Every hop of a redirect chain with what changed on each, and the loops, downgrades and temporary codes to fix.</span></a>
+  <a class="tb-doc-card" href="/tools/http3-checker/"><strong>HTTP/3 &amp; Compression Checker</strong><span>The HTTP/3 offer and a QUIC connection, what each Accept-Encoding gets back, and HSTS against the preload list's rules.</span></a>
+  <a class="tb-doc-card" href="/tools/cors-tester/"><strong>CORS Tester</strong><span>The browser's CORS algorithm step by step, from the preflight to the real response, with the headers that would allow the request.</span></a>
+  <a class="tb-doc-card" href="/tools/jwt/"><strong>JWT Decoder &amp; Verifier</strong><span>A token's header and claims decoded in the browser, its signature verified with your key, and test tokens rebuilt from edited claims.</span></a>
+  <a class="tb-doc-card" href="/tools/unix-timestamp/"><strong>Unix Timestamp Converter</strong><span>One instant in every format, the unit and zone it was read in, and what happens at 2038, before 1970 and across a clock change.</span></a>
+  <a class="tb-doc-card" href="/tools/postman-converter/"><strong>Postman Collection Converter</strong><span>Postman, OpenAPI and cURL converted in the browser, with a report of what was kept, dropped and redacted.</span></a>
+  <a class="tb-doc-card" href="/tools/mixed-content-checker/"><strong>Mixed Content &amp; Cookie Checker</strong><span>Every http:// address on an HTTPS page sorted by what browsers do with it, and every cookie judged against the rules browsers enforce.</span></a>
+  <a class="tb-doc-card" href="/tools/dnssec-checker/"><strong>DNSSEC Checker</strong><span>Resolver validation and the diagnostic chain of DS, keys and signature windows.</span></a>
+  <a class="tb-doc-card" href="/tools/reverse-dns/"><strong>Reverse DNS Lookup</strong><span>PTR names and forward confirmation for a domain or IP addresses.</span></a>
+  <a class="tb-doc-card" href="/tools/domain-availability/"><strong>Domain Availability Checker</strong><span>Registration evidence, dates and status codes without a guarantee of availability.</span></a>
+  <a class="tb-doc-card" href="/tools/whois-lookup/"><strong>WHOIS &amp; RDAP Lookup</strong><span>Domain and network registry records, contacts and raw RDAP evidence.</span></a>
 </div>
 
 ## Where processing happens
 
 Every tool page says, next to its verdict, where your input goes. The rule is the same across tools:
 
-- **Pasted input stays in your browser.** A certificate chain, a DNS record, a message header: the page reads it locally and sends nothing.
+- **Pasted evidence is parsed locally when the tool supports that mode.** A pasted domain still starts a live lookup. Website Hosting Checker also looks up network information for pasted public IP addresses. Read the tool’s processing notice before running it.
 - **A host name or domain means a named server-side check.** The server makes the required connection, DNS queries or published-file fetches, returns what it saw, and keeps nothing. The page names the port and the records or files it checks before it runs them.
 
 Nothing you enter is stored, put in a URL, or shown to advertisers.

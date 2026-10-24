@@ -1,20 +1,20 @@
 ---
 title: Domain Availability Checker
 description: How the Domain Availability Checker asks a domain's registry over RDAP whether the name is registered, reads the registration's life and status codes, and what each finding means for someone who wants the name or already owns it.
-updated: 2026-10-20
+updated: 2026-10-24
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and guide for the Tamperbox Domain Availability Checker, which finds the registry for a domain through the IANA RDAP bootstrap, asks it for the domain's RDAP record, treats an RDAP not-found answer as no registration (not a guarantee of availability), and reads registration and expiry dates, EPP status codes, transfer locks and the redemption lifecycle.
 prerequisites:
   - A domain name, or an RDAP domain record saved as JSON
 outputs:
-  - Registered or not, the registration's life from creation to expiry, its status codes in plain words, findings worst first, and links that carry the expiry to the timestamp converter and a signed delegation to the DNSSEC checker
+  - Registered or not, the registration's life from creation to expiry, its status codes in plain words, findings worst first, and the registry status evidence
 limitations:
   - One registry record at one moment; reserved, premium and blocked names can be absent from RDAP and still be unavailable, and endings without an RDAP service cannot be checked
 ---
 
-The tool page is [tamperbox.dev/domain-availability](https://tamperbox.dev/domain-availability). It opens on a sample registration and takes a domain or a saved RDAP record. This page is the long version: where the answer comes from, what "no registration found" does and does not prove, how each status code and date is read, and what to do next whether you want the name or own it.
+The tool page is [tamperbox.dev/domain-availability](https://tamperbox.dev/domain-availability). It opens with a live lookup of `tamperbox.dev` and takes a domain or a saved RDAP record. This page is the long version: where the answer comes from, what "no registration found" does and does not prove, how each status code and date is read, and what to do next whether you want the name or own it.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> a domain is sent to the Tamperbox server, which finds the registry for its ending in the IANA bootstrap list and asks that registry's RDAP service for the domain, then returns the record unchanged. The record is read in your browser. Pasted RDAP JSON never leaves the browser. Nothing is stored.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> a domain is sent to the Tamperbox server, which finds the registry for its ending in the IANA bootstrap list and asks that registry's RDAP service for the domain, then returns the record unchanged. The record is read in your browser. Pasted RDAP JSON never leaves the browser. The page does not persist the input or report.</div>
 
 ## What the tool answers
 
@@ -32,7 +32,7 @@ It does not register names, quote prices, or check trademarks. For the full reco
 
 `example.com`, checked when you stop typing (or at once on Enter). A pasted address is reduced to what the tool takes: `https://www.example.com/page` becomes `www.example.com`, an email address becomes its domain, quotes and brackets are dropped. Text that contains nothing usable stays as pasted with an explanation. Typing is never rewritten mid-word, and Break it loads are never cleaned.
 
-Enter the registered name itself. Registries hold records for registered domains, not for names below them, so `www.example.com` usually returns no record even when `example.com` is registered. When a name with three or more labels has no record, Heal it offers to check the name one level up.
+Enter the registered name itself. Registries hold records for registered domains, not for names below them, so `www.example.com` usually returns no record even when `example.com` is registered. If a subdomain has no record, enter the registered domain yourself; removing one label is not a reliable public-suffix rule.
 
 ### RDAP JSON
 
@@ -46,19 +46,11 @@ A domain record saved from an RDAP service (it starts with `{` and has `"objectC
 
 ### Findings
 
-The lifecycle checks, worst first: expiry, holds, the transfer lock, the registry lock, an unsigned delegation. A passing expiry folds with other passes into "n checks passed". The [finding reference](#finding-reference) lists them all.
-
-### Take it further
-
-For a registered name: the expiry date as a Unix timestamp (opens the timestamp converter in a new tab), and, when the registry holds a DS record, the DNSSEC chain that DS starts. Neither puts the value in a URL.
-
-### History and Heal it
-
-History logs every Break it and Heal it change with Revert and Reset input. Heal it offers "Check example.com" when a longer name has no record, and after a break "Restore input before this break".
+The lifecycle checks, worst first: expiry, holds, the transfer lock, the registry lock, an unsigned delegation. The count reports failures and checks separately. The [finding reference](#finding-reference) lists them all.
 
 ### Registration
 
-A line from registration to expiry with today marked (it turns amber within 30 days of expiry and red after it), then the dates as rows: registered and how long ago, expires and how soon, last changed, and the registrar with its IANA ID.
+A line from registration to expiry with today marked (it turns amber within 30 days of expiry and red after it), then date facts: registered and how long ago, expires and how soon, last changed, and the registrar name.
 
 ### Status codes
 
@@ -74,7 +66,7 @@ The server reads the IANA RDAP bootstrap file for domain names and picks the ser
 
 [RFC 7480, section 5.3](https://www.rfc-editor.org/rfc/rfc7480#section-5.3): a server with no data "returns a 404 (Not Found) response code. Optionally, it MAY include additional information … in the HTTP entity body." The tool treats a 404 as "no registration" only when it carries RDAP evidence: an error document with `errorCode` 404, or an empty body served as `application/rdap+json` or `application/json` (Verisign, which runs `.com` and `.net`, sends no body). An HTML 404 from a gateway is reported as an inconclusive answer, not as a free name. Other errors are reported as errors (rate limiting has its own message).
 
-No record gives the verdict "No registration found" with an INFO finding, and the line under it says it does not guarantee availability.
+No record gives the INFO verdict "No registration found" and an empty Findings list, and the line under it says it does not guarantee availability.
 
 ### 3. Reading the record
 
@@ -98,7 +90,7 @@ Unknown statuses are listed as they are, as INFO.
 
 ### 5. Lifecycle checks
 
-Applied in this order:
+The findings use rounded whole days until expiry. A timestamp just past expiry can therefore still produce an "Expires" warning until rounding becomes negative; the verdict and date fields compare the timestamp directly. Applied in this order:
 
 | Check | Finding | Level |
 | --- | --- | --- |
@@ -134,14 +126,14 @@ Being released ("Not available yet", CHECK) comes first; then an expired registr
 
 | Finding | Level | Source | What it means | What to do |
 | --- | --- | --- | --- | --- |
-| No registration record | INFO | [RFC 7480 5.3](https://www.rfc-editor.org/rfc/rfc7480#section-5.3) | Probably free; not guaranteed | [Register it](#registering-a-free-name) |
+| No registration found (verdict) | INFO | [RFC 7480 5.3](https://www.rfc-editor.org/rfc/rfc7480#section-5.3) | No record; availability unknown | [Register it](#registering-a-free-name) |
 | Expires in N days (more than 30) | PASS | [RFC 9083 4.5](https://www.rfc-editor.org/rfc/rfc9083#section-4.5) | Paid up | |
 | Expires in N days (30 or fewer) | CHECK | | Lapses soon without renewal | [Renew](#an-expiry-close-at-hand) |
-| Expired N days ago | FAIL | | In the registrar's grace period | Renew now, or wait if you want it |
+| Expired N days ago | FAIL | | Past the reported expiry; renewal rights depend on policy | Renew now, or wait if you want it |
 | Expired and on its way out | FAIL | [RFC 3915 3.1](https://www.rfc-editor.org/rfc/rfc3915#section-3.1) | Redemption or pending delete | [Restore or backorder](#a-name-being-released) |
 | On hold | FAIL | [RFC 5731 2.3](https://www.rfc-editor.org/rfc/rfc5731#section-2.3) | The domain does not resolve | Ask the registrar why |
 | No transfer lock | CHECK | [RFC 5731 2.3](https://www.rfc-editor.org/rfc/rfc5731#section-2.3) | The domain can be moved with its auth code | Turn the lock on |
-| Registry lock | PASS | [RFC 5731 2.3](https://www.rfc-editor.org/rfc/rfc5731#section-2.3) | Changes need the registry's manual approval | |
+| Registry lock | PASS | [RFC 5731 2.3](https://www.rfc-editor.org/rfc/rfc5731#section-2.3) | Server transfer and update restrictions are present; process is registry-specific | |
 | Delegation not signed | INFO | [RFC 9083 5.3](https://www.rfc-editor.org/rfc/rfc9083#section-5.3) | No DS at the registry; DNSSEC is not in use | See the [DNSSEC Checker](/tools/dnssec-checker/#turning-dnssec-on) |
 
 ## Guide
@@ -150,7 +142,7 @@ Being released ("Not available yet", CHECK) comes first; then an expired registr
 
 1. Search the exact name at a registrar; it confirms availability and the price (premium names cost more).
 2. Register it for a year or more, with auto-renew on and the transfer lock on.
-3. Check here: the record appears within minutes, with "Just registered" (add period) among the statuses.
+3. Check here: the record appears when the registry publishes it; an add-period status may appear.
 
 ### An expiry close at hand
 
@@ -183,13 +175,15 @@ Every case is a sample registry record on the reserved `.example` zone, because 
 
 ## Worked example
 
-The page opens on `harbor-supply.example`, a sample registry record answered in the browser, so the example makes no lookup. It was registered on 18 April 2011 through Sample Registrar, Inc. and is paid until 18 April 2027, so the verdict reads "Registered: harbor-supply.example is 15 years old and expires in" the days left until then. Its three status codes are the client transfer, delete and update locks, all normal protection. The registry holds a DS record, so the delegation is signed.
+The page opens with a live RDAP lookup of `tamperbox.dev`. First check whether a registration record was returned. If it was, read the creation and expiration events, then the status codes. Do not infer an exact renewal deadline from the age label or treat a reported expiry as a promise of public release.
 
-Take it further offers the expiry as a Unix timestamp and the DNSSEC chain from the registry's DS. Try "Expired, redeemable" to see a name on its way out, then Revert. Enter your own domain and every section, card and link is rewritten for it.
+Compare the registry's events with the account at the registrar if you control the domain. Registrar billing dates and registry expiration events can differ, particularly around an auto-renew period. A server transfer restriction and an ordinary client lock are different evidence; neither supplies the private account procedure required to transfer or restore a name.
+
+Choose Expired, redeemable in Break it for a reserved example of redemption. The estimated release date illustrates the calculation, not a reservation or a guarantee that the name will be offered for registration. Heal it restores the earlier input and repeats a live lookup when appropriate. The opening registration, remaining days and statuses are intentionally not frozen in this guide.
 
 ## For agents
 
-The Tamperbox MCP server runs the same lookup. Search its catalog for the domain availability operation, read its input schema, and call it with the domain. Keep these warnings with any conclusion:
+Search the Tamperbox MCP catalog for `domain_availability`, inspect its schema, and supply `domain`. A found record returns `registered: true`, `registrable: false`, raw evidence, parsed registration and checks. A confirmed RDAP not-found response returns `registered: false` and `registrable: null`; null means availability is unknown. Other failures remain errors. Browser fixtures are not a promise of equivalent public MCP lookup results. Keep these warnings with any conclusion:
 
 - No registration record is not a guarantee of availability; a registrar confirms it.
 - One registry record at one moment.
@@ -197,14 +191,20 @@ The Tamperbox MCP server runs the same lookup. Search its catalog for the domain
 
 See [Connect an MCP client](/mcp/connect/) for the calling pattern and [Security and privacy](/reference/security/) for where the domain travels.
 
+### Keeping an observation reproducible
+
+Record the target, the time of the lookup, the relevant raw records and the resolver or registry that supplied them. Repeat a live lookup after a configuration change instead of assuming a restored input restores an old response. A saved RDAP object or pasted DNSSEC record set is a snapshot: its dates are assessed against the current clock, but its contents are not refreshed.
+
+Separate absence from failure. A successful response with no applicable record, a rejected input, a timeout and an upstream error support different conclusions. Preserve an error when a query could not complete; do not replace it with a claim that the record does not exist. When sharing findings, include the narrow observation and the relevant limitation rather than only the verdict label.
+
 ## Limits
 
 - One registry record, at one moment.
 - Reserved, premium and blocked names can be missing from RDAP and still not be available.
 - Endings whose registry publishes no RDAP service cannot be checked.
 - Drop dates after redemption are estimates.
-- The example and Break it cases use sample records on the reserved `.example` zone.
-- Nothing is stored.
+- The Break it cases use sample records on the reserved `.example` zone.
+- The page does not persist the input or report.
 
 ## References
 
