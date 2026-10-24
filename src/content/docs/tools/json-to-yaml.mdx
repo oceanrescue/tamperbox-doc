@@ -17,7 +17,7 @@ limitations:
 
 The tool page is [tamperbox.dev/json-to-yaml](https://tamperbox.dev/json-to-yaml). It opens with a synthetic QA test-suite object and converts it immediately. This guide explains the parser boundary, the live-update behavior, every refusal, how the reverse handoff works and how to test that a conversion kept the intended data.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> the source is sent only to a Web Worker in the current browser tab. It is not uploaded, stored, included in a public URL or interpreted as code. The worker returns converted text and bounded counts to the page.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> the source is sent only to a Web Worker in the current browser tab. Conversion does not upload the source or interpret it as code. Explicit reverse-conversion navigation temporarily stores the output in tab-scoped session storage for the handoff; ordinary conversion does not persist it. The worker returns converted text and bounded counts to the page.</div>
 
 ## What the tool answers
 
@@ -29,7 +29,7 @@ The verdict is about the parsed data model. “Converted valid JSON to YAML” d
 
 ### Typed or pasted JSON
 
-The field accepts any JSON value: object, array, string, number, boolean or null. Editing is live. An input event clears the old output immediately, waits 120 milliseconds to avoid parsing every intermediate keystroke, then sends the current source to the worker. A later worker result carries a revision number; a result from an older edit is ignored. This prevents a slow large document from repainting stale output after a newer edit.
+The field accepts any JSON value: object, array, string, number, boolean or null. Editing is live. An input event clears the old output immediately, waits 120 milliseconds to avoid parsing every intermediate keystroke, then sends the current source to the worker. Worker results carry a revision number and are ignored after a newer conversion request starts. The current implementation advances that revision when it dispatches the request, rather than on the initial keystroke; see the timing limitation below.
 
 Pasting in the field or elsewhere on the page replaces the source. The text is not “cleaned” into a different shape because punctuation is meaningful JSON. Clear empties the source, output and cards. Empty input is a neutral state, not an invalid document.
 
@@ -39,7 +39,7 @@ The shared drop zone accepts `.json`, `application/json` and plain-text files. T
 
 ### Reverse-conversion handoff
 
-Take it further sends the current YAML output to the YAML to JSON page. The transfer uses a one-use random token plus same-origin in-memory or tab-scoped communication. The source is never placed in a query string or durable storage. The destination consumes the value once and removes the token from its address.
+Take it further sends the current YAML output to the YAML to JSON page. The transfer uses a one-use random token, session storage and same-origin BroadcastChannel communication, with a 60-second validity window. The source is never placed in a query string or durable storage. The destination consumes the value once and removes the token from its address.
 
 ### Input limits
 
@@ -49,13 +49,13 @@ Take it further sends the current YAML output to the YAML to JSON page. The tran
 | Nesting | 80 levels | Prevents hostile recursion and impractical fixtures |
 | Tree size | 100,000 values and containers | Bounds traversal and YAML generation |
 | Integer interoperability | −(2<sup>53</sup>−1) through 2<sup>53</sup>−1 | Prevents silent precision changes in JavaScript and common JSON consumers |
-| Worker freshness | Current revision only | Prevents stale asynchronous output |
+| Worker freshness | Current dispatched revision only | Rejects responses superseded by a newer dispatched request |
 
 ## Reading the result
 
 ### Verdict and checks
 
-A successful verdict names both formats and states that the represented data is unchanged. The checks name valid JSON and the bounded node count. A failed verdict clears the output before showing the reason, so Copy result cannot accidentally return the previous valid conversion. Heal it then offers the newest source that converted successfully.
+A successful verdict names both formats and states that the represented data is unchanged. The checks name valid JSON and JSON-model preservation; the validity detail and a chip give the bounded node count. A failed verdict clears the output before showing the reason, so Copy result cannot accidentally return the previous valid conversion. Heal it then offers the newest source that converted successfully.
 
 ### Findings
 
@@ -73,7 +73,7 @@ Break it replacements and Heal it repairs are logged newest first. Revert restor
 
 ### Strict JSON parsing
 
-The source first passes the platform JSON parser. Then a streaming JSON-token parser checks the same source inside a wrapper object. This second pass detects duplicate member names and integers that cannot be represented safely. A converter must not silently keep the first or last duplicate because different downstream parsers choose differently.
+The source first passes the platform JSON parser. Then a JSON-token parser checks the same source inside a wrapper object. This second pass detects duplicate member names and integers that cannot be represented safely. A converter must not silently keep the first or last duplicate because different downstream parsers choose differently.
 
 [RFC 8259 section 4](https://www.rfc-editor.org/rfc/rfc8259#section-4) says object names “SHOULD be unique.” The tool treats that interoperability recommendation as a refusal: the intended value cannot be inferred safely. Section 4 also explains that receiver behavior is unpredictable when names are not unique. The stricter choice is deliberate and appears in the page limits.
 
@@ -93,7 +93,7 @@ Key order follows the parsed object's enumeration order as an implementation con
 
 ### Live rendering and stale-result control
 
-Every edit increments a revision before the worker starts. Output, findings and result actions are hidden during the debounce. The worker echoes the revision. The page ignores a response whose revision is not current, then paints all sections from one result object. Error and empty paths clear the same sections. These steps are part of correctness: a converter that shows old YAML beside new JSON lies even if its parser is correct.
+An input edit clears the visible output and schedules conversion. Dispatch increments the revision, and the worker echoes it. The page ignores a response whose revision no longer matches. This guards requests already superseded by another dispatched request. It does not invalidate the earlier revision during the preceding debounce interval or on the empty-input path. Wait for conversion to settle before copying or following the reverse link; a matching revision alone does not prove that the source has remained unchanged since dispatch.
 
 ## Standards and conformance
 
@@ -157,7 +157,7 @@ assert.deepEqual(yaml, json);
 
 This command tests your chosen loader, which is valuable because schemas and duplicate-key policies vary. Run it in the project's locked dependency environment, not by installing an unreviewed global package.
 
-### Break it cases
+### Break it and manual edge cases
 
 | Case | Input property | Expected result |
 | --- | --- | --- |
@@ -171,7 +171,7 @@ This command tests your chosen loader, which is valuable because schemas and dup
 
 The synthetic opening object describes a checkout suite with two cases. Each case has a name and expected HTTP status, and the suite has an enabled boolean. The YAML mapping keeps the suite name, the sequence keeps case order, each nested mapping keeps its fields, numeric statuses remain numbers and the boolean remains a boolean. No real endpoint, credential or customer data appears.
 
-Changing `expected` from `401` to `403` clears the old YAML immediately, then rewrites that scalar after the debounce. Removing the closing brace clears the output and produces a refusal. Restoring it creates a fresh result. This sequence is more important than the pretty indentation: it proves the page never presents an earlier successful artifact as the result of an invalid current source.
+Changing `expected` from `401` to `403` clears the old YAML immediately, then rewrites that scalar after the debounce. Removing the closing brace clears the output and produces a refusal. Restoring it creates a fresh result. Check each completed result against the current source. Rapid edits while a worker is still running are subject to the timing limitation below.
 
 ## For agents
 
@@ -180,6 +180,12 @@ The browser page is the private-input surface. Remote automation may call `json_
 An agent should retain the warnings and provenance, avoid claiming that conversion validates a schema, and test hostile cases before recommending generated fixtures. It should never “repair” a duplicate by choosing the value that looks safer. Ask which value the producer intended or reject the source.
 
 ## Limits
+
+### Timing and handoff boundaries
+
+Revision checks begin at dispatch, not at each edit. An earlier worker response can arrive during the 120-millisecond debounce or after Clear and repaint an earlier result. Do not rely on this version for a strict no-stale-output guarantee; wait for the current conversion and compare the output with the source before using it. Reverse handoff temporarily uses session storage and a random URL fragment, with expiry and one-use consumption.
+
+### Format boundaries
 
 The converter does not preserve JSON whitespace, exponent notation, escape spelling or member order as a contract. It does not infer YAML tags, comments or anchors. It does not validate Kubernetes, GitHub Actions, Docker Compose, OpenAPI or another application schema. It cannot prove how a YAML 1.1 loader interprets plain scalars. Processing is local on the page, but a user who follows a remote API or MCP example changes that privacy boundary.
 

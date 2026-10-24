@@ -17,7 +17,7 @@ limitations:
 
 The tool page is [tamperbox.dev/yaml-to-json](https://tamperbox.dev/yaml-to-json). It opens with a synthetic QA test suite, resolves it under a deliberately narrow YAML schema and rewrites JSON as the source changes. This guide defines which YAML is accepted, which presentation is lost, every refusal and how to prove that the resulting JSON still carries the intended test data.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> the YAML is sent only to a Web Worker in the current browser tab. It is not uploaded, stored, put into a public URL or evaluated as code. Custom YAML tags are rejected rather than constructed.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> the YAML is sent only to a Web Worker in the current browser tab. Conversion does not upload the source or evaluate it as code. Explicit reverse-conversion navigation temporarily stores the output in tab-scoped session storage for the handoff; ordinary conversion does not persist it. Custom YAML tags are rejected rather than constructed.</div>
 
 ## What the tool answers
 
@@ -29,7 +29,7 @@ A successful conversion is evidence about the resolved graph. It is not evidence
 
 ### Typed or pasted YAML
 
-Any document accepted by the YAML 1.2 JSON-compatible schema can be the root: mapping, sequence, string, finite number, boolean or null. The input event clears old JSON immediately and starts a 120 millisecond debounce. Conversion then runs in a worker. Each request and response carries a revision, so a slow response for an older edit cannot overwrite a newer result.
+Any document accepted by the YAML 1.2 JSON-compatible schema can be the root: mapping, sequence, string, finite number, boolean or null. The input event clears old JSON immediately and starts a 120 millisecond debounce. Conversion then runs in a worker. Each request and response carries a revision. Responses from older requests are ignored after the next request is dispatched; the debounce interval has the timing limitation described below.
 
 Paste replaces the source when performed in the field or on the surrounding page. YAML punctuation and whitespace are not cleaned. Clear moves to a neutral empty state and removes output, Copy result, findings tied to the old source and reverse-conversion actions.
 
@@ -43,9 +43,15 @@ Acyclic aliases are resolved. JSON has no pointer identity, anchors or aliases, 
 
 ### Reverse handoff
 
-Take it further sends the valid JSON result to the JSON to YAML page using the one-use same-origin handoff. It stores neither the document nor a result identifier in the URL. The destination consumes the transfer and strips the random token from the address. If browser storage and tab communication are unavailable, ordinary navigation still works but does not carry private data.
+Take it further sends the valid JSON result to the JSON to YAML page using the one-use same-origin handoff. The document stays out of the URL, but a random one-use transfer token is temporarily placed in its fragment. The payload is stored in session storage and can also be passed through BroadcastChannel, with a 60-second validity window. The destination consumes the transfer and strips the random token from the address. If browser storage and tab communication are unavailable, ordinary navigation still works but does not carry private data.
 
 ### Limits
+
+### Timing and handoff boundaries
+
+Revision checks begin at dispatch, not at each edit. An earlier worker response can arrive during the 120-millisecond debounce or after Clear and repaint an earlier result. Do not rely on this version for a strict no-stale-output guarantee; wait for the current conversion and compare the output with the source before using it. Reverse handoff temporarily uses session storage and a random URL fragment, with expiry and one-use consumption.
+
+### Format boundaries
 
 | Boundary | Limit | Refusal prevents |
 | --- | ---: | --- |
@@ -60,7 +66,7 @@ Take it further sends the valid JSON result to the JSON to YAML page using the o
 
 ### Verdict and checks
 
-“Converted valid YAML to JSON” means parsing and the bounded tree walk completed. The checks name valid YAML and the number of resolved values. If comments, anchors or aliases are detected in the source, an Info finding says YAML presentation details were removed. That note is not a parsing failure; it is a warning against comparing text or expecting a round trip to recreate the original authoring surface.
+“Converted valid YAML to JSON” means parsing and the bounded tree walk completed. The checks name valid YAML and JSON-model preservation; a chip and validity detail report the resolved node count. A source-text heuristic detects full-line comments and some anchor or alias syntax, adding an Info finding that YAML presentation details were removed. It is not a complete YAML presentation audit: an inline comment can disappear without that note. That note is not a parsing failure; it is a warning against comparing text or expecting a round trip to recreate the original authoring surface.
 
 ### Findings
 
@@ -68,7 +74,7 @@ Passes establish syntax and JSON-model compatibility. The presentation note name
 
 ### JSON output
 
-The output is pretty-printed with two spaces and a final newline. Mapping keys become JSON object member names, sequences become arrays, and compatible scalars become their JSON equivalents. The output window wraps long lines so it does not widen the page. Copy result is available only while the current source has a completed result.
+The output is pretty-printed with two spaces and a final newline. JavaScript serialization writes negative zero as `0`, so a consumer that distinguishes `-0` needs an explicit representation outside this conversion. Mapping keys become JSON object member names, sequences become arrays, and compatible scalars become their JSON equivalents. The output window wraps long lines so it does not widen the page. Copy result is available only while the current source has a completed result.
 
 ### History and next step
 
@@ -81,6 +87,10 @@ Break it and Heal it replacements enter History. Revert removes the newest autom
 The worker uses the YAML 1.2 JSON-compatible schema. The schema accepts null, booleans, integer and floating-point numbers, strings, sequences and mappings. It does not construct custom tags such as `!include`, JavaScript objects or language-specific values. This is both a security boundary and an interoperability choice: a converter should not execute or instantiate a value merely because a tag names it.
 
 The loader also refuses duplicate mapping keys. Choosing the first or last entry would conceal an environment-dependent behavior that QA is supposed to expose. A file that looks reasonable can therefore be rejected when two merged snippets repeat `role`, `image`, `timeout` or another decisive key.
+
+### Scalar and document boundaries
+
+The loader accepts one document. Multiple `---` documents are refused rather than combined into an array. Complex mapping keys such as a sequence used as a key are refused. Plain `yes`, a date such as `2026-10-24`, hexadecimal-looking `0x10` and `.inf` remain strings under this schema; they do not become a boolean, date object, hexadecimal integer or infinity. Explicit unsupported tags fail. Test these cases with the consuming loader when migrating from a different schema.
 
 ### Resolve then bound the graph
 
@@ -98,7 +108,7 @@ The checked value is passed to `JSON.stringify` with two-space indentation. The 
 
 ### Keep the UI truthful during edits
 
-Input changes increment the revision and hide old evidence before parsing. The worker returns only output, node count and root kind or a safe error. The page paints verdict, findings, cards and reverse action from that single response. Empty and error paths clear the output. These rules stop a valid old JSON file from remaining copyable beside broken new YAML.
+Input changes clear the visible output and schedule conversion. The revision advances when conversion is dispatched. The worker returns output, node count and root kind or a safe error, and the page renders only a matching revision. An earlier response can still arrive before the debounce dispatch or after input is cleared, because those actions do not immediately advance the revision. Allow conversion to settle before copying or opening the reverse conversion.
 
 ## Standards and conformance
 
@@ -109,7 +119,7 @@ Input changes increment the revision and hide old evidence before parsing. The w
 | [Representation model](https://yaml.org/spec/1.2.2/#chapter-3-processes-and-models) | Parses nodes, mappings, sequences and aliases | Does not preserve presentation events |
 | [JSON schema](https://yaml.org/spec/1.2.2/#102-json-schema) | Resolves JSON-compatible scalar types | Does not use YAML 1.1 implicit typing |
 | [Node anchors](https://yaml.org/spec/1.2.2/#3222-anchors-and-aliases) | Resolves bounded acyclic aliases | Does not preserve anchor names or identity |
-| [Tags](https://yaml.org/spec/1.2.2/#3234-tags) | Accepts tags known to the JSON schema | Refuses application and language-specific tags |
+| [Tags](https://yaml.org/spec/1.2.2/#3212-tags) | Accepts tags known to the JSON schema | Refuses application and language-specific tags |
 
 The specification says anchors identify nodes in a serialization, while alias events refer to the most recent node with that anchor. JSON offers no equivalent syntax. Flattening an acyclic alias is therefore disclosed rather than described as lossless presentation.
 
@@ -134,7 +144,7 @@ The output follows the JSON value grammar in [section 3](https://www.rfc-editor.
 | Finding | Status | Proves | Does not prove |
 | --- | --- | --- | --- |
 | Valid YAML | Pass | The narrow parser accepted the whole source | Every YAML loader accepts it |
-| JSON data model preserved | Pass | Resolved values fit JSON | Presentation survives |
+| JSON data model preserved | Pass | Checked values were serialized as JSON | Presentation or every numeric distinction survives |
 | Presentation details removed | Info | Comments or alias syntax were detected | Their intent was unimportant |
 
 ## Guide
@@ -165,7 +175,7 @@ assert.deepEqual(json, yaml);
 
 This confirms the chosen parser's value model. It does not test comments or anchor identity because the JSON target cannot hold them. Run the comparison in CI beside the application's schema validation.
 
-### Break it cases
+### Break it and manual edge cases
 
 | Case | Source | Expected behavior |
 | --- | --- | --- |
@@ -185,7 +195,7 @@ The opening YAML maps `suite` to `checkout`, `cases` to a two-item sequence and 
 
 Add a comment above `enabled`. The JSON remains semantically equal and the page adds a presentation note. Add an anchor to the first case and alias it as another field. The value resolves and is repeated in JSON, while the note explains that alias identity disappeared. Make the alias point to an ancestor and conversion stops. This progression distinguishes safe presentation loss from a structure JSON cannot represent.
 
-During every invalid edit, the prior JSON disappears before the failure renders. That behavior prevents a tester from copying a green artifact produced from an earlier version of the source.
+For a completed invalid conversion, the output is cleared. Rapid edits during an outstanding worker request need the additional timing caution below.
 
 ## For agents
 
@@ -195,9 +205,15 @@ When diagnosing a production/configuration issue, ask which YAML library, YAML v
 
 ## Limits
 
+### Timing and handoff boundaries
+
+Revision checks begin at dispatch, not at each edit. An earlier worker response can arrive during the 120-millisecond debounce or after Clear and repaint an earlier result. Do not rely on this version for a strict no-stale-output guarantee; wait for the current conversion and compare the output with the source before using it. Reverse handoff temporarily uses session storage and a random URL fragment, with expiry and one-use consumption.
+
+### Format boundaries
+
 The tool is not a general YAML editor, linter or canonicalizer. It does not preserve comments, directives, custom tags, anchor names, alias identity, flow style, block scalar chomping, quotes or numeric spelling. It does not validate Kubernetes, CI, Compose or another product schema. Its line and column are parser diagnostics, not a guarantee that every loader reports the same position. Browser-local processing ends if the user chooses the remote API or MCP operation.
 
 ## References
 
-- [YAML 1.2.2](https://yaml.org/spec/1.2.2/), including [processes and models](https://yaml.org/spec/1.2.2/#chapter-3-processes-and-models), [anchors and aliases](https://yaml.org/spec/1.2.2/#3222-anchors-and-aliases), [tags](https://yaml.org/spec/1.2.2/#3234-tags) and the [JSON schema](https://yaml.org/spec/1.2.2/#102-json-schema).
+- [YAML 1.2.2](https://yaml.org/spec/1.2.2/), including [processes and models](https://yaml.org/spec/1.2.2/#chapter-3-processes-and-models), [anchors and aliases](https://yaml.org/spec/1.2.2/#3222-anchors-and-aliases), [tags](https://yaml.org/spec/1.2.2/#3212-tags) and the [JSON schema](https://yaml.org/spec/1.2.2/#102-json-schema).
 - [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259), especially [values](https://www.rfc-editor.org/rfc/rfc8259#section-3), [objects](https://www.rfc-editor.org/rfc/rfc8259#section-4), [arrays](https://www.rfc-editor.org/rfc/rfc8259#section-5) and [numbers](https://www.rfc-editor.org/rfc/rfc8259#section-6). Internet Standard.
