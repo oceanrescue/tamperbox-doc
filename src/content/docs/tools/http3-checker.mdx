@@ -1,0 +1,299 @@
+---
+title: HTTP/3 & Compression Checker
+description: What the transport checker requests, how it tests HTTP/3, measures each compression encoding and judges HSTS against the preload list's rules, what each finding means, and how to fix and verify each one.
+updated: 2026-10-21
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and repair guide for the Tamperbox HTTP/3 & Compression Checker, which fetches a page from the Tamperbox server once per Accept-Encoding, tests a QUIC-only connection where the probe allows, reads HSTS on the host and its main domain and asks hstspreload.org, or reads pasted response headers in the browser.
+prerequisites:
+  - A public HTTPS address on port 443 (an http address is upgraded by its own redirect), or response headers from curl -I to paste
+outputs:
+  - A verdict with one clause per lane, three chips, the HTTP/3, compression and HSTS preload lanes with their evidence, findings worst first, and the response headers of the Brotli request
+limitations:
+  - One probe location at one moment; a failed QUIC connection describes this probe, not every visitor; encoded sizes exclude headers and framing; a pasted header shows an offer, not a working connection
+---
+
+The tool page is [tamperbox.dev/http3-checker](https://tamperbox.dev/http3-checker). It opens by checking `tamperbox.dev` live, answers in one sentence with one clause per lane, and shows the evidence under it. This page is the long version: what our server requests, every rule the page applies, what each finding means, and how to fix and verify each one.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> an address is sent to the Tamperbox server, which requests the page once per compression it can ask for, attempts one HTTP/3-only connection where the probe supports it, requests the http:// form of the address and the HTTPS main domain for HSTS, and asks hstspreload.org about the main domain. Pasted response headers are read in your browser and never uploaded. Nothing is stored.</div>
+
+## What the tool answers
+
+Three questions, one lane each, judged separately:
+
+1. **Does the site offer HTTP/3, and does it work?** The Alt-Svc offer, and where the direct probe is available, whether a QUIC-only connection to the final HTTPS address succeeds.
+2. **Does it compress its pages, and how well?** What each of `br`, `zstd` and `gzip` gets back, the encoded size of each against the uncompressed body, and whether the response declares `Vary: Accept-Encoding`.
+3. **Is it ready for HSTS preload, or already preloaded?** The HSTS header on the main domain against the preload list's four rules, and the domain's status on hstspreload.org.
+
+The verdict takes the worst of the three lanes. The three chips, one per lane, scroll to the lanes. Findings under the verdict list every rule that fired, worst first.
+
+## Inputs
+
+### A website address
+
+`example.com`, `www.example.com/page` or `https://example.com/`. The check runs when you stop typing, or on Enter. An address without a scheme starts at `https://`. The parser refuses, with a message in the field, an address with spaces, a scheme other than `http` or `https`, an IP address, a host without a top-level domain, a port other than 80 or 443, and credentials in the address; the last two offer a repair. The fragment is dropped. Our server applies the same rules to the address and to every redirect target, and requires the host to resolve only to public addresses.
+
+### Pasted response headers
+
+Paste the output of:
+
+```sh
+curl -sI https://example.com/
+```
+
+A paste that starts with a status line or a `Name: value` line is read in the browser. When several responses are pasted, the last one is used. The page reads `Alt-Svc`, `Content-Encoding`, `Vary` and `Strict-Transport-Security` from it. Nothing is requested, so sizes, the other encodings, the QUIC test, the http:// redirect and the preload list stay unknown, and the lanes say so.
+
+### Files
+
+A `.txt` file dropped on the field, or chosen with Open file, is read in the browser like a paste.
+
+### What the page does to pasted text
+
+Pasted text goes through the shared cleaner before anything runs. An address the parser accepts is kept whole; otherwise a quoted or bracketed link loses its quotes and trailing punctuation, and an email address or `mailto:` link becomes its domain. Text that fits nothing stays exactly as pasted. Typing is never rewritten; leaving the field or pressing Enter tidies what was typed the same way. Break it and Heal it loads are never cleaned.
+
+## Reading the result
+
+### Verdict and chips
+
+The sentence has one clause per lane: "HTTP/3 works", "HTTP/3 offered", "HTTP/3 connection failed" or "No HTTP/3 offer"; "Brotli on", "gzip on", "pages sent uncompressed" or, for a paste, the Content-Encoding found; "preloaded HSTS", "HSTS preload pending", "ready for HSTS preload", "not eligible for HSTS preload" or "no HSTS". The detail names the final address and its status, or says the result came from pasted headers. The chips repeat the three lane states: the HTTP/3 state, "n of 3 encodings" or "Not compressed", and "Preload ready", "Preload not ready" or "Preloaded".
+
+### Protocol, compression, preload
+
+Three lanes side by side. The HTTP/3 lane shows the state in one word (Works, Advertised, Failing, Not offered), the Alt-Svc line as sent, and for how long browsers remember the offer. The compression lane lists what each Accept-Encoding got back with its encoded size, and the identity body size. The HSTS preload lane shows the preload status, the header as sent, the four submission checks with their state, a note on the list's answer, and, when the header is not eligible, the line to send with a Copy button.
+
+### Findings
+
+Every rule that fired, worst first; two or more passes fold into one line.
+
+### Response headers
+
+Behind a disclosure, the full headers of the Brotli request (or the pasted headers), with the four that matter labelled: Alt-Svc, Content-Encoding, Vary and Strict-Transport-Security.
+
+### History
+
+Every Break it and Heal it change, newest first, with what it replaced. Revert undoes the newest change; Reset input returns to what you entered.
+
+### Take it further
+
+Links that carry a value derived from this result into another tool in the same category: the `http://` form of the main domain into the [Redirect Checker](/tools/redirect-checker/), which traces the redirect the preload rules require, and the moment the HSTS max-age would run out, counted from now, into the Unix Timestamp Converter. Each opens the other tool with the value already in its box; nothing is put in a URL.
+
+## Method
+
+The rules, in the order they are applied. The analysis is one function, `assessTransport` in the shared HTTP checks library, that the page, the server and the MCP operation run on the same evidence.
+
+### What our server requests
+
+With the direct probe available, our server runs one GET per encoding, `br`, `zstd`, `gzip` and `identity`, two at a time, each with a 4 second connect timeout and an 8 second request limit, within 22 seconds for the whole check. Automatic redirects and content decoding are off; the probe follows up to five redirects itself, revalidating each target, and refuses a loop. Each body is counted as received, without decoding, up to 2 MiB. Then one HEAD request is sent over HTTP/3 only to the final HTTPS address, with no fallback. Separately, the server requests `https://` on the registrable domain (the main domain: `example.com` for `www.example.com`) for its HSTS header, requests the `http://` form of the final address to see its redirect, and asks `https://hstspreload.org/api/v2/status` about the registrable domain.
+
+Without the direct probe, the server fetches the page once per encoding through its ordinary client, which decodes bodies, so only decoded sizes are known and HTTP/3 is not tested. Headers shown in full are those of the `br` request.
+
+### HTTP/3
+
+- The Alt-Svc header is parsed per [RFC 7838 Section 3](https://www.rfc-editor.org/rfc/rfc7838#section-3): a list of `protocol="authority"` entries, each with an optional `ma` parameter. An entry for `h3` or a draft such as `h3-29` is an HTTP/3 offer. Per [Section 3.1](https://www.rfc-editor.org/rfc/rfc7838#section-3.1), an entry without `ma` is remembered for 86400 seconds, and the value `clear` means no alternatives.
+- With a direct test, **HTTP/3 works** (PASS) when the response really arrived over HTTP version 3, with the time taken; **HTTP/3 connection failed** (FAIL) when the attempt errored or the answer came back on another version. The test runs whether or not Alt-Svc offers h3, so a server that answers over QUIC shows as working even without an offer.
+- Without a direct test, **HTTP/3 advertised** (PASS) when Alt-Svc offers h3, with the authority and the duration; **No HTTP/3 advertisement** (CHECK) otherwise, which does not prove the server lacks HTTP/3.
+- **Alt-Svc remembered for n minutes** (INFO) when `ma` is under 86400: browsers forget the offer quickly and start each visit on HTTP/2.
+- **No HTTP/2** (CHECK) when the first successful transfer used HTTP/1.1.
+
+The HTTP/3 lane is PASS for works or advertised, FAIL for a failed connection, CHECK otherwise.
+
+### Compression
+
+An encoding counts as applied when the response to that Accept-Encoding carries a Content-Encoding other than `identity`, following [RFC 9110 Section 8.4](https://www.rfc-editor.org/rfc/rfc9110#section-8.4) and [Section 12.5.3](https://www.rfc-editor.org/rfc/rfc9110#section-12.5.3). Savings compare each encoded body with the identity body of a separate request.
+
+| Condition | Finding | Status |
+| --- | --- | --- |
+| No request got an encoded response | Not compressed, with the uncompressed size when known | FAIL |
+| Something applied, but the `br` request did not get `br` back | No Brotli, naming what applied | CHECK |
+| `br` applied, sizes known | Brotli saves n% | PASS |
+| `br` applied, sizes unknown | Brotli compression observed | PASS |
+| `zstd` applied | Zstandard offered | PASS |
+| A compressed response without `Vary: Accept-Encoding` or `Vary: *` | No Vary: Accept-Encoding | CHECK |
+| Pasted headers with Content-Encoding | Compressed with (encoding) | PASS |
+| Pasted headers without Content-Encoding | No Content-Encoding in the pasted headers | INFO |
+
+The Vary rule follows [RFC 9110 Section 12.5.5](https://www.rfc-editor.org/rfc/rfc9110#section-12.5.5): "An origin server SHOULD send a Vary header field when its algorithm for selecting a representation varies based on aspects of the request message other than the method and target URI". The finding says a shared cache could reuse an incompatible encoding; it is not evidence that one did. The compression lane is PASS with Brotli, CHECK with another encoding only, FAIL with none; for a paste it is PASS with an encoding and INFO without.
+
+### HSTS and the preload list
+
+The HSTS header is parsed per [RFC 6797 Section 6.1](https://www.rfc-editor.org/rfc/rfc6797#section-6.1): `max-age` (required, whole seconds), `includeSubDomains` and `preload`, with unknown directives noted. The header used is the main domain's; if that request failed or carried no header, the final page's header is used. The four submission checks follow the preload list's own rules, which are Chromium's policy ([hstspreload.org submission requirements](https://hstspreload.org/#submission-requirements)), not an RFC:
+
+| Check | Rule |
+| --- | --- |
+| HTTP redirects to HTTPS on the same host | The `http://` form of the final address answers with a Location on `https://` and the same host name; not checked when that request fails |
+| max-age at least one year (31536000) | `max-age` of 31536000 or more |
+| includeSubDomains | The directive is present |
+| preload directive | The directive is present |
+
+The header is eligible when no check is false. The list's answer decides the finding: **(domain) is preloaded** or **Preloaded via (parent)** (PASS) when hstspreload.org reports the domain or a parent entry, including a top-level domain such as `dev`; **Preload submission pending** (INFO); **Ready to preload** or **Ready to preload, not listed** (INFO) when the header is eligible; **No HSTS header** (CHECK); **Not eligible for preload** (CHECK) with the missing checks named. If the list service does not answer, the status is unavailable, never absent. Inherited coverage protects the domain even when its own header fails the individual checks, which are still shown for reference. The lane is PASS when preloaded or eligible, INFO when pending, CHECK otherwise.
+
+### Heal it
+
+For pasted headers only: **Preview an HTTP/3 Alt-Svc offer** adds `alt-svc: h3=":443"; ma=86400` when none is present, and **Make HSTS preload-ready** replaces the HSTS header with `max-age=63072000; includeSubDomains; preload`. Both edit the pasted example; publishing Alt-Svc still needs a working HTTP/3 service, and preload settings need HTTPS on every subdomain.
+
+## Standards and conformance
+
+The checker observes what one set of requests from our server received and judges it with the rules above. It is not a browser: it does not switch to an alternative service after seeing Alt-Svc, does not decode bodies in the direct measurement, and does not keep HSTS state.
+
+### RFC 7838: HTTP Alternative Services
+
+[RFC 7838](https://www.rfc-editor.org/rfc/rfc7838) is a Proposed Standard (April 2016). [Section 3](https://www.rfc-editor.org/rfc/rfc7838#section-3) gives the header syntax and [Section 3.1](https://www.rfc-editor.org/rfc/rfc7838#section-3.1) the `ma` parameter and its 24 hour default: "When this parameter is omitted, the default is 24 hours". The tool parses the header, reports the h3 offer, its authority and its lifetime, and notes a lifetime under a day. It does not connect to the advertised authority; the direct test goes to the final HTTPS origin on port 443 only.
+
+### RFC 9114 and RFC 9000: HTTP/3 over QUIC
+
+[RFC 9114](https://www.rfc-editor.org/rfc/rfc9114) (HTTP/3) and [RFC 9000](https://www.rfc-editor.org/rfc/rfc9000) (QUIC) are Proposed Standards. [RFC 9114 Section 3.1](https://www.rfc-editor.org/rfc/rfc9114#section-3.1) describes discovery through Alt-Svc with the `h3` identifier; the direct test is a single HEAD request that succeeds only when the response was carried on HTTP version 3. The tool does not test 0-RTT, connection migration or any QUIC version detail.
+
+### RFC 9113: HTTP/2
+
+[RFC 9113](https://www.rfc-editor.org/rfc/rfc9113) is a Proposed Standard and obsoletes [RFC 7540](https://www.rfc-editor.org/rfc/rfc7540). HTTP/2 is inferred from the version of the first successful transfer; the tool does not inspect ALPN directly and the TLS version is not reported here.
+
+### RFC 9110: content coding and Vary
+
+[RFC 9110](https://www.rfc-editor.org/rfc/rfc9110) is an Internet Standard (STD 97). [Section 8.4](https://www.rfc-editor.org/rfc/rfc9110#section-8.4) defines Content-Encoding and the coding names registered at IANA, [Section 12.5.3](https://www.rfc-editor.org/rfc/rfc9110#section-12.5.3) Accept-Encoding, and [Section 12.5.5](https://www.rfc-editor.org/rfc/rfc9110#section-12.5.5) Vary. The codings themselves are specified by [RFC 7932](https://www.rfc-editor.org/rfc/rfc7932) (Brotli), [RFC 8878](https://www.rfc-editor.org/rfc/rfc8878) (Zstandard, which obsoletes [RFC 8478](https://www.rfc-editor.org/rfc/rfc8478)) and [RFC 1952](https://www.rfc-editor.org/rfc/rfc1952) (gzip); the tool reads the coding names and sizes and never decodes.
+
+### RFC 6797: HSTS
+
+[RFC 6797](https://www.rfc-editor.org/rfc/rfc6797) is a Proposed Standard (November 2012). [Section 6.1](https://www.rfc-editor.org/rfc/rfc6797#section-6.1) defines the header and its directives; [Section 6.1.1](https://www.rfc-editor.org/rfc/rfc6797#section-6.1.1) requires `max-age`: "The REQUIRED "max-age" directive specifies the number of seconds". The `preload` directive is not part of RFC 6797; it is the preload list's own token. The tool parses the header as the RFC describes and judges it by the list's rules, which are stricter than the RFC (the RFC sets no minimum lifetime).
+
+### Where the tool stops
+
+- Only the final HTTPS origin on port 443 is tested for QUIC; alternative authorities and ports in Alt-Svc are not probed.
+- Sizes are encoded response-body bytes from separate requests; dynamic pages can differ between them.
+- The preload list answer is hstspreload.org's; browsers ship their own copy with a delay.
+- Inherited preload coverage is reported as a pass even when the domain's own header is not eligible.
+
+## Finding reference
+
+### HTTP/3 and HTTP/2
+
+| Finding | Status | Rule | What it means | Fix |
+| --- | --- | --- | --- | --- |
+| HTTP/3 works | PASS | Direct HEAD over QUIC answered on version 3 | Browsers switch to QUIC after the first response advertises it | Nothing; keep Alt-Svc published |
+| HTTP/3 advertised | PASS | Alt-Svc offers h3; no direct test | The offer is seen; whether QUIC connects is unknown | Nothing on the page; test from the command line |
+| HTTP/3 connection failed | FAIL | Direct test errored or fell to another version | Browsers try QUIC, wait, and fall back to HTTP/2 | Open UDP 443 at the firewall or security group; enable HTTP/3 at the CDN; build the server with QUIC |
+| No HTTP/3 advertisement | CHECK | No h3 in Alt-Svc, no direct result | Not proof of absence | Enable HTTP/3 and publish Alt-Svc |
+| Alt-Svc remembered for n minutes | INFO | `ma` under 86400 | Each visit starts on HTTP/2 | Set `ma=86400` or longer |
+| No HTTP/2 | CHECK | First transfer on HTTP/1.1 | Requests queue on six connections | Enable HTTP/2 on the server or proxy |
+
+### Compression
+
+| Finding | Status | Rule | What it means | Fix |
+| --- | --- | --- | --- | --- |
+| Not compressed | FAIL | No encoding applied | HTML travels uncompressed; Brotli or gzip usually cut it by 70 to 85% | Enable compression for text types at the server or CDN |
+| No Brotli | CHECK | `br` not returned for the `br` request | Brotli is usually 15 to 25% smaller than gzip for HTML | Enable Brotli; every current browser accepts it |
+| Brotli saves n% | PASS | `br` applied, sizes known | The saving against the identity body | Nothing |
+| Brotli compression observed | PASS | `br` applied, sizes unknown (fallback measurement) | Compression works; the saving is not measured | Nothing |
+| Zstandard offered | PASS | `zstd` applied | Chrome and Firefox accept it | Nothing |
+| No Vary: Accept-Encoding | CHECK | Compressed response without the Vary value | A shared cache could serve the wrong encoding | Add `Vary: Accept-Encoding` at the origin; check the proxy does not strip it |
+| Compressed with (encoding) | PASS | Pasted Content-Encoding | The response was encoded | Nothing; sizes need a live check |
+| No Content-Encoding in the pasted headers | INFO | Pasted, no Content-Encoding | Either not compressed or not requested | Run a live check |
+
+### HSTS and preload
+
+| Finding | Status | Rule | What it means | Fix |
+| --- | --- | --- | --- | --- |
+| (domain) is preloaded, Preloaded via (parent) | PASS | hstspreload.org reports the domain or a parent | Browsers enforce HTTPS before the first visit | Nothing; keep the header |
+| Preload submission pending | INFO | Status pending | Waiting for a browser release | Keep the header in place |
+| Ready to preload, not listed | INFO | Header eligible, status none | Submission is possible; it is a commitment that takes months to undo | Confirm every subdomain serves HTTPS, then submit |
+| No HSTS header | CHECK | No Strict-Transport-Security | The first request can be made in plain text | Send the header on the main domain |
+| Not eligible for preload | CHECK | One or more checks false | The missing checks are named | Send `max-age=63072000; includeSubDomains; preload` on the main domain and redirect http:// to https:// on the same host |
+
+## Guide
+
+### HTTP/3 connection failed
+
+1. Read the error in the lane: a timeout usually means UDP 443 is blocked by a firewall or security group; "did not use HTTP/3" means the server answered but on another version.
+2. At a CDN, switch HTTP/3 on in its settings. On your own server, build or configure QUIC (nginx 1.25 with `listen 443 quic;`, Caddy on by default) and open UDP 443.
+3. Confirm from the command line, then check again:
+
+```sh
+curl -sI --http3-only https://example.com/ | head -1
+```
+
+### No HTTP/3 offer
+
+1. Enable HTTP/3 as above.
+2. Publish the offer on every HTTPS response: `Alt-Svc: h3=":443"; ma=86400`.
+3. Check again; the lane should read Advertised or Works, and the INFO about a short `ma` should not appear.
+
+### Not compressed, or gzip only
+
+1. Enable compression for text types (`text/html`, `text/css`, `application/javascript`, `application/json`, `image/svg+xml`) at the server or CDN; a CDN may have it off while the origin compresses, or the reverse.
+2. Prefer Brotli with gzip as the fallback; add Zstandard where the server supports it.
+3. Confirm each encoding and the sizes:
+
+```sh
+for e in br zstd gzip identity; do printf '%s ' "$e"; curl -so /dev/null -H "Accept-Encoding: $e" -w '%{content_type} %{size_download}\n' https://example.com/; done
+```
+
+### No Vary: Accept-Encoding
+
+1. Add `Vary: Accept-Encoding` to compressed responses at the origin.
+2. Check the proxy or CDN in front of it does not drop the header.
+3. Check again; the CHECK disappears.
+
+### Not eligible for preload
+
+1. Read the four checks in the lane; the missing ones are named in the finding.
+2. Make `http://` on the main domain redirect to `https://` on the same host with 301 or 308 (the Redirect Checker link under Take it further traces it).
+3. Send `Strict-Transport-Security: max-age=63072000; includeSubDomains; preload` on the main domain, only after confirming that every subdomain serves HTTPS: preloading applies to all of them and removal takes months to reach browsers.
+4. Check again, then submit at hstspreload.org when the lane reads Ready. Confirm the header with:
+
+```sh
+curl -sI https://example.com/ | grep -i strict-transport-security
+```
+
+### Reading pasted headers
+
+Paste `curl -sI` output to check the offer, the encoding and the HSTS header of a response you already have. The lanes say what a live check would add. Heal it previews an Alt-Svc offer and a preload-ready HSTS header on the pasted text.
+
+### Break it cases
+
+| Case | What loads | What it shows |
+| --- | --- | --- |
+| Drop Alt-Svc | Your result's headers (or the sample's) as text, without Alt-Svc | The CHECK for no offer, and the Heal it preview |
+| gzip only, no HTTP/3 | `legacy.harbor-supply.example` | No offer, gzip without Brotli, no HSTS on the host |
+| Not compressed | `plain.harbor-supply.example` | The FAIL for uncompressed pages |
+| Alt-Svc for 5 minutes | `quic.harbor-supply.example` | The INFO for a short `ma` |
+| Ready to preload | `preload.harbor-supply.example` | Brotli, Zstandard, an eligible header, not yet listed |
+
+The reserved names are answered in the browser and never requested; the sample's compression sizes are decoded sizes only.
+
+## Worked example
+
+The page opens on `tamperbox.dev`, checked live by our server when the page loads. Read the result top down: the verdict gives one clause per lane; the chips repeat the lane states; the HTTP/3 lane shows the Alt-Svc line as sent and, when the direct probe ran, whether the QUIC-only HEAD request succeeded and how long it took; the compression lane lists what each Accept-Encoding got back with its encoded size against the identity body; the HSTS preload lane shows the header on the main domain, the four checks and the list's answer, which for a `.dev` name is inherited from the top-level domain's entry. The exact header values, sizes and timings are live evidence and change with the site's configuration and the moment of the check, so they are not reproduced here. Replace the address in the box to check your own site, or press a Break it case to see each state on the reserved sample.
+
+## For agents
+
+The Tamperbox MCP server exposes two MCP tools: use `search` to inspect the catalog and schema, then use `execute` to call `POST /v1/tools/http3_checker` through `tamperbox.request`. Its required `url` must identify a public host; use `https://` when testing HTTP/3. The result carries `status`, `http3` (`advertised`, `tested`, `ok`, `timeMs`, `error`), `alpn`, `encodings` (one row per Accept-Encoding with `encoding`, `bytes` and `timeMs`), `headers`, `hsts` (`header`, `httpRedirect`, `apex`, `apexHeader`) and `preload` (`domain`, `status`), plus warnings and provenance. Apply the rules in [Method](#method) to read it, and keep these warnings with any conclusion:
+
+- A failed QUIC connection describes this probe's path to the server, not every visitor's.
+- An Alt-Svc offer is a claim; only a tested connection is evidence that HTTP/3 works.
+- Sizes come from separate requests and exclude headers and framing; `bytes: null` means the size is unknown, not zero.
+- A preload status of `unavailable` means the list could not be asked, not that the domain is absent.
+
+See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for the calling pattern, and [Security and privacy](/reference/security/) for where the address travels.
+
+## Limits
+
+- One probe location at one moment. A failed HTTP/3 connection, a slow transfer or a missing header can be specific to this path.
+- The direct test sends one HEAD over HTTP/3 only to the final HTTPS origin; alternate hosts and ports from Alt-Svc are not probed.
+- Encoded sizes exclude HTTP headers, TLS and QUIC framing and retransmissions; transfers above 2 MiB or interrupted transfers have unknown complete sizes; separate requests can return different content.
+- Without the direct probe, only advertisement and encoding headers are reported, and byte counts stay unknown.
+- The TLS version is not reported here; HTTP/2 is inferred from the transfer that succeeded.
+- Preload coverage is reported from hstspreload.org; a domain can inherit coverage from a parent entry even without its own header.
+- A missing `Vary: Accept-Encoding` is a cache-compatibility warning, not proof of a wrong response.
+- Nothing is stored.
+
+## References
+
+- [RFC 7838, HTTP Alternative Services](https://www.rfc-editor.org/rfc/rfc7838). Proposed Standard, April 2016. Sections used: [3](https://www.rfc-editor.org/rfc/rfc7838#section-3) and [3.1](https://www.rfc-editor.org/rfc/rfc7838#section-3.1).
+- [RFC 9114, HTTP/3](https://www.rfc-editor.org/rfc/rfc9114). Proposed Standard, June 2022. Section used: [3.1](https://www.rfc-editor.org/rfc/rfc9114#section-3.1).
+- [RFC 9000, QUIC: A UDP-Based Multiplexed and Secure Transport](https://www.rfc-editor.org/rfc/rfc9000). Proposed Standard, May 2021. Used as the transport the direct test requires.
+- [RFC 9113, HTTP/2](https://www.rfc-editor.org/rfc/rfc9113). Proposed Standard, June 2022; obsoletes [RFC 7540](https://www.rfc-editor.org/rfc/rfc7540) and [RFC 8740](https://www.rfc-editor.org/rfc/rfc8740).
+- [RFC 9110, HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110). Internet Standard, STD 97, June 2022. Sections used: [8.4](https://www.rfc-editor.org/rfc/rfc9110#section-8.4), [12.5.3](https://www.rfc-editor.org/rfc/rfc9110#section-12.5.3) and [12.5.5](https://www.rfc-editor.org/rfc/rfc9110#section-12.5.5).
+- [RFC 6797, HTTP Strict Transport Security (HSTS)](https://www.rfc-editor.org/rfc/rfc6797). Proposed Standard, November 2012. Sections used: [6.1](https://www.rfc-editor.org/rfc/rfc6797#section-6.1) and [6.1.1](https://www.rfc-editor.org/rfc/rfc6797#section-6.1.1).
+- [HSTS preload list submission requirements](https://hstspreload.org/#submission-requirements). Chromium project policy; the `preload` directive and the four checks come from here, not from an RFC.
+- [RFC 7932, Brotli Compressed Data Format](https://www.rfc-editor.org/rfc/rfc7932). Informational, July 2016; updated by [RFC 9841](https://www.rfc-editor.org/rfc/rfc9841).
+- [RFC 8878, Zstandard Compression and the 'application/zstd' Media Type](https://www.rfc-editor.org/rfc/rfc8878). Informational, February 2021; obsoletes [RFC 8478](https://www.rfc-editor.org/rfc/rfc8478); updated by [RFC 9659](https://www.rfc-editor.org/rfc/rfc9659).
+- [RFC 1952, GZIP file format specification version 4.3](https://www.rfc-editor.org/rfc/rfc1952). Informational, May 1996.
+- [IANA HTTP Content Coding Registry](https://www.iana.org/assignments/http-parameters/http-parameters.xhtml#content-coding). The names `br`, `zstd`, `gzip` and `identity` the tool requests.

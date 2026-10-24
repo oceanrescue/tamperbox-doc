@@ -1,210 +1,302 @@
 ---
 title: Unix Timestamp Converter
-description: How the converter reads epoch numbers and dates, guesses and confirms units, applies time zones and clock changes, checks the ranges systems can store, and how to test the edge cases that break time handling.
-updated: 2026-10-20
+description: How the converter reads an epoch number, an ISO date or an HTTP date in the browser, every rule behind its verdict, what each finding means, and how to confirm a conversion outside Tamperbox.
+updated: 2026-10-21
 productVersion: "tamperbox.dev, October 2026"
-agentSummary: Method, finding reference and guide for the Tamperbox Unix timestamp converter, which reads Unix seconds, milliseconds, microseconds and nanoseconds, ISO 8601 and RFC 3339 dates and HTTP dates in the browser with exact nanosecond arithmetic, reports the unit and zone it assumed, checks the year and signed 32-bit ranges, and converts batches line by line.
+agentSummary: Method, finding reference and guide for the Tamperbox Unix Timestamp Converter, which converts epoch seconds, milliseconds, microseconds and nanoseconds, ISO 8601 and HTTP dates with exact integer arithmetic in the browser, reports a guessed unit or an assumed time zone as a Check, and flags the signed 32-bit range.
 prerequisites:
-  - An epoch number, an ISO date or date-time, or an HTTP date; one per line for a batch
+  - An epoch number, an ISO 8601 date or date-time, or an HTTP date to paste, one per line for a batch
 outputs:
-  - A verdict with PASS and CHECK chips, findings worst first, the instant in every common format, adjust and compare tools, code snippets, History of every change, and the instant as the exp claim of a test JWT
+  - A verdict with Pass and Check chips, the instant in every format, calendar facts, shift and snap targets, line-by-line batch output and a code snippet per language
 limitations:
-  - The unit of a bare number is guessed from its digit count unless you choose it; years 0001 to 9999 only; leap seconds, natural-language and slash dates are not read; time zone rules come from the browser
+  - A unit guessed from the digit count is a hint, not a fact; time zone rules come from the browser's own database; instants are limited to the years 0001 to 9999; nothing is sent anywhere
 ---
 
-The tool page is [tamperbox.dev/unix-timestamp](https://tamperbox.dev/unix-timestamp). It answers the question behind most time bugs: what moment does this value really mean, and what did the reader have to assume to get there? This page is the long version: how each kind of input is read, the rules for units, zones and ranges, what each finding means for the systems that store the value, and how to use Break it to test your own code.
+The tool page is [tamperbox.dev/unix-timestamp](https://tamperbox.dev/unix-timestamp). It opens on a reserved sample value, `1760000000`, answers in one sentence what instant that is and how sure it can be, and shows the same instant in every format under it. This page is the long version: what the page does to your input before reading it, every rule behind the verdict, what each finding means, and how to confirm a conversion with tools you already have.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> everything runs in your browser tab, with integer arithmetic on nanoseconds. Nothing is sent to our server. The handoff to the JWT tool opens a new tab and moves the value through tab memory, never through the URL or storage. The page opens on <code>1760000000</code>, a fixed example value. Nothing is stored.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> everything runs in your browser. Values, time zones and templates are parsed and formatted locally and never uploaded. The only thing that leaves the page is the value you choose to send to the JWT page, and that travels through same-site tab memory, never through a URL or browser storage. Nothing is stored.</div>
 
 ## What the tool answers
 
-1. **Which instant is this?** In UTC, in a time zone you choose, and in every common format.
-2. **What was assumed?** The unit of a bare number, the zone of a date without an offset, the choice for a repeated local hour.
-3. **Will it survive storage?** Whether it fits signed 32-bit seconds, and whether it is a value systems treat specially (zero, negative).
-4. **What happens at the edges?** Break it loads the cases that break time handling, built from your own instant where it can.
+Four questions, in the order the page settles them:
 
-A Unix timestamp counts time since 1970-01-01T00:00:00Z without leap seconds ([POSIX, Seconds Since the Epoch](https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap04.html#tag_04_19)). It names one instant everywhere; time zones only change how that instant is written.
+1. **What instant is this?** The value read as one exact point in time, to the nanosecond, shown as a readable date and in every common format.
+2. **How sure is that reading?** Whether the unit was chosen or guessed from the digit count, and whether a date without an offset was read in a time zone you chose.
+3. **Will it survive the systems it passes through?** Whether the seconds fit a signed 32-bit integer, and what each language or database keeps of the precision.
+4. **What happens at the edges?** The epoch itself, dates before 1970, a skipped or repeated hour at a clock change, a day that does not exist.
+
+The verdict names the worst of these. The chips repeat the two that matter most: how the value was read, and the 32-bit range. Findings under the verdict list the rest, worst first; a batch reports how many lines converted.
 
 ## Inputs
 
-Type into the box, paste anywhere on the page, or drop a text file. One value per line makes a batch.
+The field takes one value, or one value per line. Every value is trimmed. A value longer than 500 characters, or an input longer than 20,000 characters or 200 non-empty lines, is refused with the limit named. Blank lines are ignored. Pasting anywhere on the page replaces the input; typing never triggers a repair.
 
-### Epoch numbers
+### An epoch number
 
-A decimal number with an optional sign and fraction: `1700000000`, `-1`, `1700000000.5`, `1700000000123456789`. Choose the unit under "Read the number as", or leave it on Auto.
+A plain decimal number with an optional sign and fraction: `1760000000`, `-1`, `1700000000.123456789`. Separators, exponent notation and an integer part over 30 digits are refused. In **Auto** mode the unit comes from the number of digits before the decimal point, ignoring the sign and leading zeros:
 
-### ISO 8601 and RFC 3339 dates
+| Digits | Unit read | Example |
+| --- | --- | --- |
+| up to 11 | seconds | `1760000000` |
+| 12 to 14 | milliseconds | `1760000000000` |
+| 15 to 17 | microseconds | `1760000000000000` |
+| 18 or more | nanoseconds | `1760000000123456789` |
 
-`YYYY-MM-DD`, optionally followed by `T`, `t` or a space, hours and minutes, optional seconds, up to nine fractional digits, and `Z`, `+HH:MM` or `+HHMM`. A date alone means midnight. A value without an offset is read in the input time zone (UTC by default), which appears when the input needs it.
+A unit you select in **Read the number as** always wins. The list shows the date the same digits give in each unit, so a wrong guess is visible where it is corrected. A fraction may carry at most the digits that unit has below the nanosecond: nine for seconds, six for milliseconds, three for microseconds, none for nanoseconds. Non-zero digits beyond that are refused rather than rounded.
 
-### HTTP dates
+### An ISO 8601 date or date-time
 
-The exact IMF-fixdate shape `Sun, 06 Nov 1994 08:49:37 GMT` from [RFC 9110 section 5.6.7](https://www.rfc-editor.org/rfc/rfc9110#section-5.6.7). The weekday must match the date. The obsolete RFC 850 and asctime forms are not read.
+`YYYY-MM-DD`, optionally followed by `T`, `t` or a space, then `HH:mm`, optional `:ss`, up to nine fractional digits, and `Z`, `z`, `+HH:MM` or `+HHMM`. A date alone means midnight. A value with `Z` or an offset is absolute. A value without one is read in the input time zone, UTC by default, and the verdict says so. The exact shape is the [RFC 3339 §5.6](https://www.rfc-editor.org/rfc/rfc3339#section-5.6) `date-time` grammar, with the space separator that section permits and seconds made optional.
 
-### What is cleaned, and what is refused
+### An HTTP date
 
-Typing is never rewritten. Pasted wrappers are offered as a repair rather than applied silently: Heal it shows "Clean pasted value" for surrounding quotes, curly quotes, a Unicode minus, comma grouping (`1,700,000,000`) or underscore grouping (`1_700_000_000`), and "Read unit suffix" for a written `s`, `ms`, `us`, `µs` or `ns`, each only when the result converts. Refused with a reason: exponent notation (`1.7e9`), natural language, slash dates such as `03/04/2024` (the day and month order is ambiguous), and input over 20,000 characters, 200 lines or 500 characters per value.
+Exactly the IMF-fixdate shape of [RFC 9110 §5.6.7](https://www.rfc-editor.org/rfc/rfc9110#section-5.6.7): `Thu, 09 Oct 2025 08:53:20 GMT`. The weekday must match the date. The two obsolete forms (RFC 850 and asctime) are not read from the input field, but they can be edited in their own result rows.
+
+### Reading options
+
+- **Read the number as**: Auto, seconds, milliseconds, microseconds or nanoseconds. Shown when a line is a number.
+- **Read the time in**: an IANA zone name from your browser's list. Shown when a value has no offset. An unknown name stops the whole input with "Choose a valid IANA time zone, such as America/New_York."
+- **Earlier / Later**: shown when a local time happens twice.
+
+### What Heal it cleans
+
+Repairs appear for a single value only, each with the reading it would produce, and nothing changes until you apply one:
+
+| Repair | When | What it does |
+| --- | --- | --- |
+| Clean pasted value | Quotes, curly quotes, a Unicode minus, comma groups (`1,700,000,000`) or underscore groups (`1_700_000_000`) wrap a value that converts once removed | Removes the wrappers; the digits are unchanged |
+| Read unit suffix | The value ends in `s`, `ms`, `us`, `µs` or `ns` | Sets the unit from the suffix |
+| Interpret as … | The selected unit disagrees with the digit count, or the value is out of range in the selected unit | Changes the unit, showing the date each reading gives |
+| Use HH:MM, before or after the jump | The local time falls in a skipped hour | Rewrites the value with the offset from either side |
+| Make UTC or the offset explicit | The value had no offset | Writes the same instant with its offset |
 
 ## Reading the result
 
-### Verdict
+### Verdict and chips
 
-**One instant** when nothing was assumed. Otherwise the lead names the assumption: "One instant, assuming seconds", "One instant, assuming Europe/Berlin time", or the edge it sits on: "Unix epoch: 1 January 1970", "Before the Unix epoch: negative timestamp", "Outside signed 32-bit seconds: 2038 overflow risk". A failure names the rule: "Not a real calendar date", "Not a real time in America/New_York", "Outside years 0001 to 9999". The chips point at the control that answers them. Under the verdict, the instant in words with its day of the year and ISO week.
+One sentence, then the note that explains it. The first chip says how the value was read: **Unit guessed from 10 digits** or **No offset, read in UTC** (Check), or **Unit set to seconds** or **Offset in the input** (Pass). The second says **Fits signed 32-bit seconds** (Pass) or **Outside the signed 32-bit seconds range** (Check). A value that failed gets a chip that leads to the fix: **Choose earlier or later**, **n repairs in Heal it**, or **Edit the input**.
 
 ### Findings
 
-Every rule, worst first; passes fold into one line. See the [finding reference](#finding-reference).
+Under the verdict, worst first: the guessed unit, the assumed zone, the 32-bit range and the negative or epoch-zero notices. Passes fold into one line.
+
+### Every format
+
+One row per format family. ISO and HTTP rows are always UTC; the time zone row, SQL and the custom template follow the display zone. Each row has a picker for its variant (ISO with milliseconds, RFC 3339 with a space, ISO week or ordinal date, RFC 5322, RFC 850, C asctime, SQL with offset) and a Copy button. Rows are editable: a changed value is read back in that row's own strict shape, Enter applies and Esc restores, and the weekday of an HTTP or email date follows the date you type.
+
+### Adjust this instant
+
+**Shift** moves by an exact elapsed amount in seconds, minutes, hours, days of 24 hours or weeks of 7 × 24 hours, independent of clock changes. **Snap** moves to the start or end of the day, week, month or year in the display zone; weeks start on Monday and an end is one nanosecond before the next period. **Now** loads the device clock in milliseconds. Every target is shown before it is applied.
+
+### Compare with another instant
+
+A second timestamp or date, read with the same unit, input zone and repeated-time choice as the main value. The result states the difference between the two instants; neither value leaves the page.
+
+### Line by line
+
+For several lines, each converts on its own with the same unit and zone. Failed lines keep their position and read `Line N: ERROR:` with the reason. **Copy all as** takes a format and zone; **Use as input** replaces the input with the converted lines when every line converted and the format can be read back.
+
+### Use in code
+
+The instant rebuilt in 14 languages and databases, each note saying what precision the target type keeps.
 
 ### History
 
-Every change, newest first: a Break it case, a repair, a shift, a snap, an edited result row, a unit or zone change. Each records what it replaced; Revert undoes the newest, Reset input returns to the value you entered. A refused edit is listed with its reason and changes nothing.
+History sits below the complete conversion result. Every Break it, Heal it, shift, snap and Now action is logged with what it replaced, newest first, up to 50 entries. **Revert** undoes the newest; **Reset input** returns to what you entered and clears the log. Input, unit, time zone and the DST choice are all recorded.
 
 ### Take it further
 
-The instant as the `exp` claim of an unsigned test JWT, opened in a new tab of the [JWT decoder](/tools/jwt/). The token has `alg: none` and no signature, so it is only for testing how a verifier treats the time.
-
-### Every format, Adjust, Use in code
-
-Every format the tool writes, each editable: type a new value in any row and the instant follows. Adjust shifts by elapsed time (a day is 24 hours) or snaps to the start or end of a day, week, month or year in the display zone. Use in code gives the snippet for the instant in a chosen language and says how much precision the target type keeps.
-
-### Batches
-
-Each line converts on its own with the same unit and zone. Copy all lines in one format, keep failed lines marked as `Line N: ERROR:` with the reason, or reuse the output as input. CSV output prefixes cells that start with `=`, `+`, `-` or `@` with an apostrophe, so spreadsheets do not run them as formulas.
+**Use as JWT expiry** opens the JWT page in a new tab with an unsigned test token whose `exp` is this instant rounded down to whole seconds. The value moves through same-site tab memory only. The token is a fixture, never a credential: its header is `alg: none`.
 
 ## Method
 
-### 1. Choosing the unit of a bare number
+The rules, in the order the page applies them. Finding wording is quoted from the code.
 
-With Auto, the unit comes from the digits before the decimal point, ignoring the sign and leading zeros:
+### Rule 1: the shape of the value
 
-| Digits | Unit | Example |
-| --- | --- | --- |
-| up to 11 | seconds | `1700000000` |
-| 12 to 14 | milliseconds | `1700000000000` |
-| 15 to 17 | microseconds | `1700000000000000` |
-| 18 or more | nanoseconds | `1700000000123456789` |
+A trimmed value is tried as an epoch number, then as an HTTP date, then as an ISO date. Anything else fails with "Use an epoch number, YYYY-MM-DD, ISO date-time, or an HTTP date ending in GMT. Ambiguous date orders are not guessed." The verdict reads **Not a format this tool reads.** Slash dates such as `03/04/2024`, natural language and `1.7e9` fall here on purpose: no guess is safer than a wrong one.
 
-The guess is reported, never hidden: the verdict says "assuming seconds", the finding **Unit guessed** asks you to confirm it, and the unit list shows the date the same digits give in every unit, so a wrong guess is visible where it is fixed. A unit you select always wins; when it disagrees with the digit count, Heal it offers "Interpret as …" with the date that reading gives.
+### Rule 2: unit and precision
 
-### 2. Exact arithmetic
+With Auto, the unit follows the digit table above and the note reads "Assumed seconds from digit count. Override the input unit if needed." The verdict is **One instant, assuming seconds.** and the chip a Check. Digits finer than the nanosecond fail with "Precision beyond nanoseconds cannot be represented." (verdict **Finer than nanoseconds.**). All arithmetic is on integer nanoseconds; a `Date` is created only after the nanoseconds are split off, so no precision is lost to floating point.
 
-Values become a count of nanoseconds held as an integer, so no precision is lost to floating point. A fraction finer than a nanosecond is refused ("Finer than nanoseconds"): seconds allow nine fractional digits, milliseconds six, microseconds three, nanoseconds none.
+### Rule 3: the supported range
 
-### 3. Calendar validity
+Instants must fall from `0001-01-01T00:00:00Z` to the end of 9999, judged on the millisecond. Outside it: "Supported dates run from year 0001 through 9999." (verdict **Outside years 0001 to 9999.**). The limit is the page's own choice for consistent ISO and Intl output, narrower than the ±8.64 × 10¹⁵ ms a JavaScript `Date` can hold ([ECMA-262, time values and time range](https://tc39.es/ecma262/#sec-time-values-and-time-range)). A millisecond value read as seconds lands tens of thousands of years ahead and fails here, which is why the range error offers **Interpret as milliseconds**.
 
-Month 1 to 12, a real day of that month, hours up to 23, minutes and seconds up to 59. A 29 February outside a leap year, a rolled-over date such as 31 April, and a leap second `:60` are refused as "Not a real calendar date". Leap seconds are refused because Unix time does not count them: POSIX defines every day as exactly 86,400 seconds.
+### Rule 4: calendar validity
 
-### 4. Time zones and clock changes
+Month 1 to 12, a real day of that month, hour to 23, minutes and seconds to 59. `2023-02-29`, `2024-04-31` and a `:60` leap second fail with "Invalid calendar date or time. Leap seconds and rolled-over dates are not accepted." (verdict **Not a real calendar date.**). Unix time has no leap seconds: [POSIX §4.16](https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap04.html#tag_04_16) defines seconds since the Epoch as "a value that approximates the number of seconds that have elapsed since the Epoch", by a formula in which every day has 86,400 seconds. An HTTP date whose weekday does not match fails with "The HTTP date or weekday is invalid."
 
-A value with `Z` or an offset is absolute. Without one, it is read in the input zone and reported: **No offset: read in Europe/Berlin** (check). [RFC 3339 section 5.6](https://www.rfc-editor.org/rfc/rfc3339#section-5.6) makes the offset part of every date-time (`full-time = partial-time time-offset`), precisely so that no reader has to guess. Zones are IANA names from your browser's time zone database.
+### Rule 5: offsets and zones
 
-| Local time | Outcome | Repair |
-| --- | --- | --- |
-| Skipped by a forward clock change (02:30 on a spring-forward night) | "Not a real time in the zone" | Heal it offers the times just before and after the jump, each with its offset written out |
-| Repeated by a backward clock change | "This time happens twice in the zone" | Choose Earlier or Later beside the input; each shows its offset |
+An offset `[+-]HH:MM` or `[+-]HHMM` is applied as written; hours over 23 or minutes over 59 fail with "Invalid UTC offset." `-00:00`, the unknown-local-offset convention of [RFC 3339 §4.3](https://www.rfc-editor.org/rfc/rfc3339#section-4.3), is read as UTC. Without an offset, the civil time is resolved in the input zone by sampling the zone's offsets around it, so transitions that are not on the hour and skipped dates are found. The note reads "No offset in input: interpreted in Europe/Berlin." and the verdict **One instant, assuming Europe/Berlin time.**
 
-### 5. Ranges
+- A time inside a forward clock change fails: "This local time does not exist in that zone (a clock change skipped it). Enter an explicit UTC offset or choose another time." (verdict **Not a real time in America/New_York.**).
+- A time repeated by a backward change fails until you choose: "This local time occurs twice. Choose the earlier or later occurrence, or enter an explicit UTC offset." (verdict **This time happens twice in America/New_York.**). The note then records "Used the earlier occurrence."
 
-Instants must fall between 0001-01-01T00:00:00Z and the end of 9999 in UTC, the range of [RFC 3339 section 5.6](https://www.rfc-editor.org/rfc/rfc3339#section-5.6) four-digit years; anything else is "Outside years 0001 to 9999". Every instant is also checked against signed 32-bit seconds, −2,147,483,648 to 2,147,483,647, which is 1901-12-13T20:45:52Z to 2038-01-19T03:14:07Z: **Fits signed 32-bit seconds** or **Outside signed 32-bit seconds**. The limit matters for older C `time_t`, 32-bit database columns and file formats, and embedded systems.
+### Rule 6: the 32-bit check
 
-### 6. Values with special meaning
+The whole seconds are compared with −2,147,483,648 to 2,147,483,647. Outside that, the verdict is **Outside signed 32-bit seconds: 2038 overflow risk.** The upper bound is `2038-01-19T03:14:07Z`. This is a property of systems that store `time_t` or a database column in 32 signed bits, not of Unix time itself.
 
-- **The Unix epoch itself** (info) for zero: in data it usually means "not set".
-- **Before 1970: a negative timestamp** (info): valid, but POSIX leaves the relationship undefined for years before 1970 and some parsers and databases refuse negative values.
-- **Sub-second precision** (info): formats that count whole seconds, such as the HTTP date, drop the fraction.
+### Rule 7: verdict order for one instant
+
+Epoch zero (**Unix epoch: 1 January 1970.**), then a negative value (**Before the Unix epoch: negative timestamp.**), then the 32-bit range, then a guessed unit, then an assumed zone, then **One instant. Exact to the nanosecond.** The summary line holds the notes, or "The unit was selected or the input includes an explicit offset."
+
+### Rule 8: batches and exports
+
+Each non-empty line is parsed with the same options. The verdict counts **n of m values converted.** Copied text keeps failed lines as `Line N: ERROR:` so nothing disappears. CSV output quotes every cell, doubles inner quotes, and prefixes a cell that starts with `=`, `+`, `-` or `@` with an apostrophe so a spreadsheet does not run it as a formula; a negative epoch therefore appears as `'-1`. The columns are line, input, iso, seconds, milliseconds, microseconds, nanoseconds, notes and error.
 
 ## Standards and conformance
 
-| Specification | Sections used | How the tool applies them | Where it differs or stops |
-| --- | --- | --- | --- |
-| [POSIX.1-2024 Base Definitions](https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap04.html#tag_04_19) | 4.19 Seconds Since the Epoch | Every day is 86,400 seconds; no leap seconds | Negative values are converted with the same arithmetic, where POSIX leaves them undefined |
-| [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339), updated by [RFC 9557](https://www.rfc-editor.org/rfc/rfc9557) | [5.6](https://www.rfc-editor.org/rfc/rfc3339#section-5.6) grammar, [5.7](https://www.rfc-editor.org/rfc/rfc3339#section-5.7) restrictions | Date-times with `Z` or an offset are absolute; `T`, `t` or space as separator; fractions to nine digits | More lenient: date-only input, values without an offset (read in a zone you see), and `+HHMM` offsets are accepted. Stricter: a leap second `:60` is refused. RFC 9557 suffixes such as `[Europe/Paris]` are not read |
-| [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110) | [5.6.7](https://www.rfc-editor.org/rfc/rfc9110#section-5.6.7) Date/Time Formats | IMF-fixdate, with the weekday checked | The obsolete RFC 850 and asctime forms that recipients are asked to accept are refused |
-| IANA time zone database | via the browser | Zone names and DST rules | Rules are as current as the browser |
+### RFC 3339: date and time on the internet
+
+[RFC 3339](https://www.rfc-editor.org/rfc/rfc3339) is a Proposed Standard profile of ISO 8601, updated by [RFC 9557](https://www.rfc-editor.org/rfc/rfc9557). The page reads the `date-time` and `full-date` productions of [§5.6](https://www.rfc-editor.org/rfc/rfc3339#section-5.6), accepts the lower-case `t` and `z` and the space separator that section allows, and writes `Z` for UTC and a numeric offset otherwise. Where it is more lenient: seconds may be omitted and nine fractional digits are kept. Where it stops: RFC 9557's bracketed suffix such as `[Europe/Paris]` is not read; use the zone control instead.
+
+### RFC 9110: HTTP dates
+
+[RFC 9110](https://www.rfc-editor.org/rfc/rfc9110) is an Internet Standard (STD 97) that obsoletes RFC 7231. [§5.6.7](https://www.rfc-editor.org/rfc/rfc9110#section-5.6.7) says a sender "MUST generate those timestamps in the IMF-fixdate format" and that HTTP-date "represents time as an instance of Coordinated Universal Time (UTC)". The HTTP row always writes IMF-fixdate in GMT. The input field accepts only that form; the RFC 850 and asctime obsolete forms, which the RFC says a recipient must still accept, can be edited in their own result rows but are not read from the main input.
+
+### POSIX and the Unix epoch
+
+[The Open Group Base Specifications Issue 7, §4.16](https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap04.html#tag_04_16) defines seconds since the Epoch without leap seconds, and the page converts with the same arithmetic: integer nanoseconds, signed, with floor division for negatives. It extends the definition to fractional units; POSIX itself speaks only of seconds.
+
+### IANA time zones
+
+Zone names and rules come from the [IANA Time Zone Database](https://www.iana.org/time-zones) as shipped in your browser. The page lists the zones the browser reports and resolves offsets through `Intl.DateTimeFormat`. An older browser may lack a recent rule change; the page cannot know.
+
+### RFC 7519: the JWT fixture
+
+The **Use as JWT expiry** value follows the NumericDate definition of [RFC 7519 §2](https://www.rfc-editor.org/rfc/rfc7519#section-2): "the number of seconds from 1970-01-01T00:00:00Z UTC until the specified UTC date/time, ignoring leap seconds". The fixture is rounded down to whole seconds and carries `alg: none`, which [RFC 8725 §3.1](https://www.rfc-editor.org/rfc/rfc8725#section-3.1) tells verifiers to reject by default. It is for testing a verifier, never for use.
+
+### RFC 4180: CSV export
+
+The batch CSV follows [RFC 4180 §2](https://www.rfc-editor.org/rfc/rfc4180#section-2) quoting (every field quoted, inner quotes doubled, a header row) and adds the formula-neutralising apostrophe, which is a spreadsheet safety measure outside the RFC.
+
+### ISO 8601 and the ISO rows
+
+[ISO 8601-1:2019](https://www.iso.org/standard/70907.html) defines the calendar, ordinal and week dates the ISO picker offers and the basic format `YYYYMMDDTHHmmssZ`. Only its RFC 3339 subset is read from the input field.
 
 ## Finding reference
 
-| Finding | Severity | Source | What it means for the system storing the value | Fix |
-| --- | --- | --- | --- | --- |
-| Unit guessed | Check | | Wrong by a factor of 1,000 if the guess is wrong | Choose the unit; name it in the field (`created_at_ms`) |
-| Unit set to … | Pass | | Read exactly | Nothing |
-| No offset: read in a zone | Check | RFC 3339 §5.6 | Another system may read another instant | Write the offset, or use UTC with `Z` |
-| Offset in the input | Pass | RFC 3339 §5.6 | Independent of any zone setting | Nothing |
-| Fits signed 32-bit seconds | Pass | POSIX 4.19 | Every common system can hold it | Nothing |
-| Outside signed 32-bit seconds | Check | | Older systems overflow or refuse it | Store 64-bit integers or ISO 8601 text |
-| The Unix epoch itself | Info | POSIX 4.19 | Usually an unset value | Store null for "no time" |
-| Before 1970: a negative timestamp | Info | POSIX 4.19 | Some parsers refuse it | Check every system on the path |
-| Sub-second precision | Info | | Whole-second formats drop the fraction | Pick a format that keeps it |
-| Not a real calendar date | Fail | RFC 3339 §5.7 | The value cannot be stored as written | Correct the date |
-| Not a real time in a zone | Fail | | The local time never happened | Use a time with an explicit offset |
-| This time happens twice in a zone | Fail | | Ambiguous by an hour | Choose Earlier or Later, or write the offset |
-| Outside years 0001 to 9999 | Fail | RFC 3339 §5.6 | Usually a wrong unit | Choose the unit Heal it suggests |
-| Not a format this tool reads | Fail | | Exponents, slash dates, natural language | Write an epoch number or ISO date |
-| Finer than nanoseconds | Fail | | Precision would be lost | Round to nine fractional digits |
-| N of M lines converted | Pass or check | | Failed lines are marked, not dropped | Fix or remove the failed lines |
+### Checks on a converted instant
+
+| Finding | Chip | Meaning | Fix |
+| --- | --- | --- | --- |
+| Unit guessed from n digits | Check | The unit came from the digit table, not from you | Select the unit, or add a suffix and apply Read unit suffix |
+| No offset, read in zone | Check | The civil time was resolved in the input zone | Choose the right zone, then apply Make the offset explicit |
+| Outside the signed 32-bit seconds range | Check | A `time_t` or 32-bit column cannot hold this value | Store 64-bit seconds or milliseconds; see the Guide |
+| Before the Unix epoch: negative timestamp | Check | Valid, but some APIs refuse negatives (MySQL `FROM_UNIXTIME`) | Use a date literal where the snippet shows one |
+| Unit set to unit, Offset in the input, Fits signed 32-bit seconds | Pass | Nothing to do | |
+
+### Values that do not convert
+
+| Verdict | Message | Cause |
+| --- | --- | --- |
+| Not a format this tool reads. | Use an epoch number, YYYY-MM-DD, ISO date-time, or an HTTP date ending in GMT. Ambiguous date orders are not guessed. | Slash dates, words, exponent notation, separators |
+| Finer than nanoseconds. | Precision beyond nanoseconds cannot be represented. | Too many fractional digits for the unit |
+| Outside years 0001 to 9999. | Supported dates run from year 0001 through 9999. | Usually milliseconds read as seconds |
+| Not a real calendar date. | Invalid calendar date or time. Leap seconds and rolled-over dates are not accepted. | 29 February off a leap year, 31 April, `:60` |
+| Not a real time in zone. | This local time does not exist in that zone (a clock change skipped it). | Spring-forward gap |
+| This time happens twice in zone. | This local time occurs twice. Choose the earlier or later occurrence. | Autumn fold, no choice made |
+| Input needs attention. | Choose a valid IANA time zone, such as America/New_York. | Unknown zone name |
+| Input needs attention. | Input is limited to 20,000 characters. / Use at most 200 non-empty lines. | Batch too large |
 
 ## Guide
 
-### A log time is an hour off
+### A Date.now() value read as seconds
 
-1. Paste the value. If the verdict says "assuming Europe/Berlin time" or similar, the value had no offset and was read in a zone.
-2. Set the input zone to the zone of the system that wrote the log; the instant moves.
-3. Fix the writer: log RFC 3339 with an offset, or UTC with `Z`.
+`1700000000000` with Seconds selected fails the range rule. Apply **Interpret as milliseconds** under Heal it; the verdict becomes one instant in November 2023 and History records the change. In Auto mode the same value is read as milliseconds from its 13 digits, with a Check chip reminding you it was guessed.
 
-### A date lands in the year 55,000
+### A 2038 value
 
-The value is milliseconds read as seconds. Heal it offers "Interpret as milliseconds"; in code, divide by 1,000 or use a millisecond API (`new Date(ms)` in JavaScript, `datetime.fromtimestamp(ms / 1000, tz=timezone.utc)` in Python).
+Break it loads `2147483648` seconds, one past the signed 32-bit limit. The verdict is **Outside signed 32-bit seconds: 2038 overflow risk.** If the value will be stored in a C `time_t` on a 32-bit build, a 32-bit integer column or an embedded device, store it as a 64-bit integer or as milliseconds in a 64-bit field, and check with the Use in code snippet what your language keeps.
 
-### Test your system with Break it
+### A date before 1970
 
-| Break it | Value | What a robust system does |
-| --- | --- | --- |
-| Epoch zero | `0` | Treats it as a real time only if your domain allows it |
-| Before 1970 | `-1` | Converts it to 1969-12-31T23:59:59Z |
-| 2038 overflow | `2147483648` | Stores and reads it back unchanged |
-| Mix up s and ms | your instant in milliseconds, read as seconds | Rejects or flags a date thousands of years ahead |
-| Nanosecond precision | your instant with nine fractional digits | Keeps or explicitly rounds the fraction |
-| Invalid leap day | `2023-02-29T12:00:00Z` | Rejects it |
-| DST missing hour | `2024-03-10T02:30:00` in America/New_York | Rejects it or resolves it explicitly |
-| DST repeated hour | `2024-11-03T01:30:00` in America/New_York | Asks which occurrence, or uses the offset |
+`-1` is 1969-12-31T23:59:59Z. Negative values are valid everywhere in the page. The MySQL snippet switches to a `TIMESTAMP` literal because `FROM_UNIXTIME` refuses negatives, and the Python snippet adds to the epoch so it works on every platform.
 
-Copy a value from Every format and feed it to your parser, then compare with what the tool shows. Revert returns to your own input.
+### A skipped or repeated hour
 
-### Check a conversion without the tool
+Break it loads `2024-03-10T02:30:00` in America/New_York, a time that never happened. Heal it offers the reading with the offset from before and after the jump, each written with that offset so no other system has to guess. The repeated case, `2024-11-03T01:30:00`, is settled with Earlier or Later next to the input; each button shows its offset. For a batch, write the offset on each affected line instead.
+
+### A leap day that does not exist
+
+`2023-02-29T12:00:00Z` fails the calendar rule. Correct the year or the day; the page does not roll dates over.
+
+### Nanosecond precision
+
+Break it builds a nanosecond value from your own instant. Every format row shows what survives: ISO keeps nine digits, SQL variants three or six, the HTTP date whole seconds, and the snippet notes say which languages drop digits.
+
+### A batch of lines
+
+Paste one value per line. Pick **Copy all as** ISO 8601 or milliseconds and a zone, keep failed lines marked so the output stays aligned with the input, and copy. Use CSV when a spreadsheet is next.
+
+### Confirm a conversion independently
 
 ```sh
-date -u -r 1760000000          # macOS
-date -u -d @1760000000         # GNU date
+date -u -d @1760000000        # GNU coreutils
+date -u -r 1760000000         # macOS and BSD
+python3 -c "from datetime import datetime, timezone; print(datetime.fromtimestamp(1760000000, timezone.utc).isoformat())"
 ```
 
-Both print Thursday 9 October 2025, 08:53:20 UTC.
+All three print 2025-10-09 08:53:20 UTC. For a milliseconds value divide by 1,000 first; the shell `date` takes whole seconds only.
+
+### Break it cases
+
+| Button | Loads | What it shows |
+| --- | --- | --- |
+| Epoch zero | `0` seconds | The epoch verdict |
+| Before 1970 | `-1` seconds | A negative timestamp |
+| 2038 overflow | `2147483648` seconds | The 32-bit range check |
+| Mix up s and ms | Your instant in milliseconds, read as seconds | The range failure and Interpret as milliseconds |
+| Nanosecond precision | Your instant with `123456789` ns added | What each format keeps |
+| Invalid leap day | `2023-02-29T12:00:00Z` | The calendar rule |
+| DST missing hour | `2024-03-10T02:30:00`, America/New_York | The gap repairs |
+| DST repeated hour | `2024-11-03T01:30:00`, America/New_York | The Earlier and Later choice |
+
+Cases that are a way of writing an instant build on your own input; the fixed dates are reserved test values. Revert restores what you had.
 
 ## Worked example
 
-The page opens on `1760000000`, a fixed value standing for a server log entry.
+The opening value is the reserved sample `1760000000`, labelled Example: a synthetic value, not read from any live system. Ten digits put it in the seconds band, so the verdict is **One instant, assuming seconds.** with the note "Assumed seconds from digit count. Override the input unit if needed." The chips read Unit guessed from 10 digits (Check) and Fits signed 32-bit seconds (Pass).
 
-1. It is a bare number with ten digits, so Auto reads seconds: **Unit guessed: seconds** (check).
-2. As seconds it is 2025-10-09T08:53:20Z, day 282 of the year, ISO week 41.
-3. It is within signed 32-bit seconds: **Fits signed 32-bit seconds**.
-
-Verdict: **One instant, assuming seconds.** The unit list shows that the same digits as milliseconds would be 1970-01-21, which is how a wrong guess becomes visible. Take it further offers the instant as the `exp` of an unsigned test JWT. Press Mix up s and ms and the instant is rewritten in milliseconds but read as seconds: "Outside years 0001 to 9999", with "Interpret as milliseconds" in Heal it.
+The readable line is Thursday, 9 October 2025, 08:53:20 UTC; the facts line says day 282 of the year, ISO week 41, common year. Every format shows `2025-10-09T08:53:20Z`, `1760000000000` milliseconds, `Thu, 09 Oct 2025 08:53:20 GMT`, `2025-10-09 08:53:20` for SQL. Selecting Seconds in the unit control turns the first chip into Unit set to seconds and the verdict into **One instant. Exact to the nanosecond.**, because the reading is no longer a guess. Shift shows 07:53:20 and 09:53:20 as the one-hour targets; Snap shows 2025-10-06 as the start of the week and 2025-10-31 23:59:59 as the end of the month.
 
 ## For agents
 
-The MCP server's timestamp operations apply the same parser. An agent should state the unit and zone it assumed, convert with integer arithmetic, and never round silently. See [Connect Tamperbox MCP](/mcp/connect/).
+The Tamperbox MCP server exposes two MCP tools: use `search` to inspect the catalog and schema, then use `execute` to call an operation through `tamperbox.request`. The timestamp page maps to three `POST /v1/tools/...` operations:
+
+| Operation | Required input and result | Notes |
+| --- | --- | --- |
+| `timestamp_to_iso` | A text artifact containing one epoch or UTC calendar value; returns an ISO text artifact | No live clock and no zone inference |
+| `timestamp_convert` | `input` of up to 20,000 characters and 200 lines; returns parsed rows plus the requested export | Per-line errors stay in the result; nanoseconds are decimal strings |
+| `timestamp_adjust` | One `input`; returns ISO and nanosecond values, formatted output and facts, plus optional code or JWT fields | Shift with `delta`, or snap with `period` and `edge`; the JWT fixture is unsigned |
+
+Keep these with any conclusion: a guessed unit is a hint from the digit count; a time read without an offset depends on the zone supplied and on the zone database of the runtime; MCP inputs are processed on the Tamperbox server, so keep sensitive values on the browser page. See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for the calling pattern.
 
 ## Limits
 
-- The unit guess is a hint; only the writer of the value knows its unit.
-- Years 0001 to 9999; no leap seconds; no natural-language, slash or exponent input.
-- Time zone rules come from your browser's database and are as current as the browser.
-- Shifts are elapsed time; a calendar day across a DST change is 23 or 25 hours.
-- The Now control and relative times use your device clock.
+- Instants run from year 0001 to 9999 in UTC; precision finer than a nanosecond is refused, not rounded.
+- Auto unit detection is a digit count. Select the unit when it matters.
+- Zone rules are the browser's. A recent rule change may be missing from an older browser.
+- No natural-language parsing, no slash dates, no leap seconds, no RFC 9557 zone suffixes.
+- Shifts are elapsed time; calendar snapping and the display rows follow the display zone; ISO and HTTP rows are always UTC.
+- Now and the relative age use the device clock.
+- Input is limited to 20,000 characters, 200 non-empty lines and 500 characters per value; templates to 100 characters.
+- Nothing is sent or stored; the JWT handoff moves one value through tab memory.
 
 ## References
 
-- [POSIX.1-2024 Base Definitions, section 4.19](https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap04.html#tag_04_19), Seconds Since the Epoch.
-- [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339), Date and Time on the Internet: Timestamps: [section 5.6](https://www.rfc-editor.org/rfc/rfc3339#section-5.6) grammar, [section 5.7](https://www.rfc-editor.org/rfc/rfc3339#section-5.7) restrictions. Proposed Standard, updated by RFC 9557.
-- [RFC 9557](https://www.rfc-editor.org/rfc/rfc9557), Timestamps with Additional Information: [section 2](https://www.rfc-editor.org/rfc/rfc9557#section-2), the update to RFC 3339 section 4.3.
-- [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110), HTTP Semantics: [section 5.6.7](https://www.rfc-editor.org/rfc/rfc9110#section-5.6.7) Date/Time Formats. Internet Standard.
-- [RFC 7519](https://www.rfc-editor.org/rfc/rfc7519#section-2), JSON Web Token, section 2: NumericDate, the seconds count the JWT handoff uses.
+- [RFC 3339, Date and Time on the Internet: Timestamps](https://www.rfc-editor.org/rfc/rfc3339). Proposed Standard, July 2002; updated by RFC 9557. Sections used: [4.3](https://www.rfc-editor.org/rfc/rfc3339#section-4.3), [5.6](https://www.rfc-editor.org/rfc/rfc3339#section-5.6), [5.8](https://www.rfc-editor.org/rfc/rfc3339#section-5.8).
+- [RFC 9557, Date and Time on the Internet: Timestamps with Additional Information](https://www.rfc-editor.org/rfc/rfc9557). Proposed Standard, April 2024; updates RFC 3339. Not implemented; named so readers know the suffix form is not read.
+- [RFC 9110, HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110). Internet Standard (STD 97), June 2022; obsoletes [RFC 7231](https://www.rfc-editor.org/rfc/rfc7231). Section used: [5.6.7](https://www.rfc-editor.org/rfc/rfc9110#section-5.6.7).
+- [RFC 5322, Internet Message Format](https://www.rfc-editor.org/rfc/rfc5322). Draft Standard; updated by [RFC 6854](https://www.rfc-editor.org/rfc/rfc6854). Section used: [3.3](https://www.rfc-editor.org/rfc/rfc5322#section-3.3) for the email date row.
+- [RFC 7519, JSON Web Token](https://www.rfc-editor.org/rfc/rfc7519). Proposed Standard; updated by RFC 8725. Section used: [2](https://www.rfc-editor.org/rfc/rfc7519#section-2) (NumericDate).
+- [RFC 8725, JSON Web Token Best Current Practices](https://www.rfc-editor.org/rfc/rfc8725). Best Current Practice. Section used: [3.1](https://www.rfc-editor.org/rfc/rfc8725#section-3.1).
+- [RFC 4180, Common Format and MIME Type for CSV Files](https://www.rfc-editor.org/rfc/rfc4180). Informational; updated by [RFC 7111](https://www.rfc-editor.org/rfc/rfc7111). Section used: [2](https://www.rfc-editor.org/rfc/rfc4180#section-2).
+- [RFC 850, Standard for Interchange of USENET Messages](https://www.rfc-editor.org/rfc/rfc850). Obsoleted by [RFC 1036](https://www.rfc-editor.org/rfc/rfc1036); its date form survives only as the obs-date of RFC 9110 §5.6.7 and in the RFC 850 result row.
+- [The Open Group Base Specifications Issue 7, 2018 edition, §4.16 Seconds Since the Epoch](https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap04.html#tag_04_16).
+- [IANA Time Zone Database](https://www.iana.org/time-zones).
+- [ISO 8601-1:2019, Date and time, Representations for information interchange, Part 1: Basic rules](https://www.iso.org/standard/70907.html).
+- [ECMA-262, Time values and time range](https://tc39.es/ecma262/#sec-time-values-and-time-range).

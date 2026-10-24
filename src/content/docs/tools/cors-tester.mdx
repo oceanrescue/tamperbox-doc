@@ -1,0 +1,259 @@
+---
+title: CORS Tester
+description: What the CORS Tester sends from the Tamperbox server, how it replays the browser's CORS algorithm on the preflight and the actual response, what each step means, and how to fix and verify each block.
+updated: 2026-10-21
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and repair guide for the Tamperbox CORS Tester, which sends one OPTIONS preflight and, for GET or HEAD only, one request with the Origin header from the Tamperbox server, or reads pasted response headers in the browser, and reports step by step whether a browser would allow the call.
+prerequisites:
+  - The URL a page calls, the origin of that page, the method and request header names it uses, or response headers copied from a browser's network panel
+outputs:
+  - A verdict of Allowed, Blocked or Not decided, the browser's checks in order with what was sent beside what came back, the headers that would allow the request in six server syntaxes, and the raw exchange
+limitations:
+  - The Tamperbox server is not your users' browser; requests that could change data are never sent; no cookies or header values travel; a pasted block is judged in the role you give it
+---
+
+The tool page is [tamperbox.dev/cors-tester](https://tamperbox.dev/cors-tester). It opens with `https://tamperbox.dev/` in the box and nothing sent; you name the calling page's origin and press Send preflight. This page is the long version: what the server sends, every step the tool replays from the browser's algorithm, what each outcome means, and how to fix and verify each one.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> pressing Send preflight sends the URL, origin, method and header names to the Tamperbox server, which sends one OPTIONS request and, for GET and HEAD only, one request carrying just the Origin header, then returns the status and headers of each. Pasted response headers are read in your browser and never uploaded. No cookies, no header values and no request bodies are ever sent. Nothing is stored.</div>
+
+## What the tool answers
+
+Four questions, in the order a browser asks them:
+
+1. **Does this request need a preflight?** A method or header outside the safelist makes the browser ask first.
+2. **Did the preflight permit it?** A 2xx status, the origin allowed, credentials allowed when cookies are sent, the method and every custom header listed.
+3. **Can the page read the real response?** The origin and credentials rules again, on the response to the actual request.
+4. **Will caches keep it that way?** `Vary: Origin` when a specific origin is echoed, and how long the preflight is cached.
+
+The verdict names one of three outcomes. **Blocked** names the step that failed. **Allowed** means every step passed and an actual response was checked. **Not decided** means nothing failed but the exchange is incomplete: the real request was not sent because the method could change data, or a pasted exchange lacks one of its two halves.
+
+## Inputs
+
+### A URL to call
+
+The box takes the address the page would call. `parseUrl` in `site-ui.js` reads it: an address without a scheme gets `https://`; spaces, non-HTTP schemes, a user name or password, a port other than 80 or 443, an IP address and a host without a top-level domain are refused with a message, and the port and credential cases offer a repair. The fragment is dropped.
+
+Pasted text is tidied by the shared cleaner (`cleanInput` in `lib/input-clean.js`, applied through `tidySource`): a quoted or bracketed address loses its wrapping and trailing punctuation, and the hint says what was kept. Because this is a page tool, the whole address stays, not just the host. Text that fits nothing stays as pasted so the parser's message explains it. Typing is never rewritten; a break or repair load is never cleaned.
+
+A real server is never contacted on its own. The page shows "Ready to test" and waits for Enter or the Send preflight button. The reserved `harbor-supply.example` hosts answer from a local fixture at once, without a network request.
+
+### The request below the box
+
+| Field | What the tool does with it |
+| --- | --- |
+| Calling page origin | Must be a scheme and host, optionally a port, with no path, query or trailing slash; `null` is accepted as the opaque origin. Sent as `Origin`. |
+| Method | GET, HEAD, POST, PUT, PATCH or DELETE. Sent as `Access-Control-Request-Method`. Only GET and HEAD are ever sent as the actual request. |
+| Request headers | Names only, split on commas or whitespace, lowercased, deduplicated and sorted; at most 20 valid token names. Sent as `Access-Control-Request-Headers`. Values are never asked for. |
+| Send cookies | A flag that switches on the credentials rules. No cookie is ever sent. |
+| Single pasted response is | Preflight or Actual, used only when one pasted block is supplied. |
+
+Changing the origin or headers re-checks pasted headers and fixture endpoints at once; a real server waits for Enter or the button again. When the box holds a real address, the fixture's origin `https://www.harbor-supply.example` is cleared, so a third party's server is never probed with the sample origin.
+
+### Pasted response headers
+
+Text that starts with a status line or `name: value` lines is read as responses by `parseResponses` in `http-checks.js`: each `HTTP/x 2xx` line starts a block, header names are lowercased, and an indented continuation line joins the header above it. One block is judged in the role you select, with an assumed status of 204 for a preflight and 200 for an actual response when no status line was pasted. Two blocks are the preflight first and the actual response second. Nothing in a paste leaves the browser.
+
+## Reading the result
+
+### Verdict and chips
+
+The verdict line is Blocked, Allowed or Not decided, followed by the failing step's title or a sentence naming the origin, host and request. The chips are buttons: "Blocked at step n", "Preflight needed" or "No preflight", and "n checks passed", each scrolling to the steps.
+
+### Findings
+
+Findings repeat the steps that failed or warned, worst first; passes fold into one line.
+
+### What the browser checks
+
+One row per step, in the order the browser applies them, each with a badge and, where it applies, "Browser sends" beside "Server answers" with the exact header lines. After a block, a greyed row says what never happens: the request is not sent, or the page cannot read the response. After a passing preflight for a method the tool does not send, a greyed row says the request itself was not sent.
+
+### Headers that would allow it
+
+When a step blocks the request, the code window holds the response headers that would allow it, built by `corsFix` from what the server already sent, in the syntax of the server you pick: nginx, Apache, Caddy, a `_headers` file, IIS `web.config` or Express. The note under it says where the lines go and whether they belong on the OPTIONS answer or on the actual response.
+
+### Requests and responses
+
+The raw exchange: for a live check, the OPTIONS request and the GET or HEAD request as our server sent them, with each answer's status, time and headers, the CORS headers marked. For a paste, the blocks as pasted.
+
+### History
+
+Break it and Heal it log what they replaced. Revert undoes the newest change and Reset input returns to what you entered, including the request fields a break changed.
+
+### Take it further
+
+Take it further carries a value derived from this result into another tool in the same category: the Redirect Checker at the request URL when the preflight was redirected, the preflight as a curl command into the Postman Collection Converter, and the HTTP/3 and Compression Checker at the API origin. Each opens the other tool with the value in its box; nothing is put in a URL.
+
+## Method
+
+The evaluation is `evaluateCors` in `public/lib/http-checks.js`, run in the browser on the preflight and actual responses, whether they came from our server or from a paste. It stops at the first failure, as a browser does.
+
+### Step 1: is a preflight needed?
+
+A request is sent directly when its method is GET, HEAD or POST and every request header is one of `accept`, `accept-language` or `content-language`. Anything else triggers a preflight. This is stricter than the [Fetch Standard's CORS-safelisted request-header](https://fetch.spec.whatwg.org/#cors-safelisted-request-header) rule, which also safelists `Content-Type` with the values `application/x-www-form-urlencoded`, `multipart/form-data` and `text/plain`, and `Range` with a simple range. The tool asks for header names only, never values, so it cannot tell a form body from a JSON body and treats `Content-Type` as custom; a JSON body is the usual case, and the stricter reading shows the preflight such a request will trigger. The [CORS-safelisted method](https://fetch.spec.whatwg.org/#cors-safelisted-method) list is applied as the standard writes it.
+
+### Step 2: the preflight status
+
+A preflight must get a 2xx status. In the [CORS-preflight fetch](https://fetch.spec.whatwg.org/#cors-preflight-fetch) the standard says: "If response's status is not an ok status, then return a network error." The tool reports three failures:
+
+| Outcome | Finding | Rule |
+| --- | --- | --- |
+| No response | Preflight got no answer | The OPTIONS request failed at DNS, connect or timeout; the stage is named |
+| 3xx or any `Location` | Preflight was redirected (status) | Fetch sets the preflight's redirect mode to `error`, so a redirect is a network error |
+| Other non-2xx | Preflight answered (status) | An ok status is 200 to 299; 404 and 405 are the common framework answers |
+
+Our server sends the OPTIONS with `redirect: manual`, so a redirect is seen, not followed, and the `Location` is shown.
+
+### Step 3: the origin
+
+The [CORS check](https://fetch.spec.whatwg.org/#cors-check) decides this step, on the preflight and again on the actual response. The standard: "If origin is null, then return failure", "If origin is `*` and credentials mode is not include, then return success", "If request's origin, serialized and UTF-8 encoded, is not origin, then return failure", "If credentials mode is not include, then return success", "If allowCredentials is not `true`, then return failure". The tool's readings, in order: no header is a block; more than one header or a comma-separated value is a block (the header holds exactly one origin or `*`); `*` with cookies is a block; `*` without cookies passes; any other value must equal the calling origin byte for byte, as [RFC 6454 section 7](https://www.rfc-editor.org/rfc/rfc6454#section-7) serializes an origin, which has no trailing slash.
+
+### Step 4: credentials
+
+Only with Send cookies on. `Access-Control-Allow-Credentials` must be exactly `true`, lowercase; anything else, including a missing header, is a block.
+
+### Step 5: method and headers
+
+Checked on the preflight only, and only for the parts that made it necessary. The method must appear in `Access-Control-Allow-Methods` exactly as written, or the list must contain `*` and the request must be without credentials. Each custom header must appear in `Access-Control-Allow-Headers`, compared case-insensitively, or `*` must be present without credentials; `*` never covers `Authorization`, which must be named. Both follow the wildcard rules in the [CORS-preflight fetch](https://fetch.spec.whatwg.org/#cors-preflight-fetch): "If request's credentials mode is not include and methods contains `*`" and the matching sentence for headers, with the `Authorization` exception stated there.
+
+### Step 6: caching the preflight
+
+`Access-Control-Max-Age` is information, never a block. Without it the tool says browsers cache the answer for 5 seconds, the default the standard sets for a [max-age value](https://fetch.spec.whatwg.org/#http-access-control-max-age) that is absent; Chrome caps any value at 7,200 seconds, a browser limit, not a standard one.
+
+### Step 7: the actual response
+
+Our server sends the actual request only for GET and HEAD, and only when no preflight was needed or the preflight permitted the request as judged by the same rules on the server. It carries the `Origin` header and nothing else that identifies you. A status below 400 passes; 4xx and 5xx are noted, not failed, because CORS can allow a page to read an error. The origin and credentials rules run again. Then, when a specific origin is echoed without `Vary: Origin` ([RFC 9110 section 12.5.5](https://www.rfc-editor.org/rfc/rfc9110#section-12.5.5)), a warning says a shared cache can serve one origin's answer to another, as [RFC 9111 section 4.1](https://www.rfc-editor.org/rfc/rfc9111#section-4.1) describes the use of `Vary` in selecting a stored response. `Access-Control-Expose-Headers` is listed as information.
+
+The result is Allowed only when no step failed, the preflight was present whenever it was needed, and an actual response was checked. POST, PUT, PATCH and DELETE are never sent because they could change data on a server you may not own, so a passing preflight for them ends in Not decided.
+
+## Standards and conformance
+
+The tool is an observer of one exchange, not a conforming user agent. It reproduces the browser's decision procedure on the responses it has and names where it is stricter or stops.
+
+### Fetch Standard, CORS protocol
+
+The [CORS protocol](https://fetch.spec.whatwg.org/#http-cors-protocol) of the WHATWG Fetch Living Standard is the current specification; the W3C Cross-Origin Resource Sharing Recommendation of 2014 is obsolete and superseded by it, and is cited here only as history. Implemented in the browser from the responses: the preflight ok-status and redirect rules, the CORS check, the wildcard rules for methods and headers with the `Authorization` exception, and the max-age default. Implemented on our server: the decision to send the actual request only after a preflight that passes the same rules. Stricter than the standard: `Content-Type` and `Range` always count as custom headers, because the tool knows names, not values. Not implemented: the `Access-Control-Allow-Private-Network` check, the CORS-safelisted response-header filtering beyond listing `Access-Control-Expose-Headers`, and the preflight cache itself.
+
+### RFC 6454, the Web Origin Concept
+
+[RFC 6454](https://www.rfc-editor.org/rfc/rfc6454) is a Proposed Standard. Section 7 defines the serialization the tool compares against: scheme, host and port, no path. The page refuses an origin with a path, query or trailing slash before anything is sent, and accepts the string `null` as the opaque origin.
+
+### RFC 9110 and RFC 9111
+
+[RFC 9110](https://www.rfc-editor.org/rfc/rfc9110), HTTP Semantics, is an Internet Standard that replaces the earlier RFC 7230 family of HTTP semantics documents. Used: [section 9.3.7](https://www.rfc-editor.org/rfc/rfc9110#section-9.3.7) for OPTIONS, [section 15.4](https://www.rfc-editor.org/rfc/rfc9110#section-15.4) for the 3xx class the tool treats as a redirect on a preflight, and [section 12.5.5](https://www.rfc-editor.org/rfc/rfc9110#section-12.5.5) for `Vary`. [RFC 9111](https://www.rfc-editor.org/rfc/rfc9111), HTTP Caching, [section 4.1](https://www.rfc-editor.org/rfc/rfc9111#section-4.1), is behind the `Vary: Origin` warning, which is a cache-compatibility warning, not evidence that any cache misbehaved.
+
+## Finding reference
+
+Each row is a step the code can emit, with its id in `evaluateCors`. Ids beginning with `preflight-` and `actual-` are the same rule applied to each response.
+
+### Blocks at the preflight
+
+| Finding | Id | Severity | Standard | Meaning for the page | Fix |
+| --- | --- | --- | --- | --- | --- |
+| Preflight got no answer | preflight-status | Fail | Fetch, CORS-preflight fetch | The OPTIONS never got a response from this vantage point | Check DNS, the firewall and that OPTIONS reaches the application |
+| Preflight was redirected (status) | preflight-status | Fail | Fetch, redirect mode error | The browser stops; the request is never sent | Answer OPTIONS at the requested URL itself, before any redirect rule |
+| Preflight answered (status) | preflight-status | Fail | Fetch, ok status | Usually no route handles OPTIONS, or auth middleware rejected it | Route OPTIONS to a handler that answers 204 before authentication |
+| Preflight allows no origin | preflight-origin | Fail | Fetch, CORS check | No `Access-Control-Allow-Origin` | Send the calling origin or `*` |
+| More than one allowed origin | preflight-origin | Fail | Fetch, CORS check | A list is not a valid value | Echo the one origin that asked, with `Vary: Origin` |
+| Wildcard origin with credentials | preflight-origin | Fail | Fetch, CORS check | `*` is refused when cookies are sent | Echo the exact origin and send `Access-Control-Allow-Credentials: true` |
+| Origin (x) is not the one allowed | preflight-origin | Fail | RFC 6454 section 7 | The server allows a different origin, or the same one with a slash | Match scheme, host and port exactly |
+| Credentials not allowed | preflight-credentials | Fail | Fetch, CORS check | With cookies, `true` is required | Send `Access-Control-Allow-Credentials: true` |
+| (Method) not allowed | methods | Fail | Fetch, preflight wildcard rule | Method missing from the list, or `*` with credentials | List the method by name; names are case-sensitive |
+| (Header) not allowed | headers | Fail | Fetch, preflight wildcard rule | Header missing, or `Authorization` under `*` | Add each name to `Access-Control-Allow-Headers` |
+
+### Blocks and warnings at the actual response
+
+| Finding | Id | Severity | Standard | Meaning for the page | Fix |
+| --- | --- | --- | --- | --- | --- |
+| Request got no answer | actual-status | Fail | None | The GET or HEAD failed from this vantage point | Check reachability; a preflight alone cannot allow the call |
+| Response (status) | actual-status | Pass or Info | None | Below 400 passes; an error is still readable if CORS allows it | None for CORS; fix the application error separately |
+| Response allows no origin, More than one, Wildcard with credentials, Origin not the one allowed | actual-origin | Fail | Fetch, CORS check | The same origin rules, on the response the page reads | Send the origin headers on the actual response too, not only on OPTIONS |
+| Credentials not allowed | actual-credentials | Fail | Fetch, CORS check | Same as the preflight rule | Same as above |
+| No Vary: Origin | vary | Check | RFC 9110 section 12.5.5, RFC 9111 section 4.1 | A shared cache can hand one origin's answer to another | Add `Vary: Origin` whenever a specific origin is echoed |
+
+### Information rows
+
+| Finding | Id | Severity | Meaning |
+| --- | --- | --- | --- |
+| Preflight required | needed | Info | Names the method or headers that make the browser ask first |
+| No preflight needed | needed | Info | A simple request; the response alone decides |
+| Preflight not supplied | preflight-missing | Info | A paste without the OPTIONS block; the actual response is still checked |
+| Preflight cached for n s, Preflight not cached | max-age | Info | How long browsers reuse the answer; 5 seconds without the header |
+| Extra headers readable | expose | Info | The headers `Access-Control-Expose-Headers` lets the page read |
+| Any origin allowed (*) | preflight-origin, actual-origin | Pass | Fine for public data; cookies would need the exact origin |
+
+## Guide
+
+### The preflight answers 404 or 405
+
+The framework has no route for OPTIONS, or an authentication layer runs before the CORS handler and rejects a request that carries no token. Browsers never send credentials with a preflight, so the handler must answer before authentication. Route OPTIONS to a handler that returns 204 with the allow headers. The tool's code window gives the lines for your server; for nginx it is one `add_header … always;` line per header in the server block, where `always` keeps the headers on error responses too. Confirm independently:
+
+```
+curl -i -X OPTIONS 'https://api.example.com/v1/items' \
+  -H 'Origin: https://app.example.com' \
+  -H 'Access-Control-Request-Method: PUT' \
+  -H 'Access-Control-Request-Headers: content-type'
+```
+
+The status line must be 2xx and the `Access-Control-Allow-*` lines must be present. Then press Send preflight again.
+
+### The preflight is redirected
+
+A rule that adds `https://`, a trailing slash or `www` runs before CORS, or a sign-in redirect catches OPTIONS. The browser treats any redirect on a preflight as a network error. Make the page call the final address, and make OPTIONS answer at that address without a redirect. Take it further hands the request URL to the Redirect Checker so you can see the chain the preflight hit.
+
+### Wildcard origin with cookies
+
+`Access-Control-Allow-Origin: *` is refused the moment the request carries credentials. Echo the requesting origin, add `Access-Control-Allow-Credentials: true`, and add `Vary: Origin`. Decide first whether the endpoint needs cookies at all; a bearer token in a header is a custom header, not credentials, and works with `*` only if `Authorization` is named in `Access-Control-Allow-Headers`.
+
+### A header is missing from Allow-Headers
+
+The commonest block. The server lists `Content-Type` but the page also sends `Authorization` or `X-Request-Id`. Add every name the page sends; `*` covers all of them only without credentials and never covers `Authorization`. The code window merges what the server already sends with what the request needs, so pasting it does not drop existing names.
+
+### The origin is echoed without Vary: Origin
+
+Not a block today, but a CDN or shared proxy may cache the response for one origin and serve it to another, which then fails the origin check. Add `Vary: Origin` wherever a specific origin is echoed.
+
+### Break it and Heal it
+
+| Break it | What it loads | What it shows |
+| --- | --- | --- |
+| Send cookies | `open.harbor-supply.example` with credentials on | Wildcard origin with credentials |
+| Another origin | Origin `https://other-site.example` | Origin not the one allowed |
+| PUT with JSON | PUT with `Content-Type` | PUT not allowed on an endpoint that lists GET and POST |
+| OPTIONS not handled | `legacy-api.harbor-supply.example`, PUT with `Content-Type` | Preflight answered 405 |
+| Preflight redirected | `moved-api.harbor-supply.example` | Preflight was redirected (301) |
+| No preflight needed | GET with no headers | A simple request judged on its response alone |
+
+Breaks that change only the request keep your own URL when you entered one; the two fixture-only cases load the reserved host. A break never probes a real server with the fixture's origin. For a pasted exchange that is blocked, Heal it offers "Add the headers that allow it": it adds the proposed headers to each pasted block in its own role, keeps the status codes, and checks again. Method, header and max-age permissions go on the preflight; origin and credentials go on both.
+
+## Worked example
+
+The page opens with `https://tamperbox.dev/` loaded and the sample origin cleared, so nothing is sent until you enter the origin of your own page and press Send preflight. Live evidence changes, so this page does not record what that server answers; read the steps as they come back.
+
+The reserved fixture `https://api.harbor-supply.example/v1/stock` with origin `https://www.harbor-supply.example`, GET and the `Authorization` header, is synthetic sample data answered locally. Its policy allows the shop's own origins with credentials, lists GET and POST, allows only `Content-Type` and caches the preflight for 600 seconds. Read end to end: step 1, a preflight is required because of `Authorization`; step 2, the preflight answers 204; step 3, the origin matches exactly; step 4, Authorization not allowed, Blocked, and the greyed row says the GET is never sent. The code window proposes `Access-Control-Allow-Origin: https://www.harbor-supply.example`, `Access-Control-Allow-Headers: Content-Type, Authorization`, `Vary: Origin` and `Access-Control-Max-Age: 600`.
+
+## For agents
+
+The Tamperbox MCP server exposes two MCP tools: use `search` to inspect the catalog and schema, then use `execute` to call `POST /v1/tools/cors_tester` through `tamperbox.request`. Supply `url` and `origin`; optionally set `method`, `headers` (up to 20 unique header names) and `credentials`. The `credentials` flag only switches on the credentials rules; no cookie is sent. The result carries the preflight and actual responses with their status, headers and timing, and `actualSkipped` says why no actual request was sent (`method` or `preflight_failed`), plus warnings and provenance. Keep these warnings with any conclusion:
+
+- The exchange was observed from the Tamperbox server, not from a user's browser. A server can answer differently by address, cookie or firewall.
+- POST, PUT, PATCH and DELETE are never sent; a passing preflight for them is Not decided.
+- `Content-Type` is treated as a custom header; a real form body might not trigger a preflight.
+
+See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/) for the calling pattern, and [Security and privacy](/reference/security/) for where the URL and origin travel.
+
+## Limits
+
+- Our server is one client in one place. Address-based rules, geographic rules, cookies and firewalls can make a browser's exchange differ from this one.
+- Only OPTIONS and, when permitted, GET or HEAD are sent. No request body, no cookie, no header value, at most 20 header names.
+- Header names are known; values are not. `Content-Type` therefore always counts as custom.
+- A pasted block is judged in the role you give it; the tool does not infer whether headers came from OPTIONS or from the real request.
+- Allowed needs a checked actual response. A preflight alone is never Allowed.
+- The preflight cache and private-network access checks are not modelled.
+- Nothing is stored.
+
+## References
+
+- [Fetch Living Standard, CORS protocol](https://fetch.spec.whatwg.org/#http-cors-protocol). WHATWG, continuously updated; the current specification of CORS. Sections used: [CORS-safelisted method](https://fetch.spec.whatwg.org/#cors-safelisted-method), [CORS-safelisted request-header](https://fetch.spec.whatwg.org/#cors-safelisted-request-header), [CORS-preflight fetch](https://fetch.spec.whatwg.org/#cors-preflight-fetch), [CORS check](https://fetch.spec.whatwg.org/#cors-check) and [Access-Control-Max-Age](https://fetch.spec.whatwg.org/#http-access-control-max-age). Supersedes the W3C Cross-Origin Resource Sharing Recommendation of January 2014, which is obsolete.
+- [RFC 6454, The Web Origin Concept](https://www.rfc-editor.org/rfc/rfc6454). Proposed Standard, December 2011. Section used: [7](https://www.rfc-editor.org/rfc/rfc6454#section-7), serialization of an origin.
+- [RFC 9110, HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110). Internet Standard, June 2022; replaces the earlier HTTP semantics documents, including [RFC 2818](https://www.rfc-editor.org/rfc/rfc2818) and [RFC 7230](https://www.rfc-editor.org/rfc/rfc7230). Sections used: [9.3.7](https://www.rfc-editor.org/rfc/rfc9110#section-9.3.7), [12.5.5](https://www.rfc-editor.org/rfc/rfc9110#section-12.5.5) and [15.4](https://www.rfc-editor.org/rfc/rfc9110#section-15.4).
+- [RFC 9111, HTTP Caching](https://www.rfc-editor.org/rfc/rfc9111). Internet Standard, June 2022; obsoletes [RFC 7234](https://www.rfc-editor.org/rfc/rfc7234). Section used: [4.1](https://www.rfc-editor.org/rfc/rfc9111#section-4.1).
