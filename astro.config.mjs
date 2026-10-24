@@ -46,6 +46,8 @@ export default defineConfig({
           { label: 'Email Header Analyzer', link: '/tools/email-header-analyzer/' },
           { label: 'JWT Decoder & Verifier', link: '/tools/jwt/' },
           { label: 'Postman Collection Converter', link: '/tools/postman-converter/' },
+          { label: 'JSON to YAML Converter', link: '/tools/json-to-yaml/' },
+          { label: 'YAML to JSON Converter', link: '/tools/yaml-to-json/' },
           { label: 'Unix Timestamp Converter', link: '/tools/unix-timestamp/' },
           { label: 'Redirect Checker', link: '/tools/redirect-checker/' },
           { label: 'HTTP/3 & Compression Checker', link: '/tools/http3-checker/' },
