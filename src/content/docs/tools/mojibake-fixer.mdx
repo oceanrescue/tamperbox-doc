@@ -1,0 +1,81 @@
+---
+title: Mojibake Fixer
+description: How the Mojibake Fixer finds UTF-8 text that was read as Windows-1252 or Latin-1, repairs it once or several times over, leaves undamaged text alone, and reports what was lost for good.
+updated: 2026-10-25
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method and guide for the Tamperbox Mojibake Fixer, which finds runs of characters that Windows-1252 or Latin-1 can produce, turns them back into bytes, keeps the result only when the bytes are valid UTF-8, repeats up to three times for text damaged more than once, lists every repaired run, and reports replacement characters as lost data, in the browser. Also reachable as the mojibake_fix operation.
+prerequisites:
+  - Garbled text, such as an export, a CSV or a web page showing sequences like Ã© or â€™
+outputs:
+  - A verdict, the repaired text with Copy and Use as input, and every repaired run with what it became
+limitations:
+  - Only UTF-8 read as Windows-1252 or Latin-1 is repaired; U+FFFD marks data already lost; nothing is sent anywhere
+---
+
+The tool page is [tamperbox.dev/mojibake-fixer](https://tamperbox.dev/mojibake-fixer). It opens on a café menu that was exported as UTF-8 and opened as Windows-1252.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> your text is repaired in your browser and never uploaded, including text from a file you open or drop.</div>
+
+## What the tool answers
+
+Was this text read in the wrong encoding, how many times, what did it say, and is any of it gone for good?
+
+## How mojibake happens
+
+In UTF-8, é is the two bytes C3 A9. A program that reads those bytes as Windows-1252 shows each byte as one character: Ã and ©. A curly apostrophe is three bytes, E2 80 99, and becomes â€™. If the garbled text is saved as UTF-8 and read wrongly again, it is damaged a second time: é becomes ÃƒÂ©.
+
+## Method
+
+1. Find each run of characters that Windows-1252 or Latin-1 can produce.
+2. Turn the run back into the bytes those characters stand for.
+3. Decode the bytes as strict UTF-8. Keep the result only if it decodes without error and does not leave stray control characters that a further pass cannot decode.
+4. Repeat on the result, up to three passes, for text damaged more than once.
+
+Runs that do not decode stay as they were, so ordinary accented text and a genuine Ã in Portuguese are left alone. Every repaired run is listed with the pass that repaired it.
+
+## Lost data
+
+The replacement character (U+FFFD, shown as �) means a program already replaced bytes it could not read. The original letters are gone; the fixer reports how many and does not guess. Get the text again from its source, read as UTF-8.
+
+## Break it
+
+Garble once and Garble twice damage your own text the way a wrong encoding would, so you can see the repair work on it. Curly quotes, Lost data and Nothing wrong load short samples. Each break can be undone from Heal it.
+
+## Prevent it
+
+Declare UTF-8 at every step: the export or file, the database connection's character set, the HTTP Content-Type header and the HTML meta charset. Import CSV files into a spreadsheet and choose UTF-8 instead of opening them by double-clicking.
+
+## Finding reference
+
+| Finding | Severity | Source | What it means | Fix |
+| --- | --- | --- | --- | --- |
+| Repaired, read in the wrong encoding once | pass | [WHATWG Encoding](https://encoding.spec.whatwg.org/#windows-1252) | UTF-8 was read as Windows-1252 or Latin-1 | Declare UTF-8 where the text was read |
+| Damaged N times | check | [RFC 3629](https://www.rfc-editor.org/rfc/rfc3629) | Read wrongly, saved, and read wrongly again | Fix every step, not only the last |
+| Replacement characters | fail | [Unicode FAQ](https://www.unicode.org/faq/utf_bom.html) | Bytes were thrown away upstream | Export again from the source, read as UTF-8 |
+| No mojibake found | pass | | Nothing decodes as UTF-8 read as Windows-1252 | If text still looks wrong, it may be another encoding |
+
+## Guide
+
+### Repair a CSV export
+
+1. Open the CSV in a text editor, copy the garbled part or the whole file (up to 512 KiB) and paste or drop it here.
+2. Check What changed, then Copy the repaired text.
+3. Next time, import the CSV into the spreadsheet and choose UTF-8 rather than opening it by double-click.
+
+### Fix it at the source
+
+When text arrives garbled from a database, check the connection character set (for MySQL, utf8mb4). When it arrives from a web page or API, check the Content-Type charset. When it comes from email, check the part's charset header.
+
+### Test that your system keeps UTF-8 intact
+
+Use Garble once on your own text to see what a wrong reading produces, then send real accented text through your import or export and compare it with what came out.
+
+## Use it from an agent
+
+The `mojibake_fix` operation takes the text and returns the repaired text, with a warning when it was repaired or when data was lost. See the [MCP documentation](https://docs.tamperbox.dev/mcp/).
+
+## References
+
+- [RFC 3629: UTF-8](https://www.rfc-editor.org/rfc/rfc3629)
+- [WHATWG Encoding Standard: windows-1252](https://encoding.spec.whatwg.org/#windows-1252)
+- [W3C: Character encodings for beginners](https://www.w3.org/International/questions/qa-what-is-encoding)

@@ -1,0 +1,98 @@
+---
+title: Naughty Strings List
+description: What is in the Naughty Strings List, how its eleven groups and active payloads are chosen, how search and export work, and how to use the strings in manual and automated tests.
+updated: 2026-10-25
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method and guide for the Tamperbox Naughty Strings List, a built-in set of 158 hostile test strings in eleven groups, each with the reason it tests something, searchable by name, reason or code point, with active payloads hidden by default and export as JSON, JavaScript, Python, CSV or one value per line with invisible characters escaped. Also reachable as the naughty_strings operation.
+prerequisites:
+  - A field, API, import or file name you are allowed to test
+outputs:
+  - A filtered list of strings with reasons, character and byte counts, and an export in the format your tests use
+limitations:
+  - A starting set, not a complete security test; active payloads are for systems you may test; nothing is sent anywhere
+---
+
+The tool page is [tamperbox.dev/naughty-strings](https://tamperbox.dev/naughty-strings). It opens on every data-only string, with active payloads hidden.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> the list is part of the page. Searching, filtering, copying and downloading happen in your browser, and no server request is made.</div>
+
+## What the tool answers
+
+Which values should I type into this field, send to this API or put in this file to find out whether it handles real input? Each string carries one sentence on what it tests, so a failure points at a cause.
+
+## The groups
+
+| Group | What it tests |
+|---|---|
+| Empty and punctuation | Empty values, lone quotes, backslashes, entities and brackets |
+| Whitespace | Spaces, tabs, line breaks, no-break and full-width spaces |
+| Invisible and tricky Unicode | Zero width characters, direction overrides, look-alike letters, decomposed accents, emoji sequences, lone surrogates, case mapping that changes length |
+| Encoding damage | Mojibake, entities and percent-encoding in plain fields |
+| Real names that break rules | Apostrophes, the surname Null, one-word names, long names, CJK and Vietnamese names |
+| Numbers and keywords as text | Integer limits, floating point, NaN and Infinity, locale separators, other digit scripts, null and undefined written as text |
+| Dates and times | Leap days, the zero date, 2038, leap seconds, ambiguous slash dates, a time skipped by daylight saving |
+| Emails, URLs and identifiers | Valid addresses that validators refuse, IPv6 and Unicode hosts, nil UUIDs, short IPv4 forms |
+| Spreadsheet formulas | Cells starting with =, +, - or @ that run when a CSV is opened (active) |
+| Injection | SQL, NoSQL, LDAP, HTML and script, template, format string, command, header, XML entity and prototype payloads (active) |
+| Paths and reserved names | Traversal and file URLs (active), Windows reserved names, trailing dots, long and Unicode file names |
+
+## Active payloads
+
+A string is marked active when it is built to be acted on if it reaches a parser, interpreter, spreadsheet or file system. They are hidden by default so that a copied list is safe to paste into a shared staging system. None is malware and none needs a network; command payloads only sleep for five seconds. Include them only for systems you own or are allowed to test.
+
+## Searching and export
+
+Search matches the string's name, its reason, its group and its value written with code point tags, so `U+200B` finds the zero width space. Export formats:
+
+- **JSON, JavaScript and Python:** an array or list literal with every invisible character written as an escape, ready for a parameterised test.
+- **CSV:** one value per row under a `value` header, quoted where needed.
+- **One per line:** raw values; values that hold a line break span two lines, so prefer JSON or CSV for those.
+
+## Reading a result
+
+A value that is stored and shown back exactly as sent has passed. A refusal with a clear message is fine where the value is truly invalid. Anything else, such as a changed value, a server error, a value run as code or a value that breaks the page around it, is a finding.
+
+## Method
+
+1. The list is a fixed set of 158 strings, each with an identifier, a group, a reason and a flag for active payloads.
+2. A string is active when it is built to be acted on by a parser, interpreter, spreadsheet or file system. Active strings are excluded until included.
+3. Search lowercases the query and matches it against the identifier, the reason, the group and the value with invisible characters written as code point tags.
+4. Exports write each value as a string literal for the chosen language. In JSON, JavaScript and Python every invisible or unprintable character is an escape; CSV quotes values with commas, quotes, line breaks or edge spaces.
+
+## Finding reference
+
+| Result after submitting a string | Severity | Source | What it means | Fix |
+| --- | --- | --- | --- | --- |
+| Stored and shown back unchanged | pass | | The value was handled as data | None |
+| Refused with a clear message | pass | | Validation caught a truly invalid value | Check the rule does not refuse real names or addresses |
+| Shown back changed (trimmed, cut, decoded) | check | [OWASP WSTG](https://owasp.org/www-project-web-security-testing-guide/) | Data is lost or altered on the way | Store exactly what was sent, validate explicitly |
+| Server error | fail | [OWASP WSTG](https://owasp.org/www-project-web-security-testing-guide/) | An unhandled case, often a query or encoding bug | Use parameterised queries and UTF-8 throughout |
+| Value run as code or markup | fail | [OWASP WSTG](https://owasp.org/www-project-web-security-testing-guide/) | Injection | Encode output for its context; never build code from input |
+| Formula runs when an export is opened | fail | [OWASP: CSV Injection](https://owasp.org/www-community/attacks/CSV_Injection) | Spreadsheet formula injection | Prefix cells starting with = + - @ with an apostrophe on export |
+
+## Guide
+
+### Test a form field by hand
+
+1. Search or tick the groups that matter for the field (names, emails, dates).
+2. Copy each string, submit it, then read the stored value back from the page and from an export.
+3. Record anything that is not "stored and shown back unchanged" or "refused with a clear message".
+
+### Feed a parameterised test
+
+Choose JSON, JavaScript or Python, Copy all or Download, and use the list as test parameters. Invisible characters arrive as escapes, so the test file stays readable.
+
+### Test exports
+
+Include active payloads, tick Spreadsheet formulas, put the strings into records, export to CSV and open the file in a spreadsheet. Any cell that calculates is a finding.
+
+## Use it from an agent
+
+The `naughty_strings` operation takes a search as its input text and returns the matching strings with their reasons. Set `category` to limit the group and `includeActive` to include active payloads. See the [MCP documentation](https://docs.tamperbox.dev/mcp/).
+
+## References
+
+- [OWASP Web Security Testing Guide](https://owasp.org/www-project-web-security-testing-guide/)
+- [OWASP: CSV Injection](https://owasp.org/www-community/attacks/CSV_Injection)
+- [Unicode Technical Standard #39: Unicode Security Mechanisms](https://www.unicode.org/reports/tr39/)
+- [Microsoft: Naming files, paths, and namespaces](https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file)
