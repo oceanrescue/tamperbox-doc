@@ -12,7 +12,7 @@ limitations:
   - One request from one location at one moment; connection and TLS failures share one stage; any answer below 500 counts as up
 ---
 
-The tool page is [tamperbox.dev/website-down-checker](https://tamperbox.dev/website-down-checker). It loads `tamperbox.dev` and waits for you to run a live check,  says in one sentence whether the site answers from the probe’s location, and shows the stage where a request stopped. This page is the long version: what the request does, every rule that decides the verdict, what each outcome means, and how to fix and confirm each one.
+The tool page is [tamperbox.dev/website-down-checker](https://tamperbox.dev/website-down-checker). It loads `tamperbox.dev` and waits for you to run a live check, says in one sentence whether the site answers from the probe’s location, and shows the stage where a request stopped. This page is the long version: what the request does, every rule that decides the verdict, what each outcome means, and how to fix and confirm each one.
 
 <div class="tb-callout"><strong>Where processing happens:</strong> typing an address is read in your browser only. Nothing is sent until you press Check now or Enter. Then the Tamperbox server makes one request to the address, follows up to five redirects within ten seconds, and returns what it saw. Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history. Sample addresses on the reserved <code>.example</code> zone are answered in the browser from a fixture and never reach the network.</div>
 
@@ -62,13 +62,7 @@ Under the chips, two items say where the input went: typing stays in the browser
 
 ### Findings
 
-Advice follows the observed outcome: DNS, connection, HTTP failure, timeout or slow response. Reachable results also show two notes for visitors who cannot open the site. Redirects, the final address and durations are evidence in separate panels, not additional passing findings.
-
-### Related checks and input transfer
-
-Use Check the rest to open another website tool with the current address. Pasted files are not transferred through these links. Transfers temporarily use browser `sessionStorage` with a one-use random token in the URL fragment; the input itself is not in the URL. The destination accepts a transfer for less than one minute and removes the token. Manual checks still wait for their run button or Enter.
-
-To inspect a value from the result, copy that specific address into the relevant tool. A separate check collects new evidence and can return a different result; do not interpret navigation as confirmation of the original verdict.
+Advice follows the observed outcome: DNS, connection, HTTP failure, timeout or slow response. Reachable results also show two notes for visitors who cannot open the site. The outcome is followed by a redirect finding when redirects occurred, a first-byte finding when timing is available, no request error occurred and the outcome is not slow, and the relevant visitor advice. Two or more passing findings are grouped under an expandable **checks passed** row; a single pass stays visible.
 
 ### Status
 
@@ -78,15 +72,42 @@ One word (Up, Slow, Erroring or Down), the address requested with an arrow to th
 
 A table of what came back: the status, the recorded duration of the final hop, the total time (or the time until it failed), the number of redirects followed, and the final address (or the address tried).
 
+### History
+
+History follows the current result evidence. Break it and Heal it record input changes, newest first. **Revert** restores the input before the latest recorded change; **Reset input** restores the input before the first retained change and clears the list. **Restore input before this break** under Heal it also reverts the latest change.
+
+These actions reload and check the restored input. Restoring a public address can therefore send a new request, including on the two tools whose ordinary typing waits for a run button. Editing or pasting a new input clears History. The list lives in the current page; it is not saved monitoring data and does not restore an old network response.
+
+### Take it further
+
+Only links with an available result value appear.
+
+| Follow-up | Value carried | When offered |
+| --- | --- | --- |
+| [TCP Ping](https://tamperbox.dev/tcp-ping) | Final host and port | A live result without a DNS-stage failure |
+| [SSL Checker](https://tamperbox.dev/ssl-checker) | Final host | No DNS-stage failure and the final scheme uses port 443 |
+| [Website Hosting](https://tamperbox.dev/website-hosting) | Final host | No DNS-stage failure |
+
+### Related checks and input transfer
+
+Check the rest carries the current address to a sibling tool. Take it further carries the specific value listed above. Pasted file contents are not transferred through these links. Transfers temporarily use browser `sessionStorage` with a one-use random token in the URL fragment; the input itself is not in the URL. The destination accepts a transfer for less than one minute and removes the token. Manual destination tools wait for their run button or Enter.
+
+Each destination collects new evidence. A follow-up link does not confirm the original verdict or repair the remote site.
+
+### Result cards
+
+Six expandable cards below the result explain its meaning, give a beginner explanation, offer an agent prompt, describe good practice, suggest fixes and state limitations. Their text follows the current result; it is not another measurement. Open a card for its full explanation and the relevant [Method](#method) or [Guide](#guide). The agent prompt can be copied for review; copying it does not run a repair or send it to an agent.
+
 ## Method
 
-The page sends the address to `/api/web/uptime`. The server makes the request and the page judges the answer. Findings use three severities:
+The page sends the address to `/api/web/uptime`. The server makes the request and the page judges the answer. Findings use these statuses:
 
 | Severity | Shown as | Meaning |
 | --- | --- | --- |
 | Problem | FAIL | The probe could not retrieve a successful response |
 | Warning | CHECK | The probe observed a slow response |
 | Information | INFO | Interpret the response in its observed scope |
+| Passed check | PASS | The observed response or final-hop timing met this check |
 
 ### The request
 
@@ -157,23 +178,27 @@ Read as an answer from a working server: INFO, not down.
 
 ### Advice emitted by the browser
 
-The browser selects advice from the reported outcome. These titles are display text, not stable operation identifiers.
+These titles describe the reported outcome, not stable operation identifiers.
 
 | Title | Severity | Observed condition | Next check |
 | --- | --- | --- | --- |
 | The name does not resolve | FAIL | The probe reports a DNS-stage failure | Check authoritative records and another resolver; inspect the error code |
 | Connection or TLS failed | FAIL | The runtime reports a connection-stage failure | Inspect the certificate, firewall, load balancer and listener |
 | The server answers with an error | FAIL | The observed final status is 500 or higher | Compare application logs with the request time |
-| No answer within 10 seconds | FAIL | Timeout advice, also used as a fallback for an unrecognized failure stage | Read the literal error and final attempted address before diagnosing a timeout |
+| No answer within 10 seconds | FAIL | A timeout or exhausted request budget | Read the literal error and final attempted address before diagnosing a timeout |
+| Answered status | PASS / INFO | A non-slow response below 400 passes; a non-slow 4xx response is informational | Read the status before treating it as the page you wanted |
+| Redirects could not be followed to the end | FAIL | An HTTP-stage error stopped the redirect chain | Read the recorded error and last attempted address |
+| Followed n redirects | INFO | At least one redirect was followed | Inspect the final address and remove unnecessary hops |
+| First byte after n ms | PASS / CHECK | No request error, a measured final-hop duration and a non-slow outcome; over 3,000 ms warns | Compare final-hop duration with total time |
 | Up, but slow | CHECK | A reachable response took over 3,000 ms in total | Compare redirects and server processing with an independent client |
 | If it will not open for you | INFO | The probe received a reachable response | Compare a browser, another network and any local proxy |
 | If only some visitors see it down | INFO | The result is one observation from one place | Check independent locations and retain unavailable results |
 
 ### Evidence separate from advice
 
-Status, redirect count, final address and recorded durations appear in the status and response panels. They are not additional findings with stable IDs. A 4xx status still counts as reachable in this tool, even though it may represent a missing page, denied access or rate limiting. The total-time threshold does not measure how long the page takes to render in a browser.
+Status, redirect count, final address and recorded durations remain in the Status and Response panels as well as the applicable findings. Read these values together rather than treating a passing timing finding as proof of worldwide availability. A 4xx status still counts as reachable in this tool, even though it may represent a missing page, denied access or rate limiting. The total-time threshold does not measure how long the page takes to render in a browser.
 
-An unknown failure stage may fall back to timeout advice while the status panel retains another code. Use the literal code and attempted address as the diagnostic evidence. Do not infer that all visitors see the same failure from the wording of a headline.
+An HTTP-stage error selects the redirect outcome; a budget error selects timeout. Other unrecognized error stages use the connection outcome while the Status panel retains the reported code. Use the literal code and attempted address as the diagnostic evidence. Do not infer that all visitors see the same failure from the wording of a headline.
 
 ## Guide
 
@@ -241,7 +266,7 @@ Break it loads a case that shows each failure. A site cannot be made to fail on 
 | Slow to answer | `slow.harbor-supply.example` | Up, but slow; the time chip turns CHECK |
 | No such host | `nohost.` plus your domain | DNS Failed |
 
-Break it replaces the field with an adapted input or a labelled fixture. Keep a copy of your original input if you want to restore it after experimenting.
+Break it replaces the field with an adapted input or a labelled fixture. Use History to Revert the latest change or Reset input to the starting input; restoring a live address runs a new check.
 
 ## Worked example
 

@@ -12,7 +12,7 @@ limitations:
   - robots.txt is a request crawlers may ignore; the crawler table judges the home page only; at most six sitemaps, 10 MiB each
 ---
 
-The tool page is [tamperbox.dev/robots-txt-checker](https://tamperbox.dev/robots-txt-checker). It checks `tamperbox.dev` live when opened,  says which search engines and AI crawlers the rules let in, and lets you test any path. This page is the long version: how the file is fetched and read, how a crawler's group and a path's rule are chosen, every finding, and how to fix each one.
+The tool page is [tamperbox.dev/robots-txt-checker](https://tamperbox.dev/robots-txt-checker). It checks `tamperbox.dev` live when opened, says which search engines and AI crawlers the rules let in, and lets you test any path. This page is the long version: how the file is fetched and read, how a crawler's group and a path's rule are chosen, every finding, and how to fix each one.
 
 <div class="tb-callout"><strong>Where processing happens:</strong> a pasted robots.txt or sitemap is read in your browser and never uploaded. A host name is sent to the Tamperbox server, which fetches <code>/robots.txt</code> and up to six sitemaps without cookies and returns them; the rules are evaluated in your browser. Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history. Sample hosts on the reserved <code>.example</code> zone are answered in the browser from a fixture.</div>
 
@@ -48,13 +48,7 @@ Files up to 10 MiB can be dropped or opened (`.txt`, `.xml`). A pasted address l
 
 ### Findings
 
-Every finding, worst first, line findings prefixed with their line; passing findings remain visible.
-
-### Related checks and input transfer
-
-Use Check the rest to open another website tool with the current address. Pasted files are not transferred through these links. Transfers temporarily use browser `sessionStorage` with a one-use random token in the URL fragment; the input itself is not in the URL. The destination accepts a transfer for less than one minute and removes the token. Manual checks still wait for their run button or Enter.
-
-To inspect a value from the result, copy that specific address into the relevant tool. A separate check collects new evidence and can return a different result; do not interpret navigation as confirmation of the original verdict.
+Every finding, worst first, line findings prefixed with their line; two or more passing findings are grouped under an expandable **checks passed** row. A single passing finding stays visible.
 
 ### Test a URL
 
@@ -62,7 +56,7 @@ A path or full URL and a crawler. The result says Allowed or Blocked, names the 
 
 ### robots.txt
 
-The file as written, numbered, each line with an issue tinted and noted. Long files show their first 60 lines, every marked line and the tested line; **Show all n lines** lists the rest.
+The file as written, numbered, each line with an issue tinted and noted. Long files show their first 60 lines, every marked line and the tested line; **Show all n lines** lists the rest, and **Show the first 60 lines** folds it again. Folding is offered only when at least ten unmarked lines after line 60 can be hidden; marked lines remain visible.
 
 ### Crawlers at the home page
 
@@ -71,6 +65,33 @@ Two tables, search engines and AI crawlers: who runs each token, Allowed or Bloc
 ### Sitemaps
 
 Each sitemap fetched, its status, URL count, last change, and up to three issues.
+
+### History
+
+History follows the current result evidence. Break it and Heal it record input changes, newest first. **Revert** restores the input before the latest recorded change; **Reset input** restores the input before the first retained change and clears the list. **Restore input before this break** under Heal it also reverts the latest change.
+
+These actions reload and check the restored input. Restoring a public address can therefore send a new request, including on the two tools whose ordinary typing waits for a run button. Editing or pasting a new input clears History. The list lives in the current page; it is not saved monitoring data and does not restore an old network response.
+
+### Take it further
+
+Only links with an available result value appear.
+
+| Follow-up | Value carried | When offered |
+| --- | --- | --- |
+| [Redirect Checker](https://tamperbox.dev/redirect-checker) | `https://host/robots.txt` | A host was checked |
+| [Website Down Checker](https://tamperbox.dev/website-down-checker) | First included sitemap URL | A host check includes a sitemap result |
+| [Open Graph Preview](https://tamperbox.dev/open-graph-preview) | First page URL found in sitemap entries | A page URL is available, including in a pasted sitemap |
+| [security.txt Checker](https://tamperbox.dev/security-txt-checker) | Checked host | A host was checked |
+
+### Related checks and input transfer
+
+Check the rest carries the current address to a sibling tool. Take it further carries the specific value listed above. Pasted file contents are not transferred through these links. Transfers temporarily use browser `sessionStorage` with a one-use random token in the URL fragment; the input itself is not in the URL. The destination accepts a transfer for less than one minute and removes the token. Manual destination tools wait for their run button or Enter.
+
+Each destination collects new evidence. A follow-up link does not confirm the original verdict or repair the remote site.
+
+### Result cards
+
+Six expandable cards below the result explain its meaning, give a beginner explanation, offer an agent prompt, describe good practice, suggest fixes and state limitations. Their text follows the current result; it is not another measurement. Open a card for its full explanation and the relevant [Method](#method) or [Guide](#guide). The agent prompt can be copied for review; copying it does not run a repair or send it to an agent.
 
 ## Method
 

@@ -64,7 +64,7 @@ The text is parsed as JSON and must hold `log.entries` as a list. A leading byte
 
 ### 2. By name
 
-Names are compared after lowercasing and removing everything but letters and digits. A name is a credential when it contains authorization, token, secret, password, passphrase, apikey, session, csrf, xsrf, signature, credential, privatekey, codeverifier, samlresponse, samlrequest, otp or cookie, or is exactly key, sig, sid, auth, pass, pwd, pin, ssn, cvv or cvc. `code` counts only in a URL query or form, where it is an OAuth authorization code. Names that end in type, expires, expiry, endpoint, url, uri, hint, length or format describe a credential rather than hold one and are kept.
+Names are compared after lowercasing and removing everything but letters and digits. A name is a credential when it contains authorization, token, secret, password, passphrase, apikey, session, csrf, xsrf, signature, credential, privatekey, codeverifier, samlresponse, samlrequest, otp or cookie, or is exactly key, sig, sid, auth, pass, pwd, pin, ssn, cvv or cvc. `code` counts only in a URL query or form, where it is an OAuth authorization code. Names that end in type, expires, expiry, endpoint, url, uri, hint, length or format are treated as descriptive metadata, except names containing password, passwd or secret, which are always redacted.
 
 This applies to headers, query parameters, form fields, `postData.params` and keys at any depth of a JSON body.
 
@@ -74,19 +74,19 @@ Authorization and Proxy-Authorization keep their scheme. Cookie and Set-Cookie k
 
 ### 4. URLs
 
-User and password in a URL are replaced, query parameters are cleaned by name, and the whole URL is searched for the patterns below.
+User and password in a URL are replaced, query parameters and OAuth or SPA fragment parameters are cleaned by name, including repeated parameters and malformed percent escapes, and the whole URL is searched for the patterns below.
 
 ### 5. Patterns in any text
 
-Every remaining text value is searched for: private key blocks; AWS access key IDs; Google API keys; GitHub tokens; Stripe secret and restricted keys; Slack tokens; JSON Web Tokens; credentials after Bearer, Basic or Token; email addresses; 13 to 19 digit numbers that pass the Luhn check; and, when chosen, IPv4 addresses outside the documentation and loopback ranges.
+Supported header, query, body, comment and custom metadata text is searched for: private key blocks; AWS access key IDs; Google API keys; GitHub tokens; Stripe secret and restricted keys; Slack tokens; JSON Web Tokens; credentials after Bearer, Basic or Token; email addresses; 13 to 19 digit numbers that pass the Luhn check; and, when chosen, IPv4 addresses outside the documentation and loopback ranges.
 
 ### 6. Placeholders
 
-Each distinct value gets one placeholder for the whole file: `[TOKEN_n]`, `[PASSWORD_n]`, `[COOKIE_n]`, `[CARD_n]`, a named key such as `[AWS_KEY_n]`, `email-n@redacted.invalid`, and for IP addresses a documentation address from 192.0.2.0/24. A JSON Web Token keeps its header, has its claims cleaned the same way (so an email claim is replaced), and gets `redacted-signature` as its signature. Running the tool again on its own output changes nothing.
+Each distinct value gets one placeholder for the whole file: `[TOKEN_n]`, `[PASSWORD_n]`, `[COOKIE_n]`, `[CARD_n]`, a named key such as `[AWS_KEY_n]`, `email-n@redacted.invalid`, and for IP addresses a documentation address from the three documentation ranges (192.0.2.0/24, 198.51.100.0/24 and 203.0.113.0/24), followed by `[IP_n]` after 762 distinct addresses. A JSON Web Token keeps its header, has its claims cleaned the same way (so an email claim is replaced), and gets `redacted-signature` as its signature. Input that looks like a placeholder is still untrusted. Running the tool again may renumber placeholders; the mapping is stable within each run.
 
 ### 7. Bodies
 
-JSON bodies are parsed, cleaned and written with the indentation they had. Form bodies are cleaned field by field. Other text is searched for patterns. Base64 bodies with a text, JSON, XML, JavaScript or form type are decoded, cleaned and encoded again; other Base64 bodies are binary and are kept and counted.
+JSON bodies are parsed, cleaned and written with the indentation they had. URL-encoded and multipart form bodies are cleaned field by field. Sensitive JSON names also apply to values inside arrays and nested objects. Malformed JSON or multipart bodies are replaced as a whole, rather than retained without inspection. Data deeper than 100 levels is refused. Other text is searched for patterns. Base64 bodies with a text, JSON, XML, JavaScript or form type are decoded, cleaned and encoded again; other Base64 bodies are binary and are kept and counted.
 
 ## Finding reference
 
