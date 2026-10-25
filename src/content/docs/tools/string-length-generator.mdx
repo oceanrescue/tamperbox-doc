@@ -1,0 +1,95 @@
+---
+title: Exact-Length String Generator
+description: How the Exact-Length String Generator builds strings of an exact size in characters, UTF-16 units or UTF-8 bytes, what the limit test set contains, how counterstrings work, and how to test a length limit with them.
+updated: 2026-10-25
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method and guide for the Tamperbox Exact-Length String Generator, which builds a string of exactly N characters, UTF-16 units or UTF-8 bytes from a chosen fill (ASCII, digits, accented Latin, CJK, emoji, mixed widths or combining accents), a limit test set around N, or a counterstring, in the browser. Also reachable as the string_generate operation.
+prerequisites:
+  - The length limit to test, and if you know it, what the system counts
+outputs:
+  - The string with Copy and Download, its length in every count, or the limit test set with each value's size and reason
+limitations:
+  - Strings up to 1,000,000 units and limit sets up to 500,000 in the browser; nothing is sent anywhere
+---
+
+The tool page is [tamperbox.dev/string-length-generator](https://tamperbox.dev/string-length-generator). It opens on a string of exactly 255 ASCII characters.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> strings are built in your browser, and downloads are made on your device. No server request is made.</div>
+
+## What the tool answers
+
+What exactly should I paste to test a length limit, and is the limit counted in characters, UTF-16 units or bytes?
+
+## The three counts
+
+| Count | Who counts this way | Emoji 😀 |
+|---|---|---|
+| Characters (code points) | Python `len()`, most database CHAR limits | 1 |
+| UTF-16 units | JavaScript, Java and C# length, HTML `maxlength` | 2 |
+| UTF-8 bytes | Byte limits on columns, file names, HTTP headers | 4 |
+
+To find out what a field counts, generate the limit in each unit with the emoji fill: the one the field accepts exactly is the one it uses.
+
+## Method
+
+### One string
+
+The string is built from whole characters of the chosen fill, never half a surrogate pair. When the next character would go past the length, a plain `a` (one unit in every count) closes the gap, so any length can be hit exactly in any unit.
+
+### Limit test set
+
+For a limit N: the empty value, one character, N - 1, N, N + 1, N - 2 characters with a space on each side, N spaces (up to 100,000) and 2N. Every value is exactly the size its name says, in the unit you chose. N must be accepted unchanged; N + 1 must be refused, not silently cut.
+
+### Counterstring
+
+A counterstring such as `*3*5*7*9*12*` writes each asterisk's position before it. Built from the end backwards, it is always exactly N characters. Paste it into a field, read the last number left, and you know how many characters the field kept. It is ASCII, so all counts agree.
+
+## Break it presets
+
+- **Emoji at the limit:** 255 characters of emoji: 510 UTF-16 units and 1,020 bytes.
+- **Bytes, not characters:** 255 UTF-8 bytes of CJK, which is 85 characters.
+- **JavaScript length:** 10 UTF-16 units of emoji, which is 5 characters.
+- **Split accents:** letters with combining accents that look half as long as their code point count.
+- **Limit test set** and **Counterstring** for 255 and 1,000.
+
+## Limits
+
+A string is limited to 1,000,000 units and a limit set to 500,000 in the browser. Only the first 20,000 UTF-16 units are displayed; Copy and Download take the whole string with no line break added.
+
+## Finding reference
+
+| Result at the limit | Severity | Source | What it means | Fix |
+| --- | --- | --- | --- | --- |
+| Maximum accepted unchanged | pass | | The limit is where it is documented | None |
+| Maximum + 1 refused with a message | pass | | The limit is enforced | None |
+| Maximum + 1 silently cut | fail | | Data loss without notice | Refuse over-long values, or show the cut |
+| Maximum refused | fail | | Off-by-one in the check | Use "length > max", not "length >= max" |
+| Fewer emoji than characters accepted | check | [HTML maxlength](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#attr-fe-maxlength) | The limit counts UTF-16 units or bytes | Count the same unit on client, server and database |
+| Accepted in the form, error on save | fail | [RFC 3629](https://www.rfc-editor.org/rfc/rfc3629) | The database counts bytes, the form counts characters | Size the column in characters, or check bytes on input |
+| Counterstring cut at an unexpected number | check | | Something truncates before the documented limit | Find the layer whose limit matches the number |
+
+## Guide
+
+### Find what a field counts
+
+1. Set the documented limit and generate one string with the emoji fill in each unit.
+2. Submit each. The one accepted exactly at the limit names the unit the field counts.
+
+### Test a limit end to end
+
+Make the limit set, submit every value, and check the stored value as well as the form message. Maximum must be stored unchanged; maximum + 1 must be refused.
+
+### Find where a value is cut
+
+Generate a long counterstring, submit it, and read the last number that survived in the stored value, a log or an export. That number is how many characters the slowest layer kept.
+
+## Use it from an agent
+
+The `string_generate` operation takes the length as its input text and `unit`, `fill` and `mode` (`one`, `set` or `counter`) options. Through the API, strings are limited to 1,000,000 units, limit sets to 100,000, and output to the API's response size limit. See the [MCP documentation](https://docs.tamperbox.dev/mcp/).
+
+## References
+
+- [RFC 3629: UTF-8](https://www.rfc-editor.org/rfc/rfc3629)
+- [RFC 2781: UTF-16](https://www.rfc-editor.org/rfc/rfc2781)
+- [HTML Standard: the maxlength attribute](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#attr-fe-maxlength)
+- [Unicode Standard Annex #29: Unicode Text Segmentation](https://www.unicode.org/reports/tr29/)

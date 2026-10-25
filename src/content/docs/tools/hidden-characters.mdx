@@ -1,0 +1,187 @@
+---
+title: Hidden Character Checker
+description: How the Hidden Character Checker finds zero width, direction, look-alike, control and decomposed characters in text, counts its length four ways, and cleans it, with every rule behind each finding and how to confirm a result outside Tamperbox.
+updated: 2026-10-24
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and guide for the Tamperbox Hidden Character Checker, which reads text one Unicode code point at a time in the browser, reports invisible, direction, control, filler, tag, look-alike and decomposed characters with code point and position, counts characters, UTF-16 units, UTF-8 bytes and visible characters, shows the NFC, NFD, NFKC and NFKD forms, and cleans the text with the repairs the reader ticks. Also reachable as the text_inspect operation.
+prerequisites:
+  - Text to check, pasted, typed or opened from a file of up to 200,000 characters
+outputs:
+  - A verdict naming what was found, one finding per kind of character with its code point, name and positions, the text with hidden characters shown as tags, a clean copy, the four lengths and the four Unicode forms
+limitations:
+  - A finding is a character present in the text, not proof of an attack; look-alike letters are only found inside Latin words or in words made of a small set of well-known look-alikes; nothing is sent anywhere
+---
+
+The tool page is [tamperbox.dev/hidden-characters](https://tamperbox.dev/hidden-characters). It opens on the word `admin` with a zero width space (U+200B) inside it: the name a person typed, a username that looks identical to the real one and fails to log in. This page is the long version: what each finding means, how the counts differ, and how to check a result without this tool.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> your text is read and cleaned in your browser. Nothing is uploaded, including text from a file you open or drop, and no server request is made for any input.</div>
+
+## What the tool answers
+
+Two strings can look the same and not be the same. The tool answers four questions about a piece of text:
+
+1. **Is anything in it that you cannot see?** Zero width, direction, filler, tag and control characters.
+2. **Is anything in it that only looks like something else?** A no-break space for a space, a Cyrillic letter for a Latin one, a fullwidth form for an ASCII one.
+3. **How long is it?** The same text has several lengths, and the one that matters depends on who is counting.
+4. **Is it written in the form the receiving system expects?** An accent can be one character or two.
+
+It does not decide whether a character is harmful. A zero width non-joiner is correct in Persian and a joiner is correct inside an emoji.
+
+## Inputs
+
+### Text
+
+Type or paste into the box. Paste anywhere on the page outside a field also replaces the text. Input is limited to 200,000 characters.
+
+### Files
+
+Drop a `.txt`, `.csv`, `.json`, `.md`, `.log`, `.xml` or `.html` file anywhere on the page, or use Open file. Files over 512 KiB are refused with a message. The file is read in the browser as UTF-8 and never uploaded.
+
+## Reading the result
+
+### Verdict and chips
+
+The verdict names how many hidden or misleading characters were found and describes the first by name and code point. The first chip is the size in characters and bytes. The other chips count each kind found and jump to the finding that explains it.
+
+### What was found
+
+One finding per kind of character, with the code point, its Unicode name, what it does, and where it is by line and column. The status follows the risk: Fail for characters that change what is displayed or that make a blank look filled (direction overrides, fillers, tag characters, NUL, look-alike letters inside a word, broken surrogates), Check for characters that behave differently from what they look like (zero width characters, look-alike spaces, control characters, text not in composed form), and Info for notes.
+
+### Your text with hidden characters shown
+
+The same text with each hidden character written as a tag such as ⟦U+200B⟧. Shown only when something was found.
+
+### Clean text
+
+A copy with the repairs you tick applied. Only repairs that would change this text are listed. Use as input puts the clean text back in the box.
+
+### Length, by every count
+
+| Count | What counts it |
+|---|---|
+| Characters | Unicode code points. Python `len()`, and most database CHAR limits |
+| UTF-16 units | JavaScript, Java and C# string length. An emoji counts as 2 |
+| UTF-8 bytes | Bytes on the wire, a VARCHAR byte limit, file names, HTTP headers |
+| Visible characters | What a person counts. An accent, or a family emoji built from seven code points, counts once |
+
+### Unicode forms
+
+The text in NFC, NFD, NFKC and NFKD with the length of each, and whether it is the same as the input.
+
+### Heal it and Break it
+
+Heal it offers to clean the text with the current choices, or to restore the input before a break. Break it adds a hidden character to your own text where it can (a zero width space inside the first word, a Cyrillic letter in place of a Latin one, a byte order mark at the start) and loads a short sample when your text cannot carry the case. Every Break it can be undone from Heal it.
+
+## Method
+
+### 1. Reading
+
+The text is split into code points, so an emoji is one item and a lone surrogate is one item. Each code point is classified. Neighbouring characters are used only to excuse the joiners that emoji and some scripts need.
+
+### 2. Invisible and misleading characters
+
+| Kind | Code points | Why it matters |
+|---|---|---|
+| Zero width | U+200B, U+2060, U+2061 to U+2064, U+180E, U+FEFF inside text, U+200D outside emoji, U+200C outside non-Latin letters | Takes no space, breaks equality, search and length checks |
+| Byte order mark | U+FEFF at the start | Editors hide it; parsers and CSV importers see an extra character |
+| Direction | U+202A to U+202E, U+2066 to U+2069 (Fail); U+200E, U+200F, U+061C (Check) | Changes the display order, so what is shown is not what is stored |
+| Filler | U+115F, U+1160, U+3164, U+FFA0, U+2800, U+034F | Blank to the eye, not whitespace, so "not empty" checks accept it |
+| Tag | U+E0000 to U+E007F | Invisible and able to carry hidden text |
+| Control | C0 and C1 controls except tab, line feed and carriage return | NUL ends a string in C; others are acted on by terminals |
+| Look-alike space | U+00A0, U+1680, U+2000 to U+200A, U+202F, U+205F, U+3000, U+2028, U+2029 | Treated differently by trim(), split and equality |
+| Lone surrogate | U+D800 to U+DFFF alone | Not valid Unicode; encoders replace it or fail |
+| Replacement | U+FFFD | Data was already lost before it reached the tool |
+
+### 3. Look-alike letters
+
+A word is a run of letters and digits. If it holds Latin letters and also Cyrillic, Greek, Armenian or Cherokee letters from a list of well-known look-alikes, each of those letters is reported with the Latin letter it resembles. A word with no Latin letter made only of look-alikes is reported as a low note, because that is how ordinary Russian or Greek words are written. The list is a short set of the common cases, not the full Unicode confusables data in [UTS #39](https://www.unicode.org/reports/tr39/).
+
+### 4. Decomposed text and the other forms
+
+The text is compared with its NFC form ([UAX #15](https://www.unicode.org/reports/tr15/)). If they differ, a finding says how the code point count changes. A text where NFKC differs from NFC contains compatibility characters such as fullwidth letters, ligatures or superscripts.
+
+### 5. Lengths
+
+Code points are counted with the language's own iteration, UTF-16 units with the string length, UTF-8 bytes by the size of each code point (a lone surrogate is written as U+FFFD, three bytes), and visible characters with the browser's grapheme segmentation ([UAX #29](https://www.unicode.org/reports/tr29/)). Line endings are counted as CRLF, LF and CR separately, and more than one kind is flagged as mixed.
+
+### 6. Cleaning
+
+Each repair is optional. Invisible characters removes zero width, direction, filler, tag, control, soft hyphen and byte order mark characters, and keeps the joiners that emoji need. Spaces replaces look-alike spaces with a normal space and U+2028 and U+2029 with a line feed. Look-alike letters replaces only letters inside a Latin word. Composed form rewrites the text in NFC. Edges trims leading and trailing whitespace. The result states what each repair changed.
+
+## Limits and interpretation
+
+- A finding is evidence of a character, not of intent.
+- Look-alike detection covers a small set of the commonest cases and only inside Latin words, or whole words of look-alikes.
+- Text from files is read as UTF-8. Text already damaged into U+FFFD cannot be repaired here.
+- A character your font cannot draw is not the same as a hidden character: a box or question mark is a missing glyph, which this tool does not detect.
+- Input is limited to 200,000 characters and files to 512 KiB.
+
+## Finding reference
+
+| Finding | Severity | Source | What it means | Fix |
+| --- | --- | --- | --- | --- |
+| Zero width character | check | [UAX #9](https://www.unicode.org/reports/tr9/) | Invisible, breaks equality, search and length checks | Remove it (Clean text) |
+| Byte order mark at the start | check | [Unicode FAQ: BOM](https://www.unicode.org/faq/utf_bom.html#bom1) | An editor or export added it; importers see an extra character | Remove it, or save as UTF-8 without BOM |
+| Direction override or isolate | fail | [UAX #9](https://www.unicode.org/reports/tr9/) | What is shown is not what is stored | Remove it unless the text needs it |
+| Direction mark | check | [UAX #9](https://www.unicode.org/reports/tr9/) | Invisible, changes the layout of punctuation | Remove it from identifiers |
+| Blank filler | fail | [UTS #39](https://www.unicode.org/reports/tr39/) | Looks empty but passes a not-empty check | Remove it and treat the value as empty |
+| Tag character | fail | [UTS #39](https://www.unicode.org/reports/tr39/) | Can carry hidden text | Remove it |
+| Control character | check (NUL: fail) | [RFC 20](https://www.rfc-editor.org/rfc/rfc20) | Acted on by terminals and parsers | Remove it |
+| Look-alike space | check | [UAX #44](https://www.unicode.org/reports/tr44/) | trim(), split and equality treat it differently | Replace with a normal space |
+| Look-alike letter in a Latin word | fail | [UTS #39](https://www.unicode.org/reports/tr39/) | Reads as a Latin letter and compares unequal | Replace with the Latin letter |
+| Word made only of look-alikes | info | [UTS #39](https://www.unicode.org/reports/tr39/) | Normal in Cyrillic or Greek text; suspicious in a Latin context | Check where the text came from |
+| Not in composed form (NFC) | check | [UAX #15](https://www.unicode.org/reports/tr15/) | Equal-looking strings compare unequal | Normalize to NFC before storing or comparing |
+| Lone surrogate | fail | [Unicode FAQ: UTF-16](https://www.unicode.org/faq/utf_bom.html#utf16-7) | Not valid Unicode | Fix the code that split the pair |
+| Replacement character | check | [Unicode FAQ](https://www.unicode.org/faq/utf_bom.html) | Data was lost upstream | Get the text again, read as UTF-8 |
+| Stacked combining marks | info | [UAX #29](https://www.unicode.org/reports/tr29/) | Draws outside its line | Limit marks per character if layout matters |
+| Leading or trailing whitespace | info | | Easy to miss | Trim where the value is an identifier |
+
+## Guide
+
+### Find why two equal-looking values do not match
+
+1. Paste each value in turn and compare the findings and the four lengths.
+2. If one has a finding the other lacks, that character is the difference. If only the Unicode forms differ, normalize both to NFC.
+3. Fix it where the value enters the system, not only where it is compared.
+
+### Clean pasted identifiers before storing them
+
+Remove invisible characters, replace look-alike spaces and normalize to NFC for user names, email addresses, file names and keys. Keep joiners in prose, emoji and scripts that need them.
+
+### Test that your system rejects or normalizes hidden characters
+
+Use Break it on a real value from your form: each case adds one hidden character to your text. Submit it and check that the system refuses it, cleans it, or at least stores it unchanged and shows the same length you see here.
+
+### Break it cases
+
+| Case | What it loads | What it shows |
+| --- | --- | --- |
+| Zero width space | U+200B inside your first word | Zero width finding |
+| Cyrillic look-alike | One of your Latin letters replaced by a Cyrillic one | Look-alike letter finding |
+| Disguised file name | U+202E near the end of your text | Direction override finding |
+| No-break space | Your first space as U+00A0 | Look-alike space finding |
+| Byte order mark | U+FEFF at the start | Byte order mark finding |
+| NUL byte | U+0000 inside your first word | Control character finding |
+| Split accent | Your text in NFD, or a sample | Not in composed form |
+| Trailing spaces | Two spaces at the end | Trailing whitespace |
+| Blank name | U+3164 alone | Blank filler |
+| Hidden tag text | Two tag characters after your text | Tag character |
+| Emoji family | One family emoji | No findings, and four different lengths |
+
+## Use it from an agent
+
+The same check is the `text_inspect` operation of the Tamperbox API and MCP server. It takes text, returns the counts, the findings with code point, name, line and column, and, with `clean` set to true, the cleaned text. Call it with the same input and the same limits as the page. See the [MCP documentation](https://docs.tamperbox.dev/mcp/).
+
+## Confirm a result outside Tamperbox
+
+- Python: `[hex(ord(c)) for c in text]` lists every code point; `len(text)` and `len(text.encode())` give characters and bytes; `unicodedata.normalize("NFC", text) == text` tests the form.
+- JavaScript: `[...text].map(c => c.codePointAt(0).toString(16))` lists code points; `text.length` is the UTF-16 count; `new TextEncoder().encode(text).length` is the byte count; `text.normalize("NFC") === text` tests the form.
+- A hex dump of the file (`xxd file | head`) shows a byte order mark as `ef bb bf` at the start.
+
+## References
+
+- [Unicode Standard Annex #15: Unicode Normalization Forms](https://www.unicode.org/reports/tr15/)
+- [Unicode Standard Annex #9: Unicode Bidirectional Algorithm](https://www.unicode.org/reports/tr9/)
+- [Unicode Technical Standard #39: Unicode Security Mechanisms](https://www.unicode.org/reports/tr39/)
+- [Unicode Standard Annex #29: Unicode Text Segmentation](https://www.unicode.org/reports/tr29/)
+- [CVE-2021-42574: bidirectional text in source code](https://nvd.nist.gov/vuln/detail/CVE-2021-42574)
