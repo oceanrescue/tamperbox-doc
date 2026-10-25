@@ -1,7 +1,7 @@
 ---
 title: Tool pages
 description: Each Tamperbox tool page opens on a live result or controlled example, shows its verdict and evidence, and links here for the method behind every finding.
-updated: 2026-10-19
+updated: 2026-10-25
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Map of the documented Tamperbox tools, what each tool page shows, and where the full method, finding reference and guide for each tool live.
 prerequisites: []
@@ -10,6 +10,8 @@ outputs:
 limitations:
   - Only the tools listed here have a documentation page; the other tool pages carry their full reference on the page itself.
 ---
+
+Browse the same groups as the [tool directory](https://tamperbox.dev/). Each card starts with a reason to use the tool, followed by what its documentation covers.
 
 A tool page on [tamperbox.dev](https://tamperbox.dev) has one job: take one input, show the verdict, and show the evidence behind it. The page keeps a short "How it works", the limits that change how you read a result, three questions people ask, and the standards it follows. Everything longer lives here.
 
@@ -23,67 +25,99 @@ Each tool's documentation has the same shape, so a finding on the page always ha
 | Worked example | The live default or an explicitly loaded controlled sample, read end to end, and what each Break it case shows | "Worked examples on docs" |
 | For agents | How to run the same check through the MCP server and what the result does not prove | The For agents band on the page |
 
+## APIs & HTTP
+
 <div class="tb-doc-grid">
-  <a class="tb-doc-card" href="/tools/dns-lookup/"><strong>DNS Lookup</strong><span>Any record type from a public resolver or the zone itself, with status, flags and the DNSSEC answer bit.</span></a>
-  <a class="tb-doc-card" href="/tools/txt-lookup/"><strong>TXT Record Lookup</strong><span>Every TXT record on a name, named by what it is for, with its strings measured against the 255-character limit.</span></a>
-  <a class="tb-doc-card" href="/tools/cname-lookup/"><strong>CNAME Lookup</strong><span>The alias chain from a name to its address, with dangling targets, apex aliases and loops caught.</span></a>
-  <a class="tb-doc-card" href="/tools/ns-lookup/"><strong>NS Lookup</strong><span>The nameservers a zone delegates to, the provider behind each, and the unfinished migration.</span></a>
-  <a class="tb-doc-card" href="/tools/soa-lookup/"><strong>SOA Lookup</strong><span>A zone’s SOA field by field, the serial read as a date, and the four timers checked.</span></a>
-  <a class="tb-doc-card" href="/tools/aaaa-lookup/"><strong>AAAA Lookup</strong><span>A name’s IPv6 addresses, sorted by kind, with the network behind each and the IPv4 question answered.</span></a>
-  <a class="tb-doc-card" href="/tools/srv-lookup/"><strong>SRV Lookup</strong><span>The servers a service names, in priority order, with each one’s share of connections.</span></a>
-  <a class="tb-doc-card" href="/tools/caa-lookup/"><strong>CAA Lookup</strong><span>Which certificate authorities may issue for a name, inherited from parents, against the certificates already logged.</span></a>
-  <a class="tb-doc-card" href="/tools/dns-propagation/"><strong>DNS Propagation Checker</strong><span>Twelve public resolvers against the zone’s own answer, with the cache time left on every old answer.</span></a>
-  <a class="tb-doc-card" href="/tools/json-to-yaml/"><strong>JSON to YAML Converter</strong><span>Convert locally, reject duplicate keys and unsafe integers, and verify the resulting data.</span></a>
-  <a class="tb-doc-card" href="/tools/yaml-to-json/"><strong>YAML to JSON Converter</strong><span>Resolve compatible YAML values, inspect presentation loss, and test aliases and numeric limits.</span></a>
-  <a class="tb-doc-card" href="/tools/cdn-detector/"><strong>CDN Detector</strong><span>How Tamperbox combines DNS, network and HTTPS response clues to identify a likely content delivery network.</span></a>
-  <a class="tb-doc-card" href="/tools/dns-provider/"><strong>DNS Provider Lookup</strong><span>How Tamperbox groups authoritative nameservers, recognises providers, and flags fragile or mixed delegation.</span></a>
-  <a class="tb-doc-card" href="/tools/domain-health/"><strong>Domain Health Check</strong><span>How Tamperbox combines DNS, mail, TLS, HTTP and security-header observations into one bounded health report.</span></a>
-  <a class="tb-doc-card" href="/tools/website-hosting/"><strong>Website Hosting Checker</strong><span>How Tamperbox follows website DNS, maps public addresses to networks, and compares the apex with www.</span></a>
-  <a class="tb-doc-card" href="/tools/website-technology/"><strong>Website Technology Detector</strong><span>How Tamperbox identifies web technologies from bounded HTML and response-header signatures without executing the page.</span></a>
-  <a class="tb-doc-card" href="/tools/saas-stack/"><strong>SaaS Stack Detector</strong><span>How Tamperbox reads public TXT records for service-verification tokens and SPF senders without claiming that an account is active.</span></a>
-  <a class="tb-doc-card" href="/tools/subdomain-finder/"><strong>Subdomain Finder</strong><span>How Tamperbox extracts DNS names from public Certificate Transparency observations and labels risky-looking names.</span></a>
-  <a class="tb-doc-card" href="/tools/email-domain/"><strong>MX Lookup &amp; Email Domain Checker</strong><span>How Tamperbox validates a mail domain, reads MX and address fallback records, identifies null MX, and explains what public routing evidence proves.</span></a>
-  <a class="tb-doc-card" href="/tools/email-provider/"><strong>Email Provider Lookup</strong><span>How Tamperbox attributes public MX hostnames to mailbox services and gateways, handles mixed routes, and preserves uncertainty about the downstream mailbox host.</span></a>
-  <a class="tb-doc-card" href="/tools/ssl-checker/"><strong>SSL Certificate Checker</strong><span>The certificate a server really sends, its chain on one time axis, the names it covers, the connection it negotiated.</span></a>
-  <a class="tb-doc-card" href="/tools/dane-checker/"><strong>DANE &amp; TLSA Checker</strong><span>The TLSA records of every mail server, whether DNSSEC protects them, and which one matches the certificate the server presents.</span></a>
-  <a class="tb-doc-card" href="/tools/security-headers/"><strong>Security Headers Checker</strong><span>The six headers a response sends to protect visitors, the rule behind each point of the grade, and the lines to send instead.</span></a>
-  <a class="tb-doc-card" href="/tools/security-txt-checker/"><strong>security.txt Checker</strong><span>A site's security.txt read the way a researcher reads it, checked against RFC 9116, with a corrected file to publish.</span></a>
-  <a class="tb-doc-card" href="/tools/post-quantum-checker/"><strong>Post-Quantum TLS Checker</strong><span>Two handshakes on port 443: the key exchange group a server chooses, and whether it takes ML-KEM when nothing else is offered.</span></a>
-  <a class="tb-doc-card" href="/tools/dkim-checker/"><strong>DKIM Record Checker</strong><span>Every DKIM key a domain publishes, measured from the key bytes, with the selector found for you.</span></a>
-  <a class="tb-doc-card" href="/tools/spf-checker/"><strong>SPF Checker</strong><span>Every DNS lookup an SPF record costs, the include tree behind it, and a flattening plan that replaces only what it must.</span></a>
-  <a class="tb-doc-card" href="/tools/dmarc-checker/"><strong>DMARC Checker &amp; Generator</strong><span>The policy graded tag by tag, and the next record on the path from p=none to reject, with every change kept in History.</span></a>
-  <a class="tb-doc-card" href="/tools/mta-sts-checker/"><strong>MTA-STS &amp; TLS-RPT Checker</strong><span>The chain a sending server follows: the record, the policy file, MX coverage and TLS reports, with a policy that covers every server.</span></a>
-  <a class="tb-doc-card" href="/tools/bimi-checker/"><strong>BIMI Record Checker</strong><span>The record, the SVG logo, the mark certificate and the DMARC policy behind a logo in the inbox.</span></a>
-  <a class="tb-doc-card" href="/tools/email-header-analyzer/"><strong>Email Header Analyzer</strong><span>A message's route hop by hop, the receiver's authentication results, and the identities compared, all in the browser.</span></a>
-  <a class="tb-doc-card" href="/tools/redirect-checker/"><strong>Redirect Checker</strong><span>Every hop of a redirect chain with what changed on each, and the loops, downgrades and temporary codes to fix.</span></a>
-  <a class="tb-doc-card" href="/tools/http3-checker/"><strong>HTTP/3 &amp; Compression Checker</strong><span>The HTTP/3 offer and a QUIC connection, what each Accept-Encoding gets back, and HSTS against the preload list's rules.</span></a>
-  <a class="tb-doc-card" href="/tools/cors-tester/"><strong>CORS Tester</strong><span>The browser's CORS algorithm step by step, from the preflight to the real response, with the headers that would allow the request.</span></a>
-  <a class="tb-doc-card" href="/tools/jwt/"><strong>JWT Decoder &amp; Verifier</strong><span>A token's header and claims decoded in the browser, its signature verified with your key, and test tokens rebuilt from edited claims.</span></a>
-  <a class="tb-doc-card" href="/tools/unix-timestamp/"><strong>Unix Timestamp Converter</strong><span>One instant in every format, the unit and zone it was read in, and what happens at 2038, before 1970 and across a clock change.</span></a>
-  <a class="tb-doc-card" href="/tools/hidden-characters/"><strong>Hidden Character Checker</strong><span>Zero width, direction and look-alike characters found, the text counted four ways, and cleaned.</span></a>
-  <a class="tb-doc-card" href="/tools/naughty-strings/"><strong>Naughty Strings List</strong><span>Hostile test strings that say what they test, with active payloads kept apart.</span></a>
-  <a class="tb-doc-card" href="/tools/string-length-generator/"><strong>Exact-Length String Generator</strong><span>Strings of an exact size in characters, UTF-16 units or bytes, limit sets and counterstrings.</span></a>
-  <a class="tb-doc-card" href="/tools/mojibake-fixer/"><strong>Mojibake Fixer</strong><span>Garbled UTF-8 repaired run by run, and what was lost for good.</span></a>
-  <a class="tb-doc-card" href="/tools/har-sanitizer/"><strong>HAR File Sanitizer</strong><span>Secrets and personal values replaced with stable placeholders, and the failed requests listed for a ticket.</span></a>
-  <a class="tb-doc-card" href="/tools/postman-converter/"><strong>Postman Collection Converter</strong><span>Postman, OpenAPI and cURL converted in the browser, with a report of what was kept, dropped and redacted.</span></a>
-  <a class="tb-doc-card" href="/tools/mixed-content-checker/"><strong>Mixed Content &amp; Cookie Checker</strong><span>Every http:// address on an HTTPS page sorted by what browsers do with it, and every cookie judged against the rules browsers enforce.</span></a>
-  <a class="tb-doc-card" href="/tools/dnssec-checker/"><strong>DNSSEC Checker</strong><span>Resolver validation and the diagnostic chain of DS, keys and signature windows.</span></a>
-  <a class="tb-doc-card" href="/tools/reverse-dns/"><strong>Reverse DNS Lookup</strong><span>PTR names and forward confirmation for a domain or IP addresses.</span></a>
-  <a class="tb-doc-card" href="/tools/domain-availability/"><strong>Domain Availability Checker</strong><span>Registration evidence, dates and status codes without a guarantee of availability.</span></a>
-  <a class="tb-doc-card" href="/tools/whois-lookup/"><strong>WHOIS &amp; RDAP Lookup</strong><span>Domain and network registry records, contacts and raw RDAP evidence.</span></a>
-  <a class="tb-doc-card" href="/tools/asn-lookup/"><strong>ASN Lookup</strong><span>Routing origins, registry allocation holders and their evidence limits.</span></a>
-  <a class="tb-doc-card" href="/tools/bgp-lookup/"><strong>BGP Route Lookup</strong><span>Collector visibility, route objects and reported routing incidents.</span></a>
-  <a class="tb-doc-card" href="/tools/tcp-ping/"><strong>TCP Ping</strong><span>TCP connect times and individual attempts from selected regions.</span></a>
-  <a class="tb-doc-card" href="/tools/minecraft-server-status/"><strong>Minecraft Server Status Checker</strong><span>Java Edition status replies, SRV selection and player-report limits.</span></a>
-  <a class="tb-doc-card" href="/tools/open-port-checker/"><strong>Open Port Checker</strong><span>A TCP check of the request-source address and port-forward troubleshooting.</span></a>
-  <a class="tb-doc-card" href="/tools/what-is-my-ip/"><strong>What Is My IP Address?</strong><span>The observed public address and optional browser IPv4/IPv6 tests.</span></a>
-  <a class="tb-doc-card" href="/tools/connection-info/"><strong>My Connection Info</strong><span>TLS, HTTP and round-trip metadata for the connection to the edge.</span></a>
-  <a class="tb-doc-card" href="/tools/website-down-checker/"><strong>Website Down Checker</strong><span>One request from our server: up, slow, erroring or down, and the stage where a request stopped.</span></a>
-  <a class="tb-doc-card" href="/tools/broken-link-checker/"><strong>Broken Link Checker</strong><span>Every link, image and script on one page requested from our server: broken, unclear, redirected or working, with where each one sits.</span></a>
-  <a class="tb-doc-card" href="/tools/open-graph-preview/"><strong>Open Graph Preview</strong><span>The card every platform draws for a link, from its Open Graph, X and HTML tags, with the tags to add.</span></a>
-  <a class="tb-doc-card" href="/tools/robots-txt-checker/"><strong>Robots.txt &amp; Sitemap Checker</strong><span>Which search and AI crawlers the rules let in, the line that decides any URL, and the sitemaps they announce.</span></a>
-  <a class="tb-doc-card" href="/tools/ads-txt-checker/"><strong>Ads.txt &amp; App-Ads.txt Checker</strong><span>Every ads.txt line buyers would skip, and each seller checked against its ad system's sellers.json.</span></a>
-  <a class="tb-doc-card" href="/tools/llms-txt/"><strong>llms.txt Checker &amp; Generator</strong><span>The outline an AI agent reads from a site's llms.txt, every format problem, and a draft made from the site itself.</span></a>
+  <a class="tb-doc-card" href="/tools/jwt/"><strong>JWT Decoder &amp; Verifier</strong><span class="tb-doc-card__purpose">Debug a rejected login token without sharing it with another service.</span><span>A token's header and claims decoded in the browser, its signature verified with your key, and test tokens rebuilt from edited claims.</span></a>
+  <a class="tb-doc-card" href="/tools/postman-converter/"><strong>Postman Collection Converter</strong><span class="tb-doc-card__purpose">Moving away from Postman? Take your requests with you.</span><span>Postman, OpenAPI and cURL converted in the browser, with a report of what was kept, dropped and redacted.</span></a>
+  <a class="tb-doc-card" href="/tools/json-to-yaml/"><strong>JSON to YAML Converter</strong><span class="tb-doc-card__purpose">Your data is JSON, but the next tool needs YAML.</span><span>Convert locally, reject duplicate keys and unsafe integers, and verify the resulting data.</span></a>
+  <a class="tb-doc-card" href="/tools/yaml-to-json/"><strong>YAML to JSON Converter</strong><span class="tb-doc-card__purpose">Need your YAML in a JSON-only app? See what survives the conversion.</span><span>Resolve compatible YAML values, inspect presentation loss, and test aliases and numeric limits.</span></a>
+  <a class="tb-doc-card" href="/tools/unix-timestamp/"><strong>Unix Timestamp Converter</strong><span class="tb-doc-card__purpose">Make sense of a date in your logs, or test where date handling breaks.</span><span>One instant in every format, the unit and zone it was read in, and what happens at 2038, before 1970 and across a clock change.</span></a>
+  <a class="tb-doc-card" href="/tools/redirect-checker/"><strong>Redirect Checker</strong><span class="tb-doc-card__purpose">A link lands somewhere unexpected? Follow the detour.</span><span>Every hop of a redirect chain with what changed on each, and the loops, downgrades and temporary codes to fix.</span></a>
+  <a class="tb-doc-card" href="/tools/http3-checker/"><strong>HTTP/3 &amp; Compression Checker</strong><span class="tb-doc-card__purpose">Is your site missing out on faster page delivery?</span><span>The HTTP/3 offer and a QUIC connection, what each Accept-Encoding gets back, and HSTS against the preload list's rules.</span></a>
+  <a class="tb-doc-card" href="/tools/cors-tester/"><strong>CORS Tester</strong><span class="tb-doc-card__purpose">The request works outside the browser. Find out why the browser might refuse it.</span><span>The browser's CORS algorithm step by step, from the preflight to the real response, with the headers that would allow the request.</span></a>
+  <a class="tb-doc-card" href="/tools/hidden-characters/"><strong>Hidden Character Checker</strong><span class="tb-doc-card__purpose">Two strings look identical but behave differently? Find what's hiding in them.</span><span>Zero width, direction and look-alike characters found, the text counted four ways, and cleaned.</span></a>
+  <a class="tb-doc-card" href="/tools/naughty-strings/"><strong>Naughty Strings List</strong><span class="tb-doc-card__purpose">Find inputs your form probably wasn't expecting.</span><span>Hostile test strings that say what they test, with active payloads kept apart.</span></a>
+  <a class="tb-doc-card" href="/tools/string-length-generator/"><strong>Exact-Length String Generator</strong><span class="tb-doc-card__purpose">Test a field right at its length limit, and just beyond it.</span><span>Strings of an exact size in characters, UTF-16 units or bytes, limit sets and counterstrings.</span></a>
+  <a class="tb-doc-card" href="/tools/mojibake-fixer/"><strong>Mojibake Fixer</strong><span class="tb-doc-card__purpose">Your text turned into strange symbols. See whether it can be recovered.</span><span>Garbled UTF-8 repaired run by run, and what was lost for good.</span></a>
+  <a class="tb-doc-card" href="/tools/har-sanitizer/"><strong>HAR File Sanitizer</strong><span class="tb-doc-card__purpose">Need to share a browser trace for a bug report? Review and redact it first.</span><span>Secrets and personal values replaced with stable placeholders, and the failed requests listed for a ticket.</span></a>
+</div>
+
+## Web security & TLS
+
+<div class="tb-doc-grid">
+  <a class="tb-doc-card" href="/tools/dane-checker/"><strong>DANE &amp; TLSA Checker</strong><span class="tb-doc-card__purpose">Changed a server certificate? Check that its DNS fingerprint still matches.</span><span>The TLSA records of every mail server, whether DNSSEC protects them, and which one matches the certificate the server presents.</span></a>
+  <a class="tb-doc-card" href="/tools/security-headers/"><strong>Security Headers Checker</strong><span class="tb-doc-card__purpose">Find browser protections your website may be missing.</span><span>The six headers a response sends to protect visitors, the rule behind each point of the grade, and the lines to send instead.</span></a>
+  <a class="tb-doc-card" href="/tools/ssl-checker/"><strong>SSL Certificate Checker</strong><span class="tb-doc-card__purpose">A certificate warning or renewal coming up? Check what your server presents.</span><span>The certificate a server really sends, its chain on one time axis, the names it covers, the connection it negotiated.</span></a>
+  <a class="tb-doc-card" href="/tools/post-quantum-checker/"><strong>Post-Quantum TLS Checker</strong><span class="tb-doc-card__purpose">See whether your site can negotiate a post-quantum key exchange.</span><span>Two handshakes on port 443: the key exchange group a server chooses, and whether it takes ML-KEM when nothing else is offered.</span></a>
+  <a class="tb-doc-card" href="/tools/security-txt-checker/"><strong>security.txt Checker</strong><span class="tb-doc-card__purpose">Help someone who finds a security issue reach the right contact.</span><span>A site's security.txt read the way a researcher reads it, checked against RFC 9116, with a corrected file to publish.</span></a>
+  <a class="tb-doc-card" href="/tools/mixed-content-checker/"><strong>Mixed Content &amp; Cookie Checker</strong><span class="tb-doc-card__purpose">Moved to HTTPS? Look for insecure resources and cookie settings left behind.</span><span>Every http:// address on an HTTPS page sorted by what browsers do with it, and every cookie judged against the rules browsers enforce.</span></a>
+</div>
+
+## Email & DNS
+
+<div class="tb-doc-grid">
+  <a class="tb-doc-card" href="/tools/email-domain/"><strong>MX Lookup &amp; Email Domain Checker</strong><span class="tb-doc-card__purpose">Check where a domain receives mail before changing its setup.</span><span>How Tamperbox validates a mail domain, reads MX and address fallback records, identifies null MX, and explains what public routing evidence proves.</span></a>
+  <a class="tb-doc-card" href="/tools/email-provider/"><strong>Email Provider Lookup</strong><span class="tb-doc-card__purpose">Taking over a domain? Find out who handles its email.</span><span>How Tamperbox attributes public MX hostnames to mailbox services and gateways, handles mixed routes, and preserves uncertainty about the downstream mailbox host.</span></a>
+  <a class="tb-doc-card" href="/tools/spf-checker/"><strong>SPF Checker</strong><span class="tb-doc-card__purpose">Added another email service? Check whether your sender rules still fit.</span><span>Every DNS lookup an SPF record costs, the include tree behind it, and a flattening plan that replaces only what it must.</span></a>
+  <a class="tb-doc-card" href="/tools/dmarc-checker/"><strong>DMARC Checker &amp; Generator</strong><span class="tb-doc-card__purpose">Work out how your domain asks receivers to handle mail that fails authentication.</span><span>The policy graded tag by tag, and the next record on the path from p=none to reject, with every change kept in History.</span></a>
+  <a class="tb-doc-card" href="/tools/dkim-checker/"><strong>DKIM Record Checker</strong><span class="tb-doc-card__purpose">Check the public signing key your email provider asked you to publish.</span><span>Every DKIM key a domain publishes, measured from the key bytes, with the selector found for you.</span></a>
+  <a class="tb-doc-card" href="/tools/mta-sts-checker/"><strong>MTA-STS &amp; TLS-RPT Checker</strong><span class="tb-doc-card__purpose">Check whether your domain tells senders to use encrypted mail delivery.</span><span>The chain a sending server follows: the record, the policy file, MX coverage and TLS reports, with a policy that covers every server.</span></a>
+  <a class="tb-doc-card" href="/tools/bimi-checker/"><strong>BIMI Record Checker</strong><span class="tb-doc-card__purpose">Trying to get your logo into inboxes? Check the published requirements.</span><span>The record, the SVG logo, the mark certificate and the DMARC policy behind a logo in the inbox.</span></a>
+  <a class="tb-doc-card" href="/tools/email-header-analyzer/"><strong>Email Header Analyzer</strong><span class="tb-doc-card__purpose">A message arrived late or failed authentication. Follow its trail.</span><span>A message's route hop by hop, the receiver's authentication results, and the identities compared, all in the browser.</span></a>
+</div>
+
+## Domains & hosting
+
+<div class="tb-doc-grid">
+  <a class="tb-doc-card" href="/tools/saas-stack/"><strong>SaaS Stack Detector</strong><span class="tb-doc-card__purpose">See which services leave clues in a domain's public DNS records.</span><span>How Tamperbox reads public TXT records for service-verification tokens and SPF senders without claiming that an account is active.</span></a>
+  <a class="tb-doc-card" href="/tools/website-hosting/"><strong>Website Hosting Checker</strong><span class="tb-doc-card__purpose">Taking over a website? Find the networks serving it.</span><span>How Tamperbox follows website DNS, maps public addresses to networks, and compares the apex with www.</span></a>
+  <a class="tb-doc-card" href="/tools/cdn-detector/"><strong>CDN Detector</strong><span class="tb-doc-card__purpose">Find out whether a CDN or proxy sits in front of a website.</span><span>How Tamperbox combines DNS, network and HTTPS response clues to identify a likely content delivery network.</span></a>
+  <a class="tb-doc-card" href="/tools/dns-provider/"><strong>DNS Provider Lookup</strong><span class="tb-doc-card__purpose">Need to change DNS? Find out which provider runs it.</span><span>How Tamperbox groups authoritative nameservers, recognises providers, and flags fragile or mixed delegation.</span></a>
+  <a class="tb-doc-card" href="/tools/website-technology/"><strong>Website Technology Detector</strong><span class="tb-doc-card__purpose">Curious what a website is built with? Look for clues in its pages.</span><span>How Tamperbox identifies web technologies from bounded HTML and response-header signatures without executing the page.</span></a>
+  <a class="tb-doc-card" href="/tools/subdomain-finder/"><strong>Subdomain Finder</strong><span class="tb-doc-card__purpose">Find forgotten or unexpected hostnames in public certificate records.</span><span>How Tamperbox extracts DNS names from public Certificate Transparency observations and labels risky-looking names.</span></a>
+  <a class="tb-doc-card" href="/tools/domain-health/"><strong>Domain Health Check</strong><span class="tb-doc-card__purpose">Taking over a domain? Get a starting list of things to check and fix.</span><span>How Tamperbox combines DNS, mail, TLS, HTTP and security-header observations into one bounded health report.</span></a>
+</div>
+
+## DNS & registration
+
+<div class="tb-doc-grid">
+  <a class="tb-doc-card" href="/tools/domain-availability/"><strong>Domain Availability Checker</strong><span class="tb-doc-card__purpose">Got a name for your next project? Check whether the domain is available.</span><span>Registration evidence, dates and status codes without a guarantee of availability.</span></a>
+  <a class="tb-doc-card" href="/tools/whois-lookup/"><strong>WHOIS &amp; RDAP Lookup</strong><span class="tb-doc-card__purpose">Find where a domain is registered and when its registration expires.</span><span>Domain and network registry records, contacts and raw RDAP evidence.</span></a>
+  <a class="tb-doc-card" href="/tools/dns-lookup/"><strong>DNS Lookup</strong><span class="tb-doc-card__purpose">Check where a domain points before blaming the app.</span><span>Any record type from a public resolver or the zone itself, with status, flags and the DNSSEC answer bit.</span></a>
+  <a class="tb-doc-card" href="/tools/dns-propagation/"><strong>DNS Propagation Checker</strong><span class="tb-doc-card__purpose">Changed DNS, but some people still see the old site? Compare the answers.</span><span>Twelve public resolvers against the zone’s own answer, with the cache time left on every old answer.</span></a>
+  <a class="tb-doc-card" href="/tools/txt-lookup/"><strong>TXT Record Lookup</strong><span class="tb-doc-card__purpose">A service won't verify your domain? Check the records it can see.</span><span>Every TXT record on a name, named by what it is for, with its strings measured against the 255-character limit.</span></a>
+  <a class="tb-doc-card" href="/tools/cname-lookup/"><strong>CNAME Lookup</strong><span class="tb-doc-card__purpose">Moved or deleted a hosted service? Look for aliases left pointing at it.</span><span>The alias chain from a name to its address, with dangling targets, apex aliases and loops caught.</span></a>
+  <a class="tb-doc-card" href="/tools/ns-lookup/"><strong>NS Lookup</strong><span class="tb-doc-card__purpose">Changing DNS providers? Check which nameservers your domain delegates to.</span><span>The nameservers a zone delegates to, the provider behind each, and the unfinished migration.</span></a>
+  <a class="tb-doc-card" href="/tools/soa-lookup/"><strong>SOA Lookup</strong><span class="tb-doc-card__purpose">Investigate DNS updates and cache timing at the zone level.</span><span>A zone’s SOA field by field, the serial read as a date, and the four timers checked.</span></a>
+  <a class="tb-doc-card" href="/tools/aaaa-lookup/"><strong>AAAA Lookup</strong><span class="tb-doc-card__purpose">Check where IPv6 visitors are being sent.</span><span>A name’s IPv6 addresses, sorted by kind, with the network behind each and the IPv4 question answered.</span></a>
+  <a class="tb-doc-card" href="/tools/srv-lookup/"><strong>SRV Lookup</strong><span class="tb-doc-card__purpose">Find the servers an app is told to use, and which it should try first.</span><span>The servers a service names, in priority order, with each one’s share of connections.</span></a>
+  <a class="tb-doc-card" href="/tools/caa-lookup/"><strong>CAA Lookup</strong><span class="tb-doc-card__purpose">Trouble issuing a certificate? Check which issuers your domain allows.</span><span>Which certificate authorities may issue for a name, inherited from parents, against the certificates already logged.</span></a>
+  <a class="tb-doc-card" href="/tools/dnssec-checker/"><strong>DNSSEC Checker</strong><span class="tb-doc-card__purpose">DNS stopped resolving after a change? Check for broken signatures or delegation.</span><span>Resolver validation and the diagnostic chain of DS, keys and signature windows.</span></a>
+  <a class="tb-doc-card" href="/tools/reverse-dns/"><strong>Reverse DNS Lookup</strong><span class="tb-doc-card__purpose">Find the name attached to an IP address and whether the two agree.</span><span>PTR names and forward confirmation for a domain or IP addresses.</span></a>
+</div>
+
+## Network & IP
+
+<div class="tb-doc-grid">
+  <a class="tb-doc-card" href="/tools/what-is-my-ip/"><strong>What Is My IP Address?</strong><span class="tb-doc-card__purpose">See the public address your connection presents to the internet.</span><span>The observed public address and optional browser IPv4/IPv6 tests.</span></a>
+  <a class="tb-doc-card" href="/tools/connection-info/"><strong>My Connection Info</strong><span class="tb-doc-card__purpose">See how your browser actually connects, beyond the Wi-Fi signal.</span><span>TLS, HTTP and round-trip metadata for the connection to the edge.</span></a>
+  <a class="tb-doc-card" href="/tools/asn-lookup/"><strong>ASN Lookup</strong><span class="tb-doc-card__purpose">An unfamiliar IP in your logs? Find the network announcing it.</span><span>Routing origins, registry allocation holders and their evidence limits.</span></a>
+  <a class="tb-doc-card" href="/tools/bgp-lookup/"><strong>BGP Route Lookup</strong><span class="tb-doc-card__purpose">Investigate routing changes when a network becomes hard to reach.</span><span>Collector visibility, route objects and reported routing incidents.</span></a>
+  <a class="tb-doc-card" href="/tools/open-port-checker/"><strong>Open Port Checker</strong><span class="tb-doc-card__purpose">Set up port forwarding? Check whether the internet can reach your port.</span><span>A TCP check of the request-source address and port-forward troubleshooting.</span></a>
+  <a class="tb-doc-card" href="/tools/tcp-ping/"><strong>TCP Ping</strong><span class="tb-doc-card__purpose">A service works for you but not elsewhere? Compare connections from three regions.</span><span>TCP connect times and individual attempts from selected regions.</span></a>
+  <a class="tb-doc-card" href="/tools/minecraft-server-status/"><strong>Minecraft Server Status Checker</strong><span class="tb-doc-card__purpose">Friends can't join your Minecraft server? Check its public status.</span><span>Java Edition status replies, SRV selection and player-report limits.</span></a>
+</div>
+
+## Web & URLs
+
+<div class="tb-doc-grid">
+  <a class="tb-doc-card" href="/tools/website-down-checker/"><strong>Website Down Checker</strong><span class="tb-doc-card__purpose">Can't open a site? See whether our server can reach it.</span><span>One request from our server: up, slow, erroring or down, and the stage where a request stopped.</span></a>
+  <a class="tb-doc-card" href="/tools/broken-link-checker/"><strong>Broken Link Checker</strong><span class="tb-doc-card__purpose">Catch dead links and missing page resources before your visitors do.</span><span>Every link, image and script on one page requested from our server: broken, unclear, redirected or working, with where each one sits.</span></a>
+  <a class="tb-doc-card" href="/tools/open-graph-preview/"><strong>Open Graph Preview</strong><span class="tb-doc-card__purpose">Make sure a shared link shows the title and image you intended.</span><span>The card every platform draws for a link, from its Open Graph, X and HTML tags, with the tags to add.</span></a>
+  <a class="tb-doc-card" href="/tools/robots-txt-checker/"><strong>Robots.txt &amp; Sitemap Checker</strong><span class="tb-doc-card__purpose">Check whether your crawler rules block pages you want discovered.</span><span>Which search and AI crawlers the rules let in, the line that decides any URL, and the sitemaps they announce.</span></a>
+  <a class="tb-doc-card" href="/tools/ads-txt-checker/"><strong>Ads.txt &amp; App-Ads.txt Checker</strong><span class="tb-doc-card__purpose">Check the published list of who is allowed to sell your ad space.</span><span>Every ads.txt line buyers would skip, and each seller checked against its ad system's sellers.json.</span></a>
+  <a class="tb-doc-card" href="/tools/llms-txt/"><strong>llms.txt Checker &amp; Generator</strong><span class="tb-doc-card__purpose">Give AI tools a starting guide to your site's useful pages.</span><span>The outline an AI agent reads from a site's llms.txt, every format problem, and a draft made from the site itself.</span></a>
 </div>
 
 ## Where processing happens

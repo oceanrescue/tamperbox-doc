@@ -116,6 +116,7 @@ main > .content-panel:first-of-type { padding-top: 2.5rem !important; padding-bo
 .tb-doc-card:active { transform: translateY(1px); }
 .tb-doc-card strong { display: block; margin-bottom: 0.35rem; color: var(--tb-text-strong); }
 .tb-doc-card span { color: var(--tb-text-muted); font-size: 0.86rem; line-height: 1.5; }
+.tb-doc-card .tb-doc-card__purpose { display: block; margin-bottom: 0.35rem; color: var(--tb-text-strong); }
 .tb-callout { margin-block: 1.5rem; padding: 1rem 1.1rem; border: 1px solid var(--tb-tamper-border); border-radius: var(--tb-radius-card); background: var(--tb-tamper-wash); color: var(--tb-text-body); }
 .tb-callout strong { color: var(--tb-tamper); }
 
