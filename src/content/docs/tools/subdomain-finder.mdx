@@ -1,7 +1,7 @@
 ---
 title: Subdomain Finder
 description: How Tamperbox extracts DNS names from public Certificate Transparency observations and labels risky-looking names.
-updated: 2026-10-24
+updated: 2026-10-25
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox Subdomain Finder.
 prerequisites:
@@ -144,6 +144,8 @@ When two signals disagree, ask whether they describe different layers: apex vers
 If a lookup fails, preserve the error and retry once. Repeated timeouts are not equivalent to empty data. Use the specialist tool linked by the finding for deeper parsing rather than converting an inconclusive aggregate result into a failure.
 
 ### Break it and heal it
+
+The cards distinguish certificate rows from plain text or broken JSON. Names recovered from text have no inferred issuer or validity dates. A currently valid certificate in the supplied rows does not establish that the named service is online; wildcard coverage is not an enumeration of hosts.
 
 The Break it controls create documented edge cases from the visitor's own input or a reserved fixture. They are teaching states, not scans. Heal it restores a safe derived value when the repair is deterministic. Revert remains available when several changes have been made.
 

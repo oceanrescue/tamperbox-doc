@@ -1,7 +1,7 @@
 ---
 title: Website Hosting Checker
 description: How Tamperbox follows website DNS, maps public addresses to networks, and compares the apex with www.
-updated: 2026-10-24
+updated: 2026-10-25
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox Website Hosting Checker.
 prerequisites:
@@ -54,7 +54,7 @@ Evidence sections follow Findings and precede History. They are the audit trail 
 
 History records intentional input replacements, including Break it examples and their repairs. Revert restores the prior input and runs it again, including live requests when applicable; Reset input returns to the value at the beginning of the recorded sequence. History is not monitoring, persistence or an account log.
 
-Check the rest carries the current input to other tools in Domains & hosting. Take it further sends the derived hostname to the [CDN and Proxy Detector](/tools/cdn-detector/) or [Website Technology Detector](/tools/website-technology/). These links appear only when that hostname differs from the input. A receiving tool runs its own check; agreement is not guaranteed.
+Check the rest carries the current input to other tools in Domains & hosting. Take it further offers [ASN](/tools/asn-lookup/) and [reverse DNS](/tools/reverse-dns/) checks for an observed public address with registry evidence. Derived aliases can be sent to the [CDN and Proxy Detector](/tools/cdn-detector/) or [Website Technology Detector](/tools/website-technology/). A public hostname can be sent to [TCP Ping](/tools/tcp-ping/) on port 443; this tests TCP reachability, not HTTPS correctness. Fixture results do not offer that live reachability handoff. Each receiving tool runs its own check; agreement is not guaranteed.
 
 Explicit tool links transfer the input through temporary browser `sessionStorage` and, when needed, a same-origin browser channel. The URL fragment contains a random transfer token, not the input. Transfers are accepted for less than one minute, consumed once, and bound to the destination path. The destination removes the token from its address. Ordinary documentation links and direct visits do not restore a previous input; if transfer storage is unavailable, the link still opens the tool.
 
@@ -144,6 +144,8 @@ When two signals disagree, ask whether they describe different layers: apex vers
 If a lookup fails, preserve the error and retry once. Repeated timeouts are not equivalent to empty data. Use the specialist tool linked by the finding for deeper parsing rather than converting an inconclusive aggregate result into a failure.
 
 ### Break it and heal it
+
+When the entered apex has no address but its www name does, Heal it offers to look up that www name. This replaces the input and starts a new lookup; it does not add DNS records. The result cards distinguish missing addresses, non-public ranges, incomplete registry attribution and address-family coverage. Different networks are a routing observation, not proof that a CDN is bypassed.
 
 The Break it controls create documented edge cases from the visitor's own input or a reserved fixture. They are teaching states, not scans. Heal it restores a safe derived value when the repair is deterministic. Revert remains available when several changes have been made.
 
