@@ -1,7 +1,7 @@
 ---
 title: Website Technology Detector
 description: How Tamperbox identifies web technologies from bounded HTML and response-header signatures without executing the page.
-updated: 2026-10-24
+updated: 2026-10-25
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox Website Technology Detector.
 prerequisites:
@@ -144,6 +144,8 @@ When two signals disagree, ask whether they describe different layers: apex vers
 If a lookup fails, preserve the error and retry once. Repeated timeouts are not equivalent to empty data. Use the specialist tool linked by the finding for deeper parsing rather than converting an inconclusive aggregate result into a failure.
 
 ### Break it and heal it
+
+Break it uses the pasted source or the response captured by the last successful lookup: it can add illustrative version headers, keep only the existing headers, or create a labelled error-response example. Heal it can remove announced version numbers from response headers or preview an HSTS header locally. It never rewrites versioned script URLs, deploys configuration or changes the live site. The HSTS preview omits includeSubDomains; review HTTPS readiness and policy before publishing any header. Lookup failures and JSON input do not offer these repairs.
 
 The Break it controls create documented edge cases from the visitor's own input or a reserved fixture. They are teaching states, not scans. Heal it restores a safe derived value when the repair is deterministic. Revert remains available when several changes have been made.
 
