@@ -86,6 +86,7 @@ export default defineConfig({
             { label: 'Naughty Strings List', link: '/tools/naughty-strings/' },
             { label: 'Exact-Length String Generator', link: '/tools/string-length-generator/' },
             { label: 'Mojibake Fixer', link: '/tools/mojibake-fixer/' },
+            { label: 'HAR File Sanitizer', link: '/tools/har-sanitizer/' },
             { label: 'Redirect Checker', link: '/tools/redirect-checker/' },
             { label: 'HTTP/3 & Compression Checker', link: '/tools/http3-checker/' },
             { label: 'CORS Tester', link: '/tools/cors-tester/' },

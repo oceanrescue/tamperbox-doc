@@ -1,0 +1,141 @@
+---
+title: HAR File Sanitizer
+description: How the HAR File Sanitizer replaces credentials, cookies, keys and personal values in a HAR file with stable placeholders in the browser, what it detects and what it does not, and how to prepare a HAR file for a support ticket.
+updated: 2026-10-25
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Method, finding reference and guide for the Tamperbox HAR File Sanitizer, which walks a HAR file in the browser, replaces Authorization credentials, cookie values, credential-named headers, query parameters, form and JSON fields, JSON Web Token signatures and personal claims, private keys, AWS, Google, GitHub, Stripe and Slack keys, bearer tokens, email addresses, Luhn-valid card numbers and optionally IPv4 addresses with stable numbered placeholders, decodes Base64 text bodies, reports every replacement by request and place, and lists the requests with failures exportable as Markdown. Also reachable as the har_sanitize operation.
+prerequisites:
+  - A HAR file exported from a browser's developer tools (Network panel, Save all as HAR or Export HAR), up to 50 MiB
+outputs:
+  - A verdict, every replacement by request and place, the sanitized HAR to copy or download, and the request list with failures as a Markdown table
+limitations:
+  - Detection is by field name and known patterns; names, postal addresses and phone numbers in free text are not detected; binary bodies are not inspected; nothing is sent anywhere
+---
+
+The tool page is [tamperbox.dev/har-sanitizer](https://tamperbox.dev/har-sanitizer). It opens on a sample capture from a shop on the reserved `.example` domain: a sign-in that returns a token, an order list called with that token and a session cookie, and a checkout that fails with a card number in its body.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> the HAR file is read and cleaned in your browser and never uploaded, including files you open or drop. No server request is made.</div>
+
+## What the tool answers
+
+Can I attach this HAR file to a ticket? A HAR file records every request and response the browser made, with headers, cookies and bodies. Session cookies and bearer tokens in it let anyone holding the file act as the user until they expire. The tool replaces what it can find, tells you exactly what and where, and lists the requests so you can point support at the ones that failed.
+
+## Inputs
+
+### Pasted text
+
+Paste the HAR JSON into the box. Text over one million characters is kept out of the box so the page stays responsive; the box says what is loaded.
+
+### Files
+
+Drop a `.har` or `.json` file anywhere on the page, or use Open file. Files up to 50 MiB are read in the browser.
+
+### Options
+
+- **Every cookie value:** on by default. Cookie names stay, so you can see which cookies were sent.
+- **Email addresses** and **Card numbers:** on by default.
+- **IP addresses:** off by default, because they are usually needed to diagnose network problems.
+- **JSON Web Tokens:** keep claims and remove the signature (default), or replace the whole token.
+- **More field names to replace:** names your application uses for private values, such as `tenant` or `account_id`.
+
+## Reading the result
+
+### Verdict and chips
+
+How many distinct values were replaced, in how many requests, with a chip per kind, a chip for failed requests and a chip for binary bodies that were not inspected.
+
+### What was replaced
+
+One row per place: the request number, the placeholder and where it was (`request header authorization`, `response body > access_token`, `request query`). Original values are never shown.
+
+### Sanitized HAR
+
+The cleaned file, with Copy and Download. The download is named after your file with `.sanitized.har`.
+
+### Requests
+
+Every request with method, status, sanitized URL and time. Failed means status 0 (blocked, cancelled or a network error) or 400 and above. Copy failures as Markdown gives a table ready for a ticket.
+
+## Method
+
+### 1. Reading
+
+The text is parsed as JSON and must hold `log.entries` as a list. A leading byte order mark is ignored.
+
+### 2. By name
+
+Names are compared after lowercasing and removing everything but letters and digits. A name is a credential when it contains authorization, token, secret, password, passphrase, apikey, session, csrf, xsrf, signature, credential, privatekey, codeverifier, samlresponse, samlrequest, otp or cookie, or is exactly key, sig, sid, auth, pass, pwd, pin, ssn, cvv or cvc. `code` counts only in a URL query or form, where it is an OAuth authorization code. Names that end in type, expires, expiry, endpoint, url, uri, hint, length or format describe a credential rather than hold one and are kept.
+
+This applies to headers, query parameters, form fields, `postData.params` and keys at any depth of a JSON body.
+
+### 3. Headers and cookies
+
+Authorization and Proxy-Authorization keep their scheme. Cookie and Set-Cookie keep each name and attribute and lose the value. The `cookies` lists of requests and responses are treated the same way. Location, Referer, Origin and Content-Location are cleaned as URLs.
+
+### 4. URLs
+
+User and password in a URL are replaced, query parameters are cleaned by name, and the whole URL is searched for the patterns below.
+
+### 5. Patterns in any text
+
+Every remaining text value is searched for: private key blocks; AWS access key IDs; Google API keys; GitHub tokens; Stripe secret and restricted keys; Slack tokens; JSON Web Tokens; credentials after Bearer, Basic or Token; email addresses; 13 to 19 digit numbers that pass the Luhn check; and, when chosen, IPv4 addresses outside the documentation and loopback ranges.
+
+### 6. Placeholders
+
+Each distinct value gets one placeholder for the whole file: `[TOKEN_n]`, `[PASSWORD_n]`, `[COOKIE_n]`, `[CARD_n]`, a named key such as `[AWS_KEY_n]`, `email-n@redacted.invalid`, and for IP addresses a documentation address from 192.0.2.0/24. A JSON Web Token keeps its header, has its claims cleaned the same way (so an email claim is replaced), and gets `redacted-signature` as its signature. Running the tool again on its own output changes nothing.
+
+### 7. Bodies
+
+JSON bodies are parsed, cleaned and written with the indentation they had. Form bodies are cleaned field by field. Other text is searched for patterns. Base64 bodies with a text, JSON, XML, JavaScript or form type are decoded, cleaned and encoded again; other Base64 bodies are binary and are kept and counted.
+
+## Finding reference
+
+| Finding | Severity | Source | What it means | Fix |
+| --- | --- | --- | --- | --- |
+| N values replaced | pass | [W3C HAR](https://w3c.github.io/web-performance/specs/HAR/Overview.html) | Credentials and personal values were found and replaced | Read the file before sharing |
+| Nothing to replace found | info | | No credential names or known patterns matched | Read the file anyway; free text is not checked |
+| N failed requests | check | [RFC 9110 15](https://www.rfc-editor.org/rfc/rfc9110#section-15) | Status 0 or 400 and above | Copy failures as Markdown for the ticket |
+| Binary bodies not inspected | info | | Images, fonts and archives were kept as they are | Remove the entries if a binary could hold private data |
+| Not a HAR file | fail | [W3C HAR](https://w3c.github.io/web-performance/specs/HAR/Overview.html) | No `log.entries` list | Export again from the Network panel; Heal it can wrap a bare `entries` list |
+
+## Guide
+
+### Prepare a HAR file for a support ticket
+
+1. Record: open the developer tools, Network panel, tick Preserve log, reproduce the problem, then Save all as HAR (Chrome, Edge) or Export HAR (Firefox, Safari).
+2. Drop the file here. Read What was replaced, and add your own field names under More field names if something private was missed.
+3. Download the sanitized file and attach it. Paste Copy failures as Markdown into the ticket.
+4. Sign out of the session you recorded, so the original cookies stop working even if the original file leaks.
+
+### Share tokens without making them usable
+
+Keep the default JWT setting. Support can read expiry, issuer, audience and scopes, but the token has no valid signature and cannot be replayed.
+
+### Break it cases
+
+| Case | What it adds | What it shows |
+| --- | --- | --- |
+| Token in a URL | A request with `access_token` in the query | A credential replaced in the URL |
+| API key header | A request with an X-API-Key header | A credential replaced in a header |
+| Card in a body | A JSON body with a card number | A card number replaced |
+| Private key in a response | A text response holding a private key block | A private key replaced |
+| Blocked request | A request with status 0 | A failed request in the list |
+| Not a HAR file | A bare `entries` object | The error and the Heal it repair |
+
+## Use it from an agent
+
+The `har_sanitize` operation takes the HAR JSON and returns the sanitized HAR, with a warning that counts the replacements by kind. Options match the page: `cookies`, `emails`, `cards`, `ips` and `jwt`. Through the API the input goes to our server and is limited to the API's request size; use the page for files you do not want to send anywhere. See the [MCP documentation](https://docs.tamperbox.dev/mcp/).
+
+## Limits
+
+- Names, postal addresses, phone numbers and other personal details in free text are not detected.
+- Binary bodies are not inspected.
+- Changed bodies are written out again, so Content-Length headers may not match.
+- Files are limited to 50 MiB in the browser.
+
+## References
+
+- [W3C: HTTP Archive (HAR) format](https://w3c.github.io/web-performance/specs/HAR/Overview.html)
+- [RFC 7519: JSON Web Token](https://www.rfc-editor.org/rfc/rfc7519)
+- [RFC 6265: HTTP State Management Mechanism](https://www.rfc-editor.org/rfc/rfc6265)
+- [OWASP: Logging Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html)
