@@ -1,7 +1,7 @@
 ---
 title: Hidden Character Checker
 description: How the Hidden Character Checker finds zero width, direction, look-alike, control and decomposed characters in text, counts its length four ways, and cleans it, with every rule behind each finding and how to confirm a result outside Tamperbox.
-updated: 2026-10-24
+updated: 2026-10-26
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and guide for the Tamperbox Hidden Character Checker, which reads text one Unicode code point at a time in the browser, reports invisible, direction, control, filler, tag, look-alike and decomposed characters with code point and position, counts characters, UTF-16 units, UTF-8 bytes and visible characters, shows the NFC, NFD, NFKC and NFKD forms, and cleans the text with the repairs the reader ticks. Also reachable as the text_inspect operation.
 prerequisites:
@@ -88,6 +88,11 @@ The text is split into code points, so an emoji is one item and a lone surrogate
 | Filler | U+115F, U+1160, U+3164, U+FFA0, U+2800, U+034F | Blank to the eye, not whitespace, so "not empty" checks accept it |
 | Tag | U+E0000 to U+E007F | Invisible and able to carry hidden text |
 | Control | C0 and C1 controls except tab, line feed and carriage return | NUL ends a string in C; others are acted on by terminals |
+
+### Representation and equality
+
+| Finding | Severity | Source | What it means | Fix |
+| --- | --- | --- | --- | --- |
 | Look-alike space | U+00A0, U+1680, U+2000 to U+200A, U+202F, U+205F, U+3000, U+2028, U+2029 | Treated differently by trim(), split and equality |
 | Lone surrogate | U+D800 to U+DFFF alone | Not valid Unicode; encoders replace it or fail |
 | Replacement | U+FFFD | Data was already lost before it reached the tool |
@@ -116,7 +121,23 @@ Each repair is optional. Invisible characters removes zero width, direction, fil
 - A character your font cannot draw is not the same as a hidden character: a box or question mark is a missing glyph, which this tool does not detect.
 - Input is limited to 200,000 characters and files to 512 KiB.
 
+## Standards and conformance
+
+### Unicode operations and implementation limits
+
+The normalization views use the browser's NFC, NFD, NFKC and NFKD operations, corresponding to [Unicode normalization forms](https://www.unicode.org/reports/tr15/#Norm_Forms). Normalization is not general removal of suspicious characters. Compatibility normalization can change distinctions that matter to an application's identifiers or display policy; select it deliberately rather than treating every changed value as safer.
+
+Visible-character counts use `Intl.Segmenter` when available, following the browser's Unicode segmentation implementation. If that API is unavailable, the implementation falls back to code-point counts. The displayed number therefore needs that qualification when checking complex emoji or combining sequences; it is not a universal measurement of glyphs rendered by a font. See [Unicode grapheme-cluster boundaries](https://www.unicode.org/reports/tr29/#Grapheme_Cluster_Boundaries).
+
+### Security findings are scoped heuristics
+
+The tool's look-alike table and script checks are deliberately limited. They do not implement the complete [UTS #39 confusable-detection profile](https://www.unicode.org/reports/tr39/#Confusable_Detection), authenticate a sender or establish that a mixed-script string is malicious. Finding a directional character identifies input worth reviewing in context; legitimate languages and formatting also use such characters.
+
+The severity labels are Tamperbox's inspection priorities. They are not normative Unicode classifications of harmful text. Before applying a repair, compare the original and cleaned values against the receiving application's requirements, especially where joining controls, accents or script distinctions are meaningful. Keep both values when investigating an equality or rendering defect.
+
 ## Finding reference
+
+### Invisible and directional characters
 
 | Finding | Severity | Source | What it means | Fix |
 | --- | --- | --- | --- | --- |
@@ -127,6 +148,11 @@ Each repair is optional. Invisible characters removes zero width, direction, fil
 | Blank filler | fail | [UTS #39](https://www.unicode.org/reports/tr39/) | Looks empty but passes a not-empty check | Remove it and treat the value as empty |
 | Tag character | fail | [UTS #39](https://www.unicode.org/reports/tr39/) | Can carry hidden text | Remove it |
 | Control character | check (NUL: fail) | [RFC 20](https://www.rfc-editor.org/rfc/rfc20) | Acted on by terminals and parsers | Remove it |
+
+### Representation and equality
+
+| Finding | Severity | Source | What it means | Fix |
+| --- | --- | --- | --- | --- |
 | Look-alike space | check | [UAX #44](https://www.unicode.org/reports/tr44/) | trim(), split and equality treat it differently | Replace with a normal space |
 | Look-alike letter in a Latin word | fail | [UTS #39](https://www.unicode.org/reports/tr39/) | Reads as a Latin letter and compares unequal | Replace with the Latin letter |
 | Word made only of look-alikes | info | [UTS #39](https://www.unicode.org/reports/tr39/) | Normal in Cyrillic or Greek text; suspicious in a Latin context | Check where the text came from |
@@ -177,6 +203,7 @@ The same check is the `text_inspect` operation of the Tamperbox API and MCP serv
 - Python: `[hex(ord(c)) for c in text]` lists every code point; `len(text)` and `len(text.encode())` give characters and bytes; `unicodedata.normalize("NFC", text) == text` tests the form.
 - JavaScript: `[...text].map(c => c.codePointAt(0).toString(16))` lists code points; `text.length` is the UTF-16 count; `new TextEncoder().encode(text).length` is the byte count; `text.normalize("NFC") === text` tests the form.
 - A hex dump of the file (`xxd file | head`) shows a byte order mark as `ef bb bf` at the start.
+
 
 ## References
 

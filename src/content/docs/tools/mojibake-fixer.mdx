@@ -1,13 +1,13 @@
 ---
 title: Mojibake Fixer
 description: How the Mojibake Fixer finds UTF-8 text that was read as Windows-1252 or Latin-1, repairs it once or several times over, leaves undamaged text alone, and reports what was lost for good.
-updated: 2026-10-25
+updated: 2026-10-26
 productVersion: "tamperbox.dev, October 2026"
-agentSummary: Method and guide for the Tamperbox Mojibake Fixer, which finds runs of characters that Windows-1252 or Latin-1 can produce, turns them back into bytes, keeps the result only when the bytes are valid UTF-8, repeats up to three times for text damaged more than once, lists every repaired run, and reports replacement characters as lost data, in the browser. Also reachable as the mojibake_fix operation.
+agentSummary: Method and guide for the Tamperbox Mojibake Fixer, which finds runs of characters that Windows-1252 or Latin-1 can produce, turns them back into bytes, keeps the result only when the bytes are valid UTF-8, repeats up to three times for text damaged more than once, lists up to 50 repaired-run samples, and reports replacement characters as lost data, in the browser. Also reachable as the mojibake_fix operation.
 prerequisites:
   - Garbled text, such as an export, a CSV or a web page showing sequences like Ã© or â€™
 outputs:
-  - A verdict, the repaired text with Copy and Use as input, and every repaired run with what it became
+  - A verdict, the repaired text with Copy and Use as input, and up to 50 repaired-run samples with what they became
 limitations:
   - Only UTF-8 read as Windows-1252 or Latin-1 is repaired; U+FFFD marks data already lost; nothing is sent anywhere
 ---
@@ -24,6 +24,20 @@ Was this text read in the wrong encoding, how many times, what did it say, and i
 
 In UTF-8, é is the two bytes C3 A9. A program that reads those bytes as Windows-1252 shows each byte as one character: Ã and ©. A curly apostrophe is three bytes, E2 80 99, and becomes â€™. If the garbled text is saved as UTF-8 and read wrongly again, it is damaged a second time: é becomes ÃƒÂ©.
 
+## Inputs and output contract
+
+### Field and file limits
+
+The page accepts text, not a declaration of its original encoding. Its field limit is 200,000 JavaScript string units. The file picker separately refuses files larger than 512 KiB. A file can meet the byte-size limit and still exceed the text limit after decoding, so the limits are not interchangeable. If the page reports that text is too long, select a representative affected record and preserve the complete original elsewhere.
+
+The file reader supplies decoded text. If decoding the source file has already introduced replacement characters, this page cannot recover the discarded bytes. For a file whose original bytes are still available, compare a correctly configured import of those bytes before treating the pasted-text repair as the only possible recovery. This distinction matters when a downloaded CSV is correct but a spreadsheet's import settings are wrong.
+
+### Reading the repair list
+
+The count of repaired runs is not a count of damaged files, lines or individual letters. One contiguous run can hold several characters, and a run repaired in two passes contributes a repair on each pass. The displayed samples stop at the first 50 transformations; the total count can therefore exceed the number of rows. The repaired output still includes transformations beyond the sample list.
+
+Copy takes the repaired output. Use as input changes the working input to that output and checks it again. Keep an independent copy of the original when comparing a repair or diagnosing an import pipeline. The before-and-after character counts are descriptive: a shorter result is common when several misread characters collapse into one, but shortening is not the acceptance rule. Candidate bytes must decode according to the method above.
+
 ## Method
 
 1. Find each run of characters that Windows-1252 or Latin-1 can produce.
@@ -31,7 +45,7 @@ In UTF-8, é is the two bytes C3 A9. A program that reads those bytes as Windows
 3. Decode the bytes as strict UTF-8. Keep the result only if it decodes without error and does not leave stray control characters that a further pass cannot decode.
 4. Repeat on the result, up to three passes, for text damaged more than once.
 
-Runs that do not decode stay as they were, so ordinary accented text and a genuine Ã in Portuguese are left alone. Every repaired run is listed with the pass that repaired it.
+Runs that do not decode stay as they were, so ordinary accented text and a genuine Ã in Portuguese are left alone. Up to 50 repaired-run samples are listed with their pass; the total includes all transformed runs.
 
 ## Lost data
 
@@ -44,6 +58,20 @@ Garble once and Garble twice damage your own text the way a wrong encoding would
 ## Prevent it
 
 Declare UTF-8 at every step: the export or file, the database connection's character set, the HTTP Content-Type header and the HTML meta charset. Import CSV files into a spreadsheet and choose UTF-8 instead of opening them by double-clicking.
+
+## Standards and conformance
+
+### Valid decoding is evidence, not provenance
+
+[RFC 3629 section 3](https://www.rfc-editor.org/rfc/rfc3629#section-3) defines UTF-8 byte sequences. The implementation uses the browser's fatal UTF-8 decoder: malformed candidate byte sequences are rejected instead of being accepted with replacement characters. The [Encoding Standard's decoder API](https://encoding.spec.whatwg.org/#interface-textdecoder) supplies that mechanism. This makes the candidate transformation reproducible; it does not prove which program damaged the input or whether the author intended those characters literally.
+
+The reverse byte map covers Latin-1 code points and Windows-1252 punctuation. This is a targeted repair strategy rather than general encoding detection. The tool does not try every legacy encoding, consult a language model, infer missing letters or read a file's original byte history. A deliberate example containing the literal characters `Ã©` is indistinguishable from the same characters produced accidentally. Review the proposed change against the document's purpose before replacing the original.
+
+### Normalization is a separate operation
+
+[Unicode normalization forms](https://www.unicode.org/reports/tr15/#Norm_Forms) address equivalent or compatible character sequences; they do not reverse an incorrect byte decoding. Mojibake repair therefore does not apply NFC or NFKC as an additional cleanup step. A repaired word may still contain combining characters, unusual spaces or an intentional script-specific joiner.
+
+Use [Hidden Character Checker](https://tamperbox.dev/hidden-characters) when the text reads correctly but equality, searching or length still surprises you. Keep the operations separate in a regression test: first assert the intended repaired text, then apply a normalization policy only if the consuming application's contract requires it. A visually pleasing result alone does not prove that an identifier or signed document remains equivalent.
 
 ## Finding reference
 
@@ -70,9 +98,54 @@ When text arrives garbled from a database, check the connection character set (f
 
 Use Garble once on your own text to see what a wrong reading produces, then send real accented text through your import or export and compare it with what came out.
 
+## Worked example
+
+### One and two rounds of damage
+
+These cases were checked against the implemented repair function. They are small enough to compare without relying on visual similarity alone.
+
+| Input | Proposed output | Passes | Interpretation |
+| --- | --- | ---: | --- |
+| `Café` | `Café` | 0 | No supported transformation applies |
+| `CafÃ©` | `Café` | 1 | One candidate decoding repairs the accented letter |
+| `CafÃƒÂ©` | `Café` | 2 | The first decoding leaves another repairable sequence |
+| `Caf�` | `Caf�` | 0 | Replacement character remains; no missing letter is inferred |
+| `Ã` | `Ã` | 0 | This lone character does not form a valid candidate UTF-8 sequence |
+
+Start with the one-pass example and compare the recorded change from `Ã©` to `é`. Then use Garble twice on a clean word and inspect both pass numbers. This demonstrates the algorithm's iteration. It does not establish that a real external file passed through exactly the same sequence of applications; several workflows can produce the same text.
+
+### A mixed document
+
+A document can contain clean paragraphs, a garbled imported name and replacement characters in another field. The tool examines eligible runs rather than declaring a single encoding for the entire document. Clean ASCII separators divide those runs. Characters outside the reverse map also delimit what can be attempted.
+
+Check the repaired fields independently. If a customer name improves while another name retains a replacement character, the document is only partly recoverable from this text. Do not describe the entire export as restored. Use record identifiers to compare with a trusted source and re-export unresolved records. Retain the unmodified input for explaining why a record needs another source; an attractive repaired preview is not evidence for the missing characters.
+
 ## Use it from an agent
 
 The `mojibake_fix` operation takes the text and returns the repaired text, with a warning when it was repaired or when data was lost. See the [MCP documentation](https://docs.tamperbox.dev/mcp/).
+
+
+## Independent verification
+
+### Test the complete import path
+
+Create a small fixture with ASCII, accented Latin, curly quotes, a currency symbol and characters outside Western European encodings. Record the intended Unicode text before exporting it. Pass that fixture through the same download, mail attachment, spreadsheet import, database write and export steps used by the failing workflow. At each boundary, compare the decoded text and record the declared encoding.
+
+Find the first boundary where the text changes. Repairing the final output alone leaves that boundary broken and can cause the next export to need another repair. After correcting the import or transport setting, repeat the fixture without running it through this tool. Success means the ordinary workflow preserves the intended text; it does not mean the fixer can hide the remaining defect.
+
+### Compare values, not just screenshots
+
+Two fonts can make different characters look similar, while a missing font can make correct text look damaged. Compare the actual code points or an escaped representation as well as the rendered word. Record the original input, proposed output, pass count and affected field in a test fixture. Assert exact output for the known damaged case and unchanged output for a nearby clean case.
+
+For a document that intentionally discusses encoding errors, include literal mojibake examples as negative controls. The algorithm cannot know that an example is quoted for teaching rather than damaged content. That is a useful limit to test: automatic repair should not be placed unconditionally in a production write path simply because the common café example succeeds.
+
+## Limits and interpretation
+
+### Incomplete recovery and repeat runs
+
+A normal check makes at most three successful passes. Text damaged more deeply can remain garbled after that bound. Rechecking an output may produce additional changes, but inspect them rather than treating repeated execution as a proof of convergence to the intended text. The stopping condition is that no supported run changes, not that the author's original text has been recovered.
+
+U+FFFD is reported wherever it occurs in the supplied input. In an ordinary damaged export it often signals lost bytes, but a document can also contain that character deliberately, including a discussion like this guide. The tool cannot distinguish those origins. Its finding identifies the character and explains the recovery limit; it does not independently reconstruct or authenticate the upstream event.
 
 ## References
 

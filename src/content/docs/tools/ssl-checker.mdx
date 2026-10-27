@@ -1,7 +1,7 @@
 ---
 title: SSL Certificate Checker
 description: What the certificate checker connects to, every rule it applies to a chain, what each finding means for the people behind the host, and how to fix and verify each one.
-updated: 2026-10-21
+updated: 2026-10-26
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox SSL Certificate Checker, which probes one TLS connection from the Tamperbox server or reads a pasted PEM chain in the browser and reports trust, names, expiry, chain order, keys and the negotiated protocol.
 prerequisites:
@@ -108,7 +108,7 @@ Every Break it and Heal it change, newest first, with what it replaced. Revert u
 
 ### Take it further
 
-A link that carries a value from this result into another security tool: the host and port to the DANE checker, for a live connection. The other security checks on the same host are in Check the rest, and the result's Key exchange row links the post-quantum checker for port 443. The link opens the other tool with the value already in its box; nothing is put in a URL.
+A link that carries a value from this result into another security tool: the host and port to the DANE checker, for a live connection. Check the rest opens other security tools without carrying input. The result's Key exchange row passes the checked host to the post-quantum checker for port 443. The link opens the other tool with the value already in its box; nothing is put in a URL.
 
 ## Method
 

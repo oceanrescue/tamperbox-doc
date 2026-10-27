@@ -53,3 +53,17 @@ Return warnings and provenance when they affect the conclusion. A DNS failure is
 ## Compose carefully
 
 Feed one operation's artifact into another only when the output and input schemas match. Await every request. Outstanding requests are cancelled when the execution ends.
+
+## Browse website tools by task
+
+The bundled `spec['x-tamperbox-directory']` lists all 67 website tools in 11 categories, including six browser-only tools and the website-only Locator Checker. Use MCP `search` to inspect this metadata without making a network request:
+
+```js
+const directory = spec['x-tamperbox-directory'];
+return {
+  categories: directory.categories,
+  tools: directory.tools.filter(tool => tool.category === 'localization'),
+};
+```
+
+Each tool includes its category, related tool IDs, website and documentation URLs, execution mode, and `operationIds`. An empty `operationIds` list means the tool has no executable API operation; open its website page instead. Ordinary related links carry no input. Result actions transfer only compatible derived values.

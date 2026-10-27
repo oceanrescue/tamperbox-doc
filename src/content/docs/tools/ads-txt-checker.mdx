@@ -1,7 +1,7 @@
 ---
 title: Ads.txt & App-Ads.txt Checker
 description: How the ads.txt checker fetches and reads ads.txt and app-ads.txt, the rules it applies to every field, how it cross-checks sellers against each ad system's sellers.json, and how to fix each finding.
-updated: 2026-10-24
+updated: 2026-10-26
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox ads.txt and app-ads.txt checker, which fetches the file from the root of a host on the Tamperbox server, or reads a pasted file in the browser, validates each record against the IAB Tech Lab ads.txt 1.1 layout and cross-checks up to 12 ad systems' sellers.json files.
 prerequisites:
@@ -14,7 +14,7 @@ limitations:
 
 The tool page is [tamperbox.dev/ads-txt-checker](https://tamperbox.dev/ads-txt-checker). It checks `tamperbox.dev` live when opened, says how many lines buyers will skip and how many sellers sellers.json confirms, and lists every record. This page is the long version: where the file is fetched from, every rule, the sellers.json cross-check, what each finding means for the site's ad revenue, and how to fix it.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> a pasted file is read in your browser. Its sellers are looked up only when you press <strong>Look up sellers</strong>, which sends the ad system domains and seller IDs (not the file) to the Tamperbox server. A host name is sent to the server, which fetches the file and the ad systems' sellers.json files without cookies. Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history. Sample hosts on the reserved <code>.example</code> zone are answered in the browser from a fixture.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> a pasted file is read in your browser. Its sellers are looked up only when you press <strong>Look up sellers</strong>, which sends the ad system domains and seller IDs (not the file) to the Tamperbox server. A host name is sent to the server, which fetches the file and the ad systems' sellers.json files without cookies. Explicit result-action transfers use temporary browser storage; diagnostic results are not a monitoring history. Sample hosts on the reserved <code>.example</code> zone are answered in the browser from a fixture.</div>
 
 ## What the tool answers
 
@@ -75,7 +75,7 @@ Only links with an available result value appear.
 
 ### Related checks and input transfer
 
-Check the rest carries the current address to a sibling tool. Take it further carries the specific value listed above. Pasted file contents are not transferred through these links. Transfers temporarily use browser `sessionStorage` with a one-use random token in the URL fragment; the input itself is not in the URL. The destination accepts a transfer for less than one minute and removes the token. Manual destination tools wait for their run button or Enter.
+Check the rest opens related tools without carrying input. Take it further carries the specific value listed above. Pasted file contents are not transferred through these links. Transfers temporarily use browser `sessionStorage` with a one-use random token in the URL fragment; the input itself is not in the URL. The destination accepts a transfer for less than one minute and removes the token. Manual destination tools wait for their run button or Enter.
 
 Each destination collects new evidence. A follow-up link does not confirm the original verdict or repair the remote site.
 
@@ -228,7 +228,7 @@ See [Connect an MCP client](/mcp/connect/), [Code mode](/mcp/code-mode/) and [Se
 
 - One fetch of the file (2 MiB) and at most 12 sellers.json files.
 - SUBDOMAIN and INVENTORYPARTNERDOMAIN declarations are listed, not followed.
-- Live checks are rate limited. Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history.
+- Live checks are rate limited. Explicit result-action transfers use temporary browser storage; diagnostic results are not a monitoring history.
 
 ## References
 

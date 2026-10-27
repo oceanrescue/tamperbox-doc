@@ -1,7 +1,7 @@
 ---
 title: Exact-Length String Generator
 description: How the Exact-Length String Generator builds strings of an exact size in characters, UTF-16 units or UTF-8 bytes, what the limit test set contains, how counterstrings work, and how to test a length limit with them.
-updated: 2026-10-25
+updated: 2026-10-26
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method and guide for the Tamperbox Exact-Length String Generator, which builds a string of exactly N characters, UTF-16 units or UTF-8 bytes from a chosen fill (ASCII, digits, accented Latin, CJK, emoji, mixed widths or combining accents), a limit test set around N, or a counterstring, in the browser. Also reachable as the string_generate operation.
 prerequisites:
@@ -24,11 +24,25 @@ What exactly should I paste to test a length limit, and is the limit counted in 
 
 | Count | Who counts this way | Emoji 😀 |
 |---|---|---|
-| Characters (code points) | Python `len()`, most database CHAR limits | 1 |
+| Characters (code points) | Code-point-aware application limits; database rules vary | 1 |
 | UTF-16 units | JavaScript, Java and C# length, HTML `maxlength` | 2 |
 | UTF-8 bytes | Byte limits on columns, file names, HTTP headers | 4 |
 
-To find out what a field counts, generate the limit in each unit with the emoji fill: the one the field accepts exactly is the one it uses.
+To investigate what a field counts, generate neighboring values in each unit with emoji fill and compare acceptance and exact storage against the documented limit.
+
+## Inputs and reading the output
+
+### Length, fill and mode
+
+One-string mode accepts a nonnegative whole-number length. A limit set requires a positive limit because it constructs neighboring cases around a maximum. Fill chooses the actual characters used; it does not change what the selected unit counts. Counterstring mode uses ASCII markers and digits, so its counts agree regardless of an earlier unit choice.
+
+When a selected fill cannot exactly use the remaining budget, the generator inserts ASCII `a` characters. For example, an odd UTF-16 target with emoji cannot be met using only complete two-unit emoji. The final ASCII character is intentional padding rather than an accidentally truncated surrogate. Inspect both the target unit and the other displayed counts before pasting the result into a test case.
+
+### Preview, clipboard and downloaded data
+
+The preview is bounded to avoid placing an extremely long value into the visible page. Copy and Download retain the full generated string; the ellipsis in a shortened preview is not appended to the exported value. The one-string export adds no terminal line break. A text editor or later save operation can still add one, so measure the artifact actually supplied to the receiving system.
+
+A boundary-set export is a collection of values, not a single long test value. Keep the selected export format with the fixture. Parse a JSON array as JSON; copying its surrounding brackets into a form would test the serialized collection instead of the individual string. Preserve case identifiers or labels separately when your test runner needs to distinguish failures at N from failures at N plus one.
 
 ## Method
 
@@ -42,7 +56,7 @@ For a limit N: the empty value, one character, N - 1, N, N + 1, N - 2 characters
 
 ### Counterstring
 
-A counterstring such as `*3*5*7*9*12*` writes each asterisk's position before it. Built from the end backwards, it is always exactly N characters. Paste it into a field, read the last number left, and you know how many characters the field kept. It is ASCII, so all counts agree.
+A counterstring such as `*3*5*7*9*12*` writes each asterisk's position before it. Built from the end backwards, it is always exactly N characters. Paste it into a field, read the last complete marker and then measure the remaining value to locate the cut. It is ASCII, so all counts agree.
 
 ## Break it presets
 
@@ -55,6 +69,20 @@ A counterstring such as `*3*5*7*9*12*` writes each asterisk's position before it
 ## Limits
 
 A string is limited to 1,000,000 units and a limit set to 500,000 in the browser. Only the first 20,000 UTF-16 units are displayed; Copy and Download take the whole string with no line break added.
+
+## Standards and conformance
+
+### Choose the counted unit explicitly
+
+[RFC 3629 section 3](https://www.rfc-editor.org/rfc/rfc3629#section-3) describes UTF-8 encoding lengths, and [RFC 2781 section 2](https://www.rfc-editor.org/rfc/rfc2781#section-2) describes UTF-16 and surrogate pairs. The generator implements three numerical targets: Unicode code points, UTF-16 units and UTF-8 bytes. A request for five units is incomplete until the unit is known. Database column behavior depends on its engine, type and configuration; a generic label such as “characters” is not enough to infer that behavior.
+
+The [HTML maxlength definition](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#attr-fe-maxlength) is relevant when testing browser text controls. However, a successful browser paste is only one observation. Client script, server validation and database storage can enforce different rules. The generator reports its own output lengths and never inspects or certifies the receiving field.
+
+### Visible characters are supplementary evidence
+
+[Unicode text segmentation](https://www.unicode.org/reports/tr29/#Grapheme_Cluster_Boundaries) describes grapheme clusters. A user-perceived character can contain several code points. The generator's visible-character count uses the browser's grapheme segmenter when available; its fallback is the code-point count. That display is not a fourth generation unit and is not a promise about how every font renders the text.
+
+The combining-accent fill intentionally separates the base letter and accent. Normalizing the value elsewhere can change its code-point and byte counts. Record whether your target normalizes before checking length, after checking length or not at all. Test that documented order explicitly instead of assuming every representation of the same-looking word consumes the same capacity.
 
 ## Finding reference
 
@@ -73,7 +101,7 @@ A string is limited to 1,000,000 units and a limit set to 500,000 in the browser
 ### Find what a field counts
 
 1. Set the documented limit and generate one string with the emoji fill in each unit.
-2. Submit each. The one accepted exactly at the limit names the unit the field counts.
+2. Submit each. Compare acceptance, rejection and read-back values; one accepted input alone does not establish the counting unit.
 
 ### Test a limit end to end
 
@@ -81,11 +109,52 @@ Make the limit set, submit every value, and check the stored value as well as th
 
 ### Find where a value is cut
 
-Generate a long counterstring, submit it, and read the last number that survived in the stored value, a log or an export. That number is how many characters the slowest layer kept.
+Generate a long counterstring, submit it, and read the last number that survived in the stored value, a log or an export. The final complete marker gives a known position; measure any trailing partial marker to find the exact retained length.
+
+## Worked example
+
+### Five units with emoji fill
+
+The following outputs were generated with the implemented function, using a target of five and the emoji fill. They demonstrate why a field that accepts one result can reject another even when the requested number is identical.
+
+| Selected unit | Output | Code points | UTF-16 units | UTF-8 bytes |
+| --- | --- | ---: | ---: | ---: |
+| Characters | `😀😀😀😀😀` | 5 | 10 | 20 |
+| UTF-16 units | `😀😀a` | 3 | 5 | 9 |
+| UTF-8 bytes | `😀a` | 2 | 3 | 5 |
+
+Use the complete exported value for each trial. Record what the browser permits, what the server accepts and what can be read back from storage. A single accepted value does not uniquely identify the server's unit: its limit might be larger than expected or another rule might short-circuit validation. Try neighboring values and compare the actual stored result before drawing that conclusion.
+
+### A maximum of one
+
+At a limit of one, some named cases have identical values and some larger-limit cases do not exist. The implemented set contains empty, one, maximum, maximum plus one, only spaces and double the limit. There is no maximum-minus-one row distinct from the empty case, and no padded row requiring two edge spaces around an interior string.
+
+This is expected behavior, not missing coverage caused by an export error. Keep the named cases if their purpose differs in your test harness, or deduplicate exact values while preserving their intended assertions. An empty value may violate a required-field rule independently of the maximum length. A single space may be accepted by length validation but rejected by a separate nonblank rule. Diagnose the rule that actually produced the rejection.
 
 ## Use it from an agent
 
 The `string_generate` operation takes the length as its input text and `unit`, `fill` and `mode` (`one`, `set` or `counter`) options. Through the API, strings are limited to 1,000,000 units, limit sets to 100,000, and output to the API's response size limit. See the [MCP documentation](https://docs.tamperbox.dev/mcp/).
+
+
+## Verification workflow
+
+### Write the expected behavior first
+
+Record the field's maximum, unit, minimum, allowed characters, whitespace policy and normalization policy. Mark which of those are documented and which are assumptions being tested. Then choose fills that isolate one question. ASCII is useful for an off-by-one check because its code-point, UTF-16 and UTF-8 counts agree. Emoji separates those counts, while combining accents explores normalization and visible-length differences.
+
+The generated case reasons assume a plain maximum-length contract. Your application may have additional constraints, such as digits only or a fixed identifier alphabet. Rejection of emoji in that field does not prove its maximum length is wrong. Repeat with a valid fill and use a different field when testing Unicode support. Keep unrelated validation errors separate in the report.
+
+### Follow the value through storage
+
+For each boundary case, capture the submitted value, response, read-back value and export value. Compare exact strings, not only response status. A success response followed by a shorter stored value is materially different from a clear rejection. A browser that prevents extra typing may behave differently when an integration sends the same payload directly.
+
+If the application intentionally trims whitespace, test before-and-after lengths and confirm that the user sees the policy. Do not call every transformation corruption: compare it with the documented behavior. Conversely, a hidden trim that changes an identifier or password is not explained merely by a green length-validation result. The generator supplies diagnostic data; the test author supplies the expected contract.
+
+### Interpret counterstrings carefully
+
+The numbers identify marker positions in the complete generated ASCII string. After truncation, the final complete marker gives a known position. If the cut occurs inside the next number, that last complete marker is a lower bound rather than the exact cut length. Measure the surviving string directly to determine the precise boundary.
+
+A counterstring can reveal that truncation occurred, but cannot identify the responsible component by itself. Compare captures at each boundary: form value, outgoing request, server input, stored row and exported field. The first differing value narrows the investigation. Escaping, line-ending conversion or inserted prefixes can also change positions, so preserve the exact artifact and account for those transformations before attributing the result to a length limit.
 
 ## References
 

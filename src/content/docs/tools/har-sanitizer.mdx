@@ -1,7 +1,7 @@
 ---
 title: HAR File Sanitizer
 description: How the HAR File Sanitizer replaces credentials, cookies, keys and personal values in a HAR file with stable placeholders in the browser, what it detects and what it does not, and how to prepare a HAR file for a support ticket.
-updated: 2026-10-25
+updated: 2026-10-26
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and guide for the Tamperbox HAR File Sanitizer, which walks a HAR file in the browser, replaces Authorization credentials, cookie values, credential-named headers, query parameters, form and JSON fields, JSON Web Token signatures and personal claims, private keys, AWS, Google, GitHub, Stripe and Slack keys, bearer tokens, email addresses, Luhn-valid card numbers and optionally IPv4 addresses with stable numbered placeholders, decodes Base64 text bodies, reports every replacement by request and place, and lists the requests with failures exportable as Markdown. Also reachable as the har_sanitize operation.
 prerequisites:
@@ -88,12 +88,26 @@ Each distinct value gets one placeholder for the whole file: `[TOKEN_n]`, `[PASS
 
 JSON bodies are parsed, cleaned and written with the indentation they had. URL-encoded and multipart form bodies are cleaned field by field. Sensitive JSON names also apply to values inside arrays and nested objects. Malformed JSON or multipart bodies are replaced as a whole, rather than retained without inspection. Data deeper than 100 levels is refused. Other text is searched for patterns. Base64 bodies with a text, JSON, XML, JavaScript or form type are decoded, cleaned and encoded again; other Base64 bodies are binary and are kept and counted.
 
+## Standards and conformance
+
+### Format recognition has a limited scope
+
+The commonly cited [HAR format document](https://w3c.github.io/web-performance/specs/HAR/Overview.html#sec-log) is an abandoned historical draft, not a current W3C Recommendation. It remains useful for interpreting the familiar `log`, `entries`, request, response and content objects emitted by browser tools. This sanitizer checks the structure it needs to traverse safely; it is not a comprehensive HAR conformance validator.
+
+The implemented parser checks for a log object, an entries array, object entries and suitable shapes for supplied request, response and header/cookie/query lists. It rejects data nested beyond 100 levels. Successful parsing does not establish that timing totals, encoded body sizes, HTTP versions or browser-specific metadata are internally consistent. Preserve the original capture when investigating capture-tool defects.
+
+### Redaction and protocol meaning
+
+HTTP status interpretation follows the status-code families in [RFC 9110 section 15](https://www.rfc-editor.org/rfc/rfc9110#section-15). The additional status-zero bucket is a capture convention used for incomplete or failed requests, not an HTTP response status assigned by that RFC. A failure row identifies a diagnostic candidate; it does not determine whether the cause was cancellation, a browser policy, the network or the application.
+
+[JWT claims](https://www.rfc-editor.org/rfc/rfc7519#section-4) can carry sensitive application data beyond recognizable email addresses or credential-like field names. Removing a signature changes the token, but retained claims still require review. Prefer whole-token replacement when claims are unnecessary. The sanitizer does not contact an issuer, revoke credentials or test whether a server correctly rejects modified tokens.
+
 ## Finding reference
 
 | Finding | Severity | Source | What it means | Fix |
 | --- | --- | --- | --- | --- |
 | N values replaced | pass | [W3C HAR](https://w3c.github.io/web-performance/specs/HAR/Overview.html) | Credentials and personal values were found and replaced | Read the file before sharing |
-| Nothing to replace found | info | | No credential names or known patterns matched | Read the file anyway; free text is not checked |
+| Nothing to replace found | info | | No credential names or known patterns matched | Read the file anyway; only recognized patterns in free text are detected |
 | N failed requests | check | [RFC 9110 15](https://www.rfc-editor.org/rfc/rfc9110#section-15) | Status 0 or 400 and above | Copy failures as Markdown for the ticket |
 | Binary bodies not inspected | info | | Images, fonts and archives were kept as they are | Remove the entries if a binary could hold private data |
 | Not a HAR file | fail | [W3C HAR](https://w3c.github.io/web-performance/specs/HAR/Overview.html) | No `log.entries` list | Export again from the Network panel; Heal it can wrap a bare `entries` list |
@@ -109,7 +123,7 @@ JSON bodies are parsed, cleaned and written with the indentation they had. URL-e
 
 ### Share tokens without making them usable
 
-Keep the default JWT setting. Support can read expiry, issuer, audience and scopes, but the token has no valid signature and cannot be replayed.
+Keep the default JWT setting. Support can read retained claims, while the original signature is replaced. Review the claims too; this does not verify server rejection or revoke the original credential.
 
 ### Break it cases
 
@@ -122,6 +136,20 @@ Keep the default JWT setting. Support can read expiry, issuer, audience and scop
 | Blocked request | A request with status 0 | A failed request in the list |
 | Not a HAR file | A bare `entries` object | The error and the Heal it repair |
 
+## Worked example
+
+### Review the three-request opening capture
+
+The reserved-domain example contains sign-in, order retrieval and checkout. Follow the same email or credential across its occurrences: stable placeholders within a run retain useful relationships while removing the original recognized value. A placeholder count and an occurrence count answer different questions. One credential can appear in several requests and therefore produce several report locations.
+
+Inspect the failed checkout separately from the redaction list. Its failure status is useful to the support investigation even after the card-like value is replaced. Copying failures as Markdown should preserve request order and the sanitized URL. Then inspect the exported HAR itself: the table is a summary, not the complete artifact that another person will receive.
+
+### Account for fields the detector cannot understand
+
+Add an application-specific field name when its value must be removed regardless of its shape. An opaque customer identifier does not have to resemble an email address or standard token. Consider whether retaining it is necessary to explain the failure, and verify every occurrence in the output rather than assuming that one redacted JSON field covers a URL path or an unrelated free-text message.
+
+Names, addresses and arbitrary personal prose can remain. Binary attachments can also contain information that the text matcher never reads. When a request is irrelevant to the investigation, omitting that request can be more appropriate than expecting generic redaction to interpret its contents. The tool's report is evidence of performed substitutions, not a certificate that the artifact contains no private data.
+
 ## Use it from an agent
 
 The `har_sanitize` operation takes the HAR JSON and returns the sanitized HAR, with a warning that counts the replacements by kind. Options match the page: `cookies`, `emails`, `cards`, `ips` and `jwt`. Through the API the input goes to our server and is limited to the API's request size; use the page for files you do not want to send anywhere. See the [MCP documentation](https://docs.tamperbox.dev/mcp/).
@@ -132,6 +160,21 @@ The `har_sanitize` operation takes the HAR JSON and returns the sanitized HAR, w
 - Binary bodies are not inspected.
 - Changed bodies are written out again, so Content-Length headers may not match.
 - Files are limited to 50 MiB in the browser.
+
+
+## Verification before sharing
+
+### Check the exported artifact independently
+
+Open the downloaded sanitized file as data and search for known sample secrets from the original, including URL-encoded representations where relevant. Confirm that the requests needed for reproduction remain understandable and that the selected cookie and JWT options match the intended disclosure. Never use the presence of many replacements as the sole reason to stop reviewing.
+
+A second sanitizer run is not an equivalence or completeness test. Placeholder numbering is scoped to a run and placeholder-looking input is still treated as untrusted data. Compare the intended semantics of requests, not byte-for-byte equality between repeated runs. Preserve timing and error information needed by the recipient while removing details they do not need.
+
+### Keep redaction separate from replay
+
+A sanitized capture is intended for inspection. Replaced passwords, modified tokens and rewritten bodies can make replay fail, and length-related metadata may no longer describe the new body. Do not treat a replay failure as evidence that the original recorded request failed in the same way. Conversely, do not test a retained credential against a live service merely to check whether redaction was necessary.
+
+When generating mocks from a sanitized HAR, review the mock output and choose deliberate test values for removed fields. Use [HAR to Mocks](https://tamperbox.dev/har-to-mocks) for supported response fixtures, keeping its matching limits separate from this sanitizer's detection limits. A useful support artifact and an executable test fixture have different acceptance criteria.
 
 ## References
 

@@ -1,7 +1,7 @@
 ---
 title: Broken Link Checker
 description: How the broken link checker collects every link, image and script on one page, requests each from the Tamperbox server, sorts them into broken, unclear, redirected and working, and how to fix each kind.
-updated: 2026-10-24
+updated: 2026-10-26
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox Broken Link Checker, which fetches one page, collects up to 300 unique link, image, script, style sheet, frame and media addresses from its HTML, and requests each from the Tamperbox server with HEAD then GET, 8 seconds per link and 45 seconds in all.
 prerequisites:
@@ -14,7 +14,7 @@ limitations:
 
 The tool page is [tamperbox.dev/broken-link-checker](https://tamperbox.dev/broken-link-checker). It loads `tamperbox.dev` and waits for you to run a live check, says how many links are broken, and lists every address worst first. This page is the long version: what is collected, how each address is requested, how each result is sorted, and how to fix each kind.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> typing an address is read in your browser only. Nothing is sent until you press Check links or Enter. Then the Tamperbox server fetches the page and requests each address on it, without cookies, and returns the completed result. Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history. Sample addresses on the reserved <code>.example</code> zone are answered in the browser from a fixture.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> typing an address is read in your browser only. Nothing is sent until you press Check links or Enter. Then the Tamperbox server fetches the page and requests each address on it, without cookies, and returns the completed result. Explicit result-action transfers use temporary browser storage; diagnostic results are not a monitoring history. Sample addresses on the reserved <code>.example</code> zone are answered in the browser from a fixture.</div>
 
 ## What the tool answers
 
@@ -69,7 +69,7 @@ Only links with an available result value appear.
 
 ### Related checks and input transfer
 
-Check the rest carries the current address to a sibling tool. Take it further carries the specific value listed above. Pasted file contents are not transferred through these links. Transfers temporarily use browser `sessionStorage` with a one-use random token in the URL fragment; the input itself is not in the URL. The destination accepts a transfer for less than one minute and removes the token. Manual destination tools wait for their run button or Enter.
+Check the rest opens related tools without carrying input. Take it further carries the specific value listed above. Pasted file contents are not transferred through these links. Transfers temporarily use browser `sessionStorage` with a one-use random token in the URL fragment; the input itself is not in the URL. The destination accepts a transfer for less than one minute and removes the token. Manual destination tools wait for their run button or Enter.
 
 Each destination collects new evidence. A follow-up link does not confirm the original verdict or repair the remote site.
 
@@ -224,7 +224,7 @@ See [Connect an MCP client](/mcp/connect/), [Code mode](/mcp/code-mode/) and [Se
 - Only the first `srcset` candidate is checked; CSS references, form actions and posters are not collected.
 - Private addresses, IP addresses and ports other than 80 and 443 are not requested.
 - A site can refuse automated requests while it works for people.
-- Live checks are rate limited. Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history.
+- Live checks are rate limited. Explicit result-action transfers use temporary browser storage; diagnostic results are not a monitoring history.
 
 ## References
 

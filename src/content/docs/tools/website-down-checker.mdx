@@ -1,7 +1,7 @@
 ---
 title: Website Down Checker
 description: How the website down checker requests a site from the Tamperbox server, where it places a failure, what each outcome means for visitors and owners, and how to confirm a fix.
-updated: 2026-10-24
+updated: 2026-10-26
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox Website Down Checker, which makes one HTTP request from the Tamperbox server, follows up to five redirects within ten seconds, and reports up, slow, erroring or down with the stage where a request stopped.
 prerequisites:
@@ -14,7 +14,7 @@ limitations:
 
 The tool page is [tamperbox.dev/website-down-checker](https://tamperbox.dev/website-down-checker). It loads `tamperbox.dev` and waits for you to run a live check, says in one sentence whether the site answers from the probe’s location, and shows the stage where a request stopped. This page is the long version: what the request does, every rule that decides the verdict, what each outcome means, and how to fix and confirm each one.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> typing an address is read in your browser only. Nothing is sent until you press Check now or Enter. Then the Tamperbox server makes one request to the address, follows up to five redirects within ten seconds, and returns what it saw. Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history. Sample addresses on the reserved <code>.example</code> zone are answered in the browser from a fixture and never reach the network.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> typing an address is read in your browser only. Nothing is sent until you press Check now or Enter. Then the Tamperbox server makes one request to the address, follows up to five redirects within ten seconds, and returns what it saw. Explicit result-action transfers use temporary browser storage; diagnostic results are not a monitoring history. Sample addresses on the reserved <code>.example</code> zone are answered in the browser from a fixture and never reach the network.</div>
 
 ## What the tool answers
 
@@ -90,7 +90,7 @@ Only links with an available result value appear.
 
 ### Related checks and input transfer
 
-Check the rest carries the current address to a sibling tool. Take it further carries the specific value listed above. Pasted file contents are not transferred through these links. Transfers temporarily use browser `sessionStorage` with a one-use random token in the URL fragment; the input itself is not in the URL. The destination accepts a transfer for less than one minute and removes the token. Manual destination tools wait for their run button or Enter.
+Check the rest opens related tools without carrying input. Take it further carries the specific value listed above. Pasted file contents are not transferred through these links. Transfers temporarily use browser `sessionStorage` with a one-use random token in the URL fragment; the input itself is not in the URL. The destination accepts a transfer for less than one minute and removes the token. Manual destination tools wait for their run button or Enter.
 
 Each destination collects new evidence. A follow-up link does not confirm the original verdict or repair the remote site.
 
@@ -295,7 +295,7 @@ See [Connect an MCP client](/mcp/connect/), [Code mode](/mcp/code-mode/) and [Se
 - Only ports 80 and 443, only public addresses, at most five redirects and ten seconds.
 - A site can block the TamperboxBot user agent while it works for people.
 - Live checks are rate limited.
-- Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history.
+- Explicit result-action transfers use temporary browser storage; diagnostic results are not a monitoring history.
 
 ## References
 
