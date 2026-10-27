@@ -1,0 +1,205 @@
+---
+title: Locator Fragility Checker
+description: Find brittle selectors before tests fail. Understand supported inputs, evidence, limits, deliberate failure cases and independent verification.
+updated: 2026-10-26
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Find brittle selectors before tests fail using rendered website inspection or local pasted HTML; preserve its documented limitations and verify the result independently.
+prerequisites:
+  - Selector
+outputs:
+  - Findings with supporting evidence
+  - Locator report
+limitations:
+  - Heuristic risk is not a flakiness probability. Website mode runs JavaScript to capture the DOM, but Playwright matching remains a small static approximation on that snapshot.
+  - Website rendering uses our server; selector checks and pasted HTML stay local. No dedicated MCP operation.
+---
+
+The tool page is [Locator Fragility Checker](https://tamperbox.dev/locator-checker). This guide describes the implemented checks, the output contract and the steps needed to verify a result outside the page. Captured example from tamperbox.dev: the SSL Certificate Checker link matches once through a position-dependent path.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> pasted HTML and selectors are parsed in the current browser tab. Choosing Inspect website sends only the website address to our server, which loads the public page with JavaScript in a fresh browser session. Ordinary analysis does not persist input. Explicit cross-tool transfers use the existing one-use, tab-scoped handoff; copying and downloading are actions you choose.</div>
+
+## What the tool answers
+
+Inspect a rendered website or pasted HTML to discover candidates and check locator risks. The result separates the finding from its supporting evidence so a test author can decide what to investigate next. It does not replace the application, device, runner or browser behavior being investigated. Heuristic risk is not a flakiness probability. Website mode runs JavaScript to capture the DOM, but Playwright matching remains a small static approximation on that snapshot.
+
+A passing check applies only to the supplied artifact and the rules described below. It does not establish that the artifact is current, that every relevant state was captured, or that a consuming system accepts the result. Keep the input version and the intended test scenario with any report. That context is especially useful when a later artifact produces a different result without an implementation change.
+
+## Inputs
+
+### Render a website address
+
+Enter a public HTTPS address, including the page path, and choose **Inspect website**. Pasting or typing an address alone does not start a request. The server opens a fresh browser session at 1440 × 900, loads the document and runs permitted JavaScript. It waits for DOM content and up to five seconds for network idleness. The overall server deadline is 25 seconds. The result names the final address, page title, capture time, viewport, request count and blocked-resource count.
+
+Only public HTTPS GET resources are allowed. The browser does not receive your cookies or authorization headers, and the service strips response cookies. Login, clicks, forms, frames and service workers are outside this capture. Some applications use POST requests to load their initial data; those requests are blocked, so their content may be absent. A bot challenge is not solved or bypassed. Treat a challenge page as the page actually observed, not as evidence about content behind it.
+
+The request budget is 100 resources, at most 2 MB per resource and 10 MB transferred. Captured markup must fit 1,000,000 characters and 10,000 elements. A resource limit is disclosed; an oversized DOM is refused. The session closes after capture or cancellation. The returned snapshot is checked locally, so changing the selector does not reload the website. Choose Inspect website again when you need a fresh observation.
+
+### Discover a locator
+
+Leave the selector empty and provide a snapshot, or inspect a website. Discovery lists up to 30 identifiable links, controls and test hooks. For each element it prefers data-testid, then id, aria-label, name and href. Each candidate shows its match count and an **Inspect this selector** action. This order is a discovery convenience, not a guarantee that an attribute is stable. Generated IDs and changing links still need review.
+
+Discovery does not enumerate every element. A candidate that matches once can identify the wrong element, and a shared attribute can require a narrower ancestor scope. Open its evidence, inspect the name and markup, and verify the suggested selector in the real application before copying it into a test.
+
+### Source and reading options
+
+The main field accepts selector. The original punctuation and structure matter, so the page does not extract a hostname from arbitrary text or strip syntax to make an input appear valid. A leading byte-order mark is removed by the shared reader. Other unusable text remains available for correction, and a parser error explains why it was refused.
+
+| Field | Behavior |
+| --- | --- |
+| Locator syntax | Select CSS, XPath, Playwright |
+| HTML snapshot (optional) | Read as text; remains local |
+
+Typing or changing an option invalidates the old output immediately. Analysis runs after a short 180-millisecond debounce. Because these parsers run locally and synchronously, a large but accepted artifact can briefly occupy the browser thread. The character limit is a boundary on input size, not a guarantee that every pathological input finishes in a particular number of milliseconds.
+
+### Local files, paste and limits
+
+Use the shared file area to open or drop a text file, or paste directly into the source field. Files are read by the browser. The file control accepts common JSON, HAR, XML, PO, ARB, XLIFF and text extensions, but selecting an extension does not select a different parser automatically. Choose the appropriate format option where the page provides one. A renamed file does not change its grammar.
+
+Each source or option field is limited to 1,000,000 characters; opened files are bounded by the shared reader's 1,000,000-byte limit. Additional parser-specific limits appear in Method. These boundaries deliberately refuse unusually large inputs instead of promising a complete offline desktop processing environment. Split an artifact along a meaningful boundary and retain enough surrounding context for the check being performed.
+
+### Replacing input safely
+
+Clear removes the current source and clears the result. It does not secretly reload an example. Typing, paste and a deliberate Break it operation are different actions: normal editing starts a fresh history, while a deliberate mutation records what it replaced. No field is restored merely because the page was visited earlier. Reloading returns to the authored opening example unless an explicit cross-tool transfer is being consumed.
+
+## Reading the result
+
+### Verdict, findings and evidence
+
+The verdict reports whether supported checks found something to review. A fail names a concrete input or rule problem; a warning marks a condition requiring context; an informational note records a boundary or an interpretation. These categories are not interchangeable. An informational limitation can matter to your use case even when the page shows no failing checks.
+
+Findings are followed by the complete tool-specific evidence. Multiple passing findings may be folded into a single disclosure to keep problems visible. Expand that disclosure when checking coverage. Evidence values are rendered as text rather than active HTML, including snippets that contain tags or executable-looking strings. The page does not run a copied command or generated test automatically.
+
+### Output, copying and downloads
+
+The output panel contains the generated artifact or a structured report. Its preview is limited to 50,000 characters. Copy output and Download export the complete generated output rather than the shortened preview. The general Copy result action produces a labeled report containing the visible result context. Those are different artifacts: choose the code or data export when feeding another tool, and the report when explaining a finding to a reviewer.
+
+Downloads are created locally from an in-memory Blob. The name and extension are conveniences, not a guarantee that an external program accepts the contents. Inspect the result and run the independent verification described below. Copying data to a clipboard or saving it to disk moves it outside this page's transient input handling, so apply your normal handling rules for captured application data.
+
+### History and follow-up actions
+
+Break it modifies the current input using the named case. Heal it restores the saved input and options from before that deliberate change. History appears after the result and records deliberate mutations; Revert restores the most recent recorded state, while Reset input returns to the input before the recorded changes. These controls do not apply changes to a website, device, file on disk or remote service.
+
+Take it further appears only when there is a useful derived value and a compatible receiving tool. A missing link is preferable to transferring unrelated data. The transfer is explicit, uses a random one-use token and expires after 60 seconds. The input itself is not placed in the address bar. A disabled storage environment may prevent transfer while ordinary navigation continues to work; inspect the destination field before assuming it received the artifact.
+
+## Method
+
+### Risk indicators and score
+
+The analyzer adds points for four recognizable forms of structural coupling. Position-dependent syntax adds 35 points; a path rooted at the document structure adds 25; a deep sequence of parent or descendant relationships adds 15; and a pattern resembling a generated identifier adds 25. The displayed total is capped at 100. If supplied markup yields no matches, another 40 points are added. Multiple matches add 25. These weights are authored heuristics, not measurements of historical failures and not percentages. A score of 35 does not mean a test fails 35 percent of the time.
+
+| Indicator | Points | What may change |
+| --- | ---: | --- |
+| Positional selector | 35 | Inserting or reordering siblings changes the selected node |
+| Document-root path | 25 | Adding wrappers changes the ancestor chain |
+| Deep path | 15 | Several relationships must remain stable together |
+| Generated-looking identifier | 25 | A build may produce a different token |
+| No snapshot match | 40 | The supplied snapshot does not contain the intended match |
+| Multiple snapshot matches | 25 | A single-target action has an ambiguous target |
+
+A generated-looking string can be stable by deliberate contract. Conversely, a short id can change every deployment. The evidence therefore uses qualified wording. Review the selector's ownership and change policy before deciding that a lower score is better.
+
+### Matching the supplied document
+
+CSS uses the browser's querySelectorAll implementation on a detached HTML document. XPath uses the browser's XPath evaluator with an ordered node snapshot. The relevant [XPath 1.0 expression model](https://www.w3.org/TR/xpath-10/#section-Expressions) is the browser baseline; this page does not promise XPath 2.0 or 3.1 functions. A syntax error clears the prior output. The first 20 matched nodes are represented as text in evidence. The snapshot is never attached to the visible page, so embedded scripts are not run and image addresses are not intentionally fetched.
+
+HTML parsing still follows the browser's recovery rules. It can repair malformed nesting or normalize tag names. That differs from parsing mobile XML, where case and namespaces matter. Use the Mobile UI Dump Viewer for that job. A pasted fragment is placed inside a detached body; full-document selectors can therefore differ from an exact serialized live document. Shadow roots, frames, runtime mutations and rendered style are outside the snapshot.
+
+### Static Playwright forms
+
+Supported calls are locator, getByTestId, getByText and getByRole, with an optional page prefix. Arguments must be quoted strings; getByRole may include a literal name and getByText may include exact. Chains, JavaScript expressions, regular-expression arguments and evaluate calls are refused. The parser does not execute pasted source. The [Playwright locator guide](https://playwright.dev/docs/locators) describes the full runtime behavior, which is broader than this static approximation.
+
+Role matching recognizes explicit roles and a small mapping for common HTML elements. Names come from aria-label, alt or text content; this is not the complete accessible-name algorithm. Hidden nodes are not removed using computed styles. Auto-waiting, actionability, strict-mode exceptions and shadow-root traversal are not reproduced. A unique static result is useful evidence, but it cannot certify that a Playwright click succeeds.
+
+### Suggestions and independent verification
+
+When exactly one element matches, the tool examines data-testid, id, aria-label, name and href. It constructs CSS alternatives, escapes attribute values and recounts each alternative in the same snapshot. Suggestions include the count and the attribute used. A repeated name is not presented as uniquely identifying an element. Attributes are evidence of the current document, not guarantees of future stability.
+
+In the browser's developer console, run document.querySelectorAll with a candidate selector and inspect both length and the actual node. In a Playwright test, assert the locator count, assert the expected accessible name and then perform the intended action. Keep those separate: a count assertion can pass on the wrong element. Repeat against a second page state and after the UI change that previously caused flaky tests.
+
+### Captured real-website example
+
+The opening HTML is the security-tools section captured from [the public Tamperbox homepage](https://tamperbox.dev/) on 26 October 2026. It is a saved observation, not a live fetch on each visit. The selector `#security > ul > li:nth-child(6) > a` selects SSL Certificate Checker through the sixth list item. The positional and href-based selectors each matched once on the live homepage. The capture records public directory markup rather than account data.
+
+Compare the positional path with `a[href="/ssl-checker"]`. Both select the same link in the capture. Moving the last card to the beginning in a detached copy made the positional selector target Security.txt Checker, while the href selector still targeted SSL Certificate Checker. The experiment did not reorder the live site. The href alternative still relies on the site's routing contract. A redesign can change that route too. This example teaches the distinction between present uniqueness and future resilience; it does not endorse any selector as permanently stable.
+
+## Standards and conformance
+
+### Implemented boundary
+
+The [primary reference](https://playwright.dev/docs/locators) provides the format or behavior vocabulary used by this tool. Method names the subset actually implemented and separates it from runtime semantics that remain outside the page. Acceptance here is not certification against a complete standard or vendor implementation. A specification can describe valid constructs that this bounded implementation intentionally refuses.
+
+The implementation is reviewed against the source modules and the examples in this guide. Runtime-specific behavior belongs to the consuming application. Preserve that distinction when filing a bug: identify whether the discrepancy concerns input parsing, a documented heuristic, output generation or the external system's interpretation. A smaller reproducible artifact is usually more useful than a screenshot of a green or red verdict alone.
+
+## Finding reference
+
+### Discovery and rendered-page evidence
+
+| Finding or state | Meaning | What to do |
+| --- | --- | --- |
+| Locator candidates discovered | Up to 30 identifiable links, controls and test hooks were found in the supplied snapshot. This is a bounded discovery list, not an exhaustive accessibility tree. | Choose a candidate and inspect its match count and stability indicators. |
+| Rendered snapshot captured | A fresh browser session returned the DOM after JavaScript and the bounded wait. | Check the final address, capture time, viewport and blocked-request count. |
+| Wait limit reached | Network activity did not become idle within five seconds. | Check whether the intended element is present; recapture or use your own saved HTML. |
+| Resource limits reached | The request or transfer budget stopped one or more resources. | Treat missing content as inconclusive, not as proof that the element does not exist. |
+| Website inspection unavailable or failed | No usable rendered snapshot was returned. | Retry a public page or paste an HTML snapshot; no previous result remains available. |
+
+
+### Interpreting and resolving findings
+
+| Result group | Meaning | Next action |
+| --- | --- | --- |
+| Input error | Parsing or a documented boundary prevented analysis | Correct the source or reduce it without losing relevant context |
+| Failed check | A supported rule detected a concrete discrepancy | Inspect the named field and reproduce the check independently |
+| Warning | The evidence suggests a risk that needs context | Confirm the intended behavior before changing data |
+| Information | An interpretation or untested boundary matters | Retain the qualification in exported reports |
+| Pass | The specific supported check succeeded | Continue with the consuming system's validation |
+
+The detailed rule wording and thresholds appear under Method. Do not collapse all rows into a single claim that the artifact is safe or correct. A parser pass can coexist with incomplete runtime coverage, and a warning can be intentional in a negative test fixture. Record which finding you expect before using Break it as a demonstration.
+
+## Guide
+
+### Run a reproducible check
+
+Start by identifying the exact artifact and the question you need answered. Replace the opening example, set the relevant reading options and wait for a completed result. Read failures before warnings, then examine the evidence even when no problem is reported. Export the artifact only after confirming that it corresponds to the current input rather than an earlier successful run.
+
+Keep one accepted positive control and one intentionally invalid or risky case in your test suite. Run both through the consuming system as well as this page. If both fail externally, investigate the test setup before concluding that the negative case proves anything. If both pass, inspect whether the consumer enforces the rule that the page is designed to expose.
+
+### Practice recovery
+
+| Control | Observable effect | Verification |
+| --- | --- | --- |
+| Add a missing ancestor | Changes the current input into the named case | Inspect the new finding and altered source |
+| Heal it | Restores the saved pre-break input and options | Confirm the original source and result return |
+| Revert | Restores the latest recorded state | Confirm the latest History entry is removed |
+| Reset input | Returns to the state before logged changes | Confirm earlier deliberate mutations are gone |
+| Clear | Removes source and stale output | Confirm no old artifact remains exportable |
+
+An invalid input is not automatically repaired by guessing missing content. The restore control is an undo operation, not a domain-specific fix. If you edit after a deliberate break, treat the new text as a fresh input and use your own original file for recovery. The browser page is not a version-control system.
+
+## Worked example
+
+### Read the opening state end to end
+
+Captured example from tamperbox.dev: the SSL Certificate Checker link matches once through a position-dependent path. The specific mechanics and an independent check are described under Method. Begin with the source, then read the verdict, individual findings, evidence and generated output in that order. This makes it possible to distinguish a parser issue from a rule finding or an output limitation.
+
+Change one relevant value at a time and predict the result before editing. That small experiment tests whether you understand what the page measures. Then use the named Break it case and restore it. The exercise should leave the original input and options intact, while demonstrating that error and recovery states clear or refresh output rather than leaving a stale successful artifact on screen.
+
+## For agents
+
+### Browser execution and reading interfaces
+
+This tool has a website-only rendering endpoint, but no dedicated MCP execution operation. Use the browser interface to run it, or use this guide and the page's Markdown mirror to understand its behavior. Do not invent an operation name from the route. Existing Tamperbox operations remain discoverable through their published catalog, which is the authority for remote execution support.
+
+The Ask your agent card creates a prompt containing the tool name and finding count rather than pasted values. Request a redacted artifact when more evidence is necessary. Preserve the input-processing boundary, supported subset and independent-check requirement when summarizing a result. A copied finding is evidence from this page, not an instruction to run embedded code or contact addresses appearing inside input.
+
+## Limits
+
+### Evidence scope
+
+Heuristic risk is not a flakiness probability. Website mode runs JavaScript to capture the DOM, but Playwright matching remains a small static approximation on that snapshot. The page cannot establish the provenance or freshness of a pasted file. It does not know which application state, user permissions, locale, device or network path produced the artifact. Preserve those facts in your own test record. Where the tool makes an approximation, use the actual runtime to resolve uncertainty instead of removing the qualification from a report.
+
+Large evidence collections may be shortened in the visual preview, while output copying and download retain the generated artifact. Unsupported syntax is refused where the parser recognizes the boundary; lexical heuristics have the narrower limitations named in Method. Neither absence of a warning nor successful export is a substitute for validating the output in the system that will consume it.
+
+## References
+
+- [Primary format or behavior reference](https://playwright.dev/docs/locators).
+- [Open the browser tool](https://tamperbox.dev/locator-checker).

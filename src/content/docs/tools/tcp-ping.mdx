@@ -1,7 +1,7 @@
 ---
 title: TCP Ping
 description: How TCP Ping measures connect time to a host and port from three regions, how each attempt is classified, what every verdict and finding means, and how to fix refused, filtered and lossy ports.
-updated: 2026-10-24
+updated: 2026-10-26
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and guide for the Tamperbox TCP Ping, which resolves a host in up to three regions (Eastern North America, Western Europe, Asia Pacific) and makes three TCP handshakes to the first public address from each, reporting open, refused or unanswered attempts with connect times.
 prerequisites:
@@ -230,7 +230,7 @@ See [Connect an MCP client](/mcp/connect/) and [Code mode](/mcp/code-mode/), and
 
 ### Transfers to another tool
 
-Explicit sibling-tool controls can carry the current input or observed address to another page. The shared navigation stores that value temporarily in tab-scoped `sessionStorage`, accepts a transfer for at most one minute, and puts a random transfer token in the URL fragment. The input itself is not placed in the URL. The receiving page consumes the transfer and applies its own input rules; tools with a manual Run button still require that action for live checks. This is not a saved result, and the destination can send the value to the services it needs. Ordinary edits and lookups do not create a durable report archive.
+Ordinary tool links carry no input. Explicit result actions can carry the domain, address or other value supplied by the displayed result to another page. The shared navigation stores that value temporarily in tab-scoped `sessionStorage`, accepts a transfer for at most one minute, and puts a random transfer token in the URL fragment. The input itself is not placed in the URL. The receiving page consumes the transfer and applies its own input rules; tools with a manual Run button still require that action for live checks. This is not a saved result, and the destination can send the value to the services it needs. Ordinary edits and lookups do not create a durable report archive.
 
 ## Limits
 

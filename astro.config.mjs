@@ -39,17 +39,13 @@ export default defineConfig({
           { label: 'APIs & HTTP', collapsed: false, items: [
             { label: 'JWT Decoder & Verifier', link: '/tools/jwt/' },
             { label: 'Postman Collection Converter', link: '/tools/postman-converter/' },
-            { label: 'JSON to YAML Converter', link: '/tools/json-to-yaml/' },
-            { label: 'YAML to JSON Converter', link: '/tools/yaml-to-json/' },
-            { label: 'Unix Timestamp Converter', link: '/tools/unix-timestamp/' },
             { label: 'Redirect Checker', link: '/tools/redirect-checker/' },
             { label: 'HTTP/3 & Compression Checker', link: '/tools/http3-checker/' },
             { label: 'CORS Tester', link: '/tools/cors-tester/' },
-            { label: 'Hidden Character Checker', link: '/tools/hidden-characters/' },
-            { label: 'Naughty Strings List', link: '/tools/naughty-strings/' },
-            { label: 'Exact-Length String Generator', link: '/tools/string-length-generator/' },
-            { label: 'Mojibake Fixer', link: '/tools/mojibake-fixer/' },
             { label: 'HAR File Sanitizer', link: '/tools/har-sanitizer/' },
+            { label: 'HAR to Mocks', link: '/tools/har-to-mocks/' },
+            { label: 'Negative Payload Generator', link: '/tools/negative-payload-generator/' },
+            { label: 'Cookie Header Explainer', link: '/tools/cookie-header-explainer/' },
           ] },
           { label: 'Web security & TLS', collapsed: false, items: [
             { label: 'DANE & TLSA Checker', link: '/tools/dane-checker/' },
@@ -60,7 +56,7 @@ export default defineConfig({
             { label: 'Mixed Content & Cookie Checker', link: '/tools/mixed-content-checker/' },
           ] },
           { label: 'Email & DNS', collapsed: false, items: [
-            { label: 'MX Lookup & Email Domain', link: '/tools/email-domain/' },
+            { label: 'MX Lookup & Email Domain Checker', link: '/tools/email-domain/' },
             { label: 'Email Provider Lookup', link: '/tools/email-provider/' },
             { label: 'SPF Checker', link: '/tools/spf-checker/' },
             { label: 'DMARC Checker & Generator', link: '/tools/dmarc-checker/' },
@@ -69,18 +65,18 @@ export default defineConfig({
             { label: 'BIMI Record Checker', link: '/tools/bimi-checker/' },
             { label: 'Email Header Analyzer', link: '/tools/email-header-analyzer/' },
           ] },
-          { label: 'Domains & hosting', collapsed: false, items: [
-            { label: 'SaaS Stack Detector', link: '/tools/saas-stack/' },
+          { label: 'Domains, registration & hosting', collapsed: false, items: [
+            { label: 'SaaS & Email Services from DNS', link: '/tools/saas-stack/' },
             { label: 'Website Hosting Checker', link: '/tools/website-hosting/' },
-            { label: 'CDN Detector', link: '/tools/cdn-detector/' },
+            { label: 'CDN & Proxy Detector', link: '/tools/cdn-detector/' },
             { label: 'DNS Provider Lookup', link: '/tools/dns-provider/' },
             { label: 'Website Technology Detector', link: '/tools/website-technology/' },
             { label: 'Subdomain Finder', link: '/tools/subdomain-finder/' },
-            { label: 'Domain Health Check', link: '/tools/domain-health/' },
-          ] },
-          { label: 'DNS & registration', collapsed: false, items: [
             { label: 'Domain Availability Checker', link: '/tools/domain-availability/' },
             { label: 'WHOIS & RDAP Lookup', link: '/tools/whois-lookup/' },
+            { label: 'Domain Health Checker', link: '/tools/domain-health/' },
+          ] },
+          { label: 'DNS', collapsed: false, items: [
             { label: 'DNS Lookup', link: '/tools/dns-lookup/' },
             { label: 'DNS Propagation Checker', link: '/tools/dns-propagation/' },
             { label: 'TXT Record Lookup', link: '/tools/txt-lookup/' },
@@ -102,6 +98,11 @@ export default defineConfig({
             { label: 'TCP Ping', link: '/tools/tcp-ping/' },
             { label: 'Minecraft Server Status Checker', link: '/tools/minecraft-server-status/' },
           ] },
+          { label: 'Data formats', collapsed: false, items: [
+            { label: 'JSON to YAML Converter', link: '/tools/json-to-yaml/' },
+            { label: 'YAML to JSON Converter', link: '/tools/yaml-to-json/' },
+            { label: 'Unix Timestamp Converter', link: '/tools/unix-timestamp/' },
+          ] },
           { label: 'Web & URLs', collapsed: false, items: [
             { label: 'Website Down Checker', link: '/tools/website-down-checker/' },
             { label: 'Broken Link Checker', link: '/tools/broken-link-checker/' },
@@ -109,6 +110,20 @@ export default defineConfig({
             { label: 'Robots.txt & Sitemap Checker', link: '/tools/robots-txt-checker/' },
             { label: 'Ads.txt & App-Ads.txt Checker', link: '/tools/ads-txt-checker/' },
             { label: 'llms.txt Checker & Generator', link: '/tools/llms-txt/' },
+          ] },
+          { label: 'Text & test data', collapsed: false, items: [
+            { label: 'Hidden Character Checker', link: '/tools/hidden-characters/' },
+            { label: 'Naughty Strings List', link: '/tools/naughty-strings/' },
+            { label: 'Exact-Length String Generator', link: '/tools/string-length-generator/' },
+            { label: 'Mojibake Fixer', link: '/tools/mojibake-fixer/' },
+          ] },
+          { label: 'Localization', collapsed: false, items: [
+            { label: 'Locale File Checker', link: '/tools/locale-file-checker/' },
+            { label: 'Pseudo-Localizer', link: '/tools/pseudo-localizer/' },
+          ] },
+          { label: 'UI testing', collapsed: false, items: [
+            { label: 'Locator Fragility Checker', link: '/tools/locator-checker/' },
+            { label: 'Mobile UI Dump Viewer', link: '/tools/mobile-ui-dump-viewer/' },
           ] },
         ] },
         { label: 'MCP server', items: [

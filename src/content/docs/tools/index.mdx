@@ -1,7 +1,7 @@
 ---
 title: Tool pages
 description: Each Tamperbox tool page opens on a live result or controlled example, shows its verdict and evidence, and links here for the method behind every finding.
-updated: 2026-10-25
+updated: 2026-10-26
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Map of the documented Tamperbox tools, what each tool page shows, and where the full method, finding reference and guide for each tool live.
 prerequisites: []
@@ -30,17 +30,13 @@ Each tool's documentation has the same shape, so a finding on the page always ha
 <div class="tb-doc-grid">
   <a class="tb-doc-card" href="/tools/jwt/"><strong>JWT Decoder &amp; Verifier</strong><span class="tb-doc-card__purpose">Debug a rejected login token without sharing it with another service.</span><span>A token's header and claims decoded in the browser, its signature verified with your key, and test tokens rebuilt from edited claims.</span></a>
   <a class="tb-doc-card" href="/tools/postman-converter/"><strong>Postman Collection Converter</strong><span class="tb-doc-card__purpose">Moving away from Postman? Take your requests with you.</span><span>Postman, OpenAPI and cURL converted in the browser, with a report of what was kept, dropped and redacted.</span></a>
-  <a class="tb-doc-card" href="/tools/json-to-yaml/"><strong>JSON to YAML Converter</strong><span class="tb-doc-card__purpose">Your data is JSON, but the next tool needs YAML.</span><span>Convert locally, reject duplicate keys and unsafe integers, and verify the resulting data.</span></a>
-  <a class="tb-doc-card" href="/tools/yaml-to-json/"><strong>YAML to JSON Converter</strong><span class="tb-doc-card__purpose">Need your YAML in a JSON-only app? See what survives the conversion.</span><span>Resolve compatible YAML values, inspect presentation loss, and test aliases and numeric limits.</span></a>
-  <a class="tb-doc-card" href="/tools/unix-timestamp/"><strong>Unix Timestamp Converter</strong><span class="tb-doc-card__purpose">Make sense of a date in your logs, or test where date handling breaks.</span><span>One instant in every format, the unit and zone it was read in, and what happens at 2038, before 1970 and across a clock change.</span></a>
   <a class="tb-doc-card" href="/tools/redirect-checker/"><strong>Redirect Checker</strong><span class="tb-doc-card__purpose">A link lands somewhere unexpected? Follow the detour.</span><span>Every hop of a redirect chain with what changed on each, and the loops, downgrades and temporary codes to fix.</span></a>
   <a class="tb-doc-card" href="/tools/http3-checker/"><strong>HTTP/3 &amp; Compression Checker</strong><span class="tb-doc-card__purpose">Is your site missing out on faster page delivery?</span><span>The HTTP/3 offer and a QUIC connection, what each Accept-Encoding gets back, and HSTS against the preload list's rules.</span></a>
   <a class="tb-doc-card" href="/tools/cors-tester/"><strong>CORS Tester</strong><span class="tb-doc-card__purpose">The request works outside the browser. Find out why the browser might refuse it.</span><span>The browser's CORS algorithm step by step, from the preflight to the real response, with the headers that would allow the request.</span></a>
-  <a class="tb-doc-card" href="/tools/hidden-characters/"><strong>Hidden Character Checker</strong><span class="tb-doc-card__purpose">Two strings look identical but behave differently? Find what's hiding in them.</span><span>Zero width, direction and look-alike characters found, the text counted four ways, and cleaned.</span></a>
-  <a class="tb-doc-card" href="/tools/naughty-strings/"><strong>Naughty Strings List</strong><span class="tb-doc-card__purpose">Find inputs your form probably wasn't expecting.</span><span>Hostile test strings that say what they test, with active payloads kept apart.</span></a>
-  <a class="tb-doc-card" href="/tools/string-length-generator/"><strong>Exact-Length String Generator</strong><span class="tb-doc-card__purpose">Test a field right at its length limit, and just beyond it.</span><span>Strings of an exact size in characters, UTF-16 units or bytes, limit sets and counterstrings.</span></a>
-  <a class="tb-doc-card" href="/tools/mojibake-fixer/"><strong>Mojibake Fixer</strong><span class="tb-doc-card__purpose">Your text turned into strange symbols. See whether it can be recovered.</span><span>Garbled UTF-8 repaired run by run, and what was lost for good.</span></a>
   <a class="tb-doc-card" href="/tools/har-sanitizer/"><strong>HAR File Sanitizer</strong><span class="tb-doc-card__purpose">Need to share a browser trace for a bug report? Review and redact it first.</span><span>Secrets and personal values replaced with stable placeholders, and the failed requests listed for a ticket.</span></a>
+  <a class="tb-doc-card" href="/tools/har-to-mocks/"><strong>HAR to Mocks</strong><span class="tb-doc-card__purpose">Turn captured responses into test fixtures.</span><span>Export MSW or WireMock fixtures, create Playwright setup, or compare captures.</span></a>
+  <a class="tb-doc-card" href="/tools/negative-payload-generator/"><strong>Negative Payload Generator</strong><span class="tb-doc-card__purpose">Generate invalid request bodies from schemas.</span><span>Create verified-invalid cases for a supported JSON Schema or OpenAPI subset.</span></a>
+  <a class="tb-doc-card" href="/tools/cookie-header-explainer/"><strong>Cookie Header Explainer</strong><span class="tb-doc-card__purpose">Explain cookie scope and cache reuse rules.</span><span>Inspect Set-Cookie, Cache-Control, Vary and ETag without sending requests.</span></a>
 </div>
 
 ## Web security & TLS
@@ -67,7 +63,7 @@ Each tool's documentation has the same shape, so a finding on the page always ha
   <a class="tb-doc-card" href="/tools/email-header-analyzer/"><strong>Email Header Analyzer</strong><span class="tb-doc-card__purpose">A message arrived late or failed authentication. Follow its trail.</span><span>A message's route hop by hop, the receiver's authentication results, and the identities compared, all in the browser.</span></a>
 </div>
 
-## Domains & hosting
+## Domains, registration & hosting
 
 <div class="tb-doc-grid">
   <a class="tb-doc-card" href="/tools/saas-stack/"><strong>SaaS Stack Detector</strong><span class="tb-doc-card__purpose">See which services leave clues in a domain's public DNS records.</span><span>How Tamperbox reads public TXT records for service-verification tokens and SPF senders without claiming that an account is active.</span></a>
@@ -76,14 +72,14 @@ Each tool's documentation has the same shape, so a finding on the page always ha
   <a class="tb-doc-card" href="/tools/dns-provider/"><strong>DNS Provider Lookup</strong><span class="tb-doc-card__purpose">Need to change DNS? Find out which provider runs it.</span><span>How Tamperbox groups authoritative nameservers, recognises providers, and flags fragile or mixed delegation.</span></a>
   <a class="tb-doc-card" href="/tools/website-technology/"><strong>Website Technology Detector</strong><span class="tb-doc-card__purpose">Curious what a website is built with? Look for clues in its pages.</span><span>How Tamperbox identifies web technologies from bounded HTML and response-header signatures without executing the page.</span></a>
   <a class="tb-doc-card" href="/tools/subdomain-finder/"><strong>Subdomain Finder</strong><span class="tb-doc-card__purpose">Find forgotten or unexpected hostnames in public certificate records.</span><span>How Tamperbox extracts DNS names from public Certificate Transparency observations and labels risky-looking names.</span></a>
+  <a class="tb-doc-card" href="/tools/domain-availability/"><strong>Domain Availability Checker</strong><span class="tb-doc-card__purpose">Got a name for your next project? Check whether the domain is available.</span><span>Registration evidence, dates and status codes without a guarantee of availability.</span></a>
+  <a class="tb-doc-card" href="/tools/whois-lookup/"><strong>WHOIS &amp; RDAP Lookup</strong><span class="tb-doc-card__purpose">Find where a domain is registered and when its registration expires.</span><span>Domain and network registry records, contacts and raw RDAP evidence.</span></a>
   <a class="tb-doc-card" href="/tools/domain-health/"><strong>Domain Health Check</strong><span class="tb-doc-card__purpose">Taking over a domain? Get a starting list of things to check and fix.</span><span>How Tamperbox combines DNS, mail, TLS, HTTP and security-header observations into one bounded health report.</span></a>
 </div>
 
-## DNS & registration
+## DNS
 
 <div class="tb-doc-grid">
-  <a class="tb-doc-card" href="/tools/domain-availability/"><strong>Domain Availability Checker</strong><span class="tb-doc-card__purpose">Got a name for your next project? Check whether the domain is available.</span><span>Registration evidence, dates and status codes without a guarantee of availability.</span></a>
-  <a class="tb-doc-card" href="/tools/whois-lookup/"><strong>WHOIS &amp; RDAP Lookup</strong><span class="tb-doc-card__purpose">Find where a domain is registered and when its registration expires.</span><span>Domain and network registry records, contacts and raw RDAP evidence.</span></a>
   <a class="tb-doc-card" href="/tools/dns-lookup/"><strong>DNS Lookup</strong><span class="tb-doc-card__purpose">Check where a domain points before blaming the app.</span><span>Any record type from a public resolver or the zone itself, with status, flags and the DNSSEC answer bit.</span></a>
   <a class="tb-doc-card" href="/tools/dns-propagation/"><strong>DNS Propagation Checker</strong><span class="tb-doc-card__purpose">Changed DNS, but some people still see the old site? Compare the answers.</span><span>Twelve public resolvers against the zone’s own answer, with the cache time left on every old answer.</span></a>
   <a class="tb-doc-card" href="/tools/txt-lookup/"><strong>TXT Record Lookup</strong><span class="tb-doc-card__purpose">A service won't verify your domain? Check the records it can see.</span><span>Every TXT record on a name, named by what it is for, with its strings measured against the 255-character limit.</span></a>
@@ -109,6 +105,14 @@ Each tool's documentation has the same shape, so a finding on the page always ha
   <a class="tb-doc-card" href="/tools/minecraft-server-status/"><strong>Minecraft Server Status Checker</strong><span class="tb-doc-card__purpose">Friends can't join your Minecraft server? Check its public status.</span><span>Java Edition status replies, SRV selection and player-report limits.</span></a>
 </div>
 
+## Data formats
+
+<div class="tb-doc-grid">
+  <a class="tb-doc-card" href="/tools/json-to-yaml/"><strong>JSON to YAML Converter</strong><span class="tb-doc-card__purpose">Your data is JSON, but the next tool needs YAML.</span><span>Convert locally, reject duplicate keys and unsafe integers, and verify the resulting data.</span></a>
+  <a class="tb-doc-card" href="/tools/yaml-to-json/"><strong>YAML to JSON Converter</strong><span class="tb-doc-card__purpose">Need your YAML in a JSON-only app? See what survives the conversion.</span><span>Resolve compatible YAML values, inspect presentation loss, and test aliases and numeric limits.</span></a>
+  <a class="tb-doc-card" href="/tools/unix-timestamp/"><strong>Unix Timestamp Converter</strong><span class="tb-doc-card__purpose">Make sense of a date in your logs, or test where date handling breaks.</span><span>One instant in every format, the unit and zone it was read in, and what happens at 2038, before 1970 and across a clock change.</span></a>
+</div>
+
 ## Web & URLs
 
 <div class="tb-doc-grid">
@@ -120,6 +124,29 @@ Each tool's documentation has the same shape, so a finding on the page always ha
   <a class="tb-doc-card" href="/tools/llms-txt/"><strong>llms.txt Checker &amp; Generator</strong><span class="tb-doc-card__purpose">Give AI tools a starting guide to your site's useful pages.</span><span>The outline an AI agent reads from a site's llms.txt, every format problem, and a draft made from the site itself.</span></a>
 </div>
 
+## Text & test data
+
+<div class="tb-doc-grid">
+  <a class="tb-doc-card" href="/tools/hidden-characters/"><strong>Hidden Character Checker</strong><span class="tb-doc-card__purpose">Two strings look identical but behave differently? Find what's hiding in them.</span><span>Zero width, direction and look-alike characters found, the text counted four ways, and cleaned.</span></a>
+  <a class="tb-doc-card" href="/tools/naughty-strings/"><strong>Naughty Strings List</strong><span class="tb-doc-card__purpose">Find inputs your form probably wasn't expecting.</span><span>Hostile test strings that say what they test, with active payloads kept apart.</span></a>
+  <a class="tb-doc-card" href="/tools/string-length-generator/"><strong>Exact-Length String Generator</strong><span class="tb-doc-card__purpose">Test a field right at its length limit, and just beyond it.</span><span>Strings of an exact size in characters, UTF-16 units or bytes, limit sets and counterstrings.</span></a>
+  <a class="tb-doc-card" href="/tools/mojibake-fixer/"><strong>Mojibake Fixer</strong><span class="tb-doc-card__purpose">Your text turned into strange symbols. See whether it can be recovered.</span><span>Garbled UTF-8 repaired run by run, and what was lost for good.</span></a>
+</div>
+
+## Localization
+
+<div class="tb-doc-grid">
+  <a class="tb-doc-card" href="/tools/locale-file-checker/"><strong>Locale File Checker</strong><span class="tb-doc-card__purpose">Catch missing keys and changed placeholders.</span><span>Compare JSON, ARB, PO, XLIFF and Android keys and placeholders.</span></a>
+  <a class="tb-doc-card" href="/tools/pseudo-localizer/"><strong>Pseudo-Localizer</strong><span class="tb-doc-card__purpose">Expose clipping with expanded test strings.</span><span>Accent and expand resource strings while preserving placeholders.</span></a>
+</div>
+
+## UI testing
+
+<div class="tb-doc-grid">
+  <a class="tb-doc-card" href="/tools/locator-checker/"><strong>Locator Fragility Checker</strong><span class="tb-doc-card__purpose">Find brittle selectors before tests fail.</span><span>Render a website or paste HTML to discover candidates and check locator risks.</span></a>
+  <a class="tb-doc-card" href="/tools/mobile-ui-dump-viewer/"><strong>Mobile UI Dump Viewer</strong><span class="tb-doc-card__purpose">Inspect UI nodes without a device session.</span><span>Browse Android or Appium XML, query XPath and inspect node attributes.</span></a>
+</div>
+
 ## Where processing happens
 
 Every tool page says, next to its verdict, where your input goes. The rule is the same across tools:
@@ -127,7 +154,7 @@ Every tool page says, next to its verdict, where your input goes. The rule is th
 - **Pasted evidence is parsed locally when the tool supports that mode.** A pasted domain still starts a live lookup. Website Hosting Checker also looks up network information for pasted public IP addresses. Read the tool’s processing notice before running it.
 - **A host name or domain means a named server-side check.** The server makes the required connection, DNS queries or published-file fetches, returns what it saw, and keeps nothing. The page names the port and the records or files it checks before it runs them.
 
-Explicit sibling-tool links temporarily use browser session storage and a random transfer token in the URL fragment. The transferred input itself is not placed in the URL. See each guide for its input handling and network requests.
+Ordinary rail links carry no input. Explicit result actions temporarily use browser session storage and a random transfer token in the URL fragment. The transferred input itself is not placed in the URL. See each guide for its input handling and network requests.
 
 ## Break it, Heal it, History
 

@@ -1,7 +1,7 @@
 ---
 title: DNS Provider Lookup
 description: How Tamperbox groups authoritative nameservers, recognises providers, and flags fragile or mixed delegation.
-updated: 2026-10-25
+updated: 2026-10-26
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox DNS Provider Lookup.
 prerequisites:
@@ -54,9 +54,9 @@ Evidence sections follow Findings and precede History. They are the audit trail 
 
 History records intentional input replacements, including Break it examples and their repairs. Revert restores the prior input and runs it again, including live requests when applicable; Reset input returns to the value at the beginning of the recorded sequence. History is not monitoring, persistence or an account log.
 
-Check the rest carries the current input to other tools in Domains & hosting. Take it further uses the identified zone or suggested parent for [SOA](/tools/soa-lookup/) and [DNSSEC](/tools/dnssec-checker/) checks, and the first nameserver hostname for a [DNS lookup](/tools/dns-lookup/). A parent inferred from the hostname is only a suggestion; SOA-derived zone evidence is labelled separately. Pasted NS records remain local until you choose a server-lookup handoff. Each receiving tool runs its own check; agreement is not guaranteed.
+Check the rest opens related tools without carrying input. Take it further uses the identified zone or suggested parent for [SOA](/tools/soa-lookup/) and [DNSSEC](/tools/dnssec-checker/) checks, and the first nameserver hostname for a [DNS lookup](/tools/dns-lookup/). A parent inferred from the hostname is only a suggestion; SOA-derived zone evidence is labelled separately. Pasted NS records remain local until you choose a server-lookup handoff. Each receiving tool runs its own check; agreement is not guaranteed.
 
-Explicit tool links transfer the input through temporary browser `sessionStorage` and, when needed, a same-origin browser channel. The URL fragment contains a random transfer token, not the input. Transfers are accepted for less than one minute, consumed once, and bound to the destination path. The destination removes the token from its address. Ordinary documentation links and direct visits do not restore a previous input; if transfer storage is unavailable, the link still opens the tool.
+Result actions transfer their explicit derived values through temporary browser `sessionStorage` and, when needed, a same-origin browser channel. The URL fragment contains a random transfer token, not the input. Transfers are accepted for less than one minute, consumed once, and bound to the destination path. The destination removes the token from its address. Ordinary documentation links and direct visits do not restore a previous input; if transfer storage is unavailable, the link still opens the tool.
 
 
 ## Method

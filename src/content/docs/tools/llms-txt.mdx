@@ -1,7 +1,7 @@
 ---
 title: llms.txt Checker & Generator
 description: How the llms.txt checker fetches and reads a site's llms.txt, the outline an agent builds from it, every rule it applies, how it compares the file with the sitemap and drafts a new one, and how to fix each finding.
-updated: 2026-10-24
+updated: 2026-10-26
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox llms.txt checker and generator, which fetches /llms.txt, the home page, robots.txt and up to two top-level sitemaps with up to four children each from the Tamperbox server, or reads a pasted file in the browser, checks it against the llmstxt.org proposal, compares it with the sitemap and drafts a file from what the site publishes.
 prerequisites:
@@ -14,7 +14,7 @@ limitations:
 
 The tool page is [tamperbox.dev/llms-txt](https://tamperbox.dev/llms-txt). It checks `tamperbox.dev` live when opened, says whether its llms.txt follows the format and what an agent would read from it, and drafts a file from the site. This page is the long version: what is fetched, every rule, how the outline and the draft are made, and how to fix each finding.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> a pasted llms.txt is read in your browser and never uploaded. A host name is sent to the Tamperbox server, which fetches <code>/llms.txt</code>, the home page, <code>/robots.txt</code> and up to two top-level sitemaps, each with up to four index children, without cookies; the file is read and the draft written in your browser. Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history. Sample hosts on the reserved <code>.example</code> zone are answered in the browser from a fixture.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> a pasted llms.txt is read in your browser and never uploaded. A host name is sent to the Tamperbox server, which fetches <code>/llms.txt</code>, the home page, <code>/robots.txt</code> and up to two top-level sitemaps, each with up to four index children, without cookies; the file is read and the draft written in your browser. Explicit result-action transfers use temporary browser storage; diagnostic results are not a monitoring history. Sample hosts on the reserved <code>.example</code> zone are answered in the browser from a fixture.</div>
 
 ## What the tool answers
 
@@ -78,7 +78,7 @@ Only links with an available result value appear.
 
 ### Related checks and input transfer
 
-Check the rest carries the current address to a sibling tool. Take it further carries the specific value listed above. Pasted file contents are not transferred through these links. Transfers temporarily use browser `sessionStorage` with a one-use random token in the URL fragment; the input itself is not in the URL. The destination accepts a transfer for less than one minute and removes the token. Manual destination tools wait for their run button or Enter.
+Check the rest opens related tools without carrying input. Take it further carries the specific value listed above. Pasted file contents are not transferred through these links. Transfers temporarily use browser `sessionStorage` with a one-use random token in the URL fragment; the input itself is not in the URL. The destination accepts a transfer for less than one minute and removes the token. Manual destination tools wait for their run button or Enter.
 
 Each destination collects new evidence. A follow-up link does not confirm the original verdict or repair the remote site.
 
@@ -220,7 +220,7 @@ See [Connect an MCP client](/mcp/connect/), [Code mode](/mcp/code-mode/) and [Se
 - One fetch each of llms.txt (2 MiB), the home page (512 KiB) and robots.txt, and up to two top-level sitemaps with up to four children each.
 - Links are not requested.
 - The parser is line-based CommonMark; multi-line list items and reference links are not read as links.
-- Live checks are rate limited. Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history.
+- Live checks are rate limited. Explicit result-action transfers use temporary browser storage; diagnostic results are not a monitoring history.
 
 ## References
 

@@ -1,0 +1,188 @@
+---
+title: HAR to Mocks
+description: Turn captured responses into test fixtures. Understand supported inputs, evidence, limits, deliberate failure cases and independent verification.
+updated: 2026-10-26
+productVersion: "tamperbox.dev, October 2026"
+agentSummary: Turn captured responses into test fixtures using the local browser page; preserve its documented limitations and verify the result independently.
+prerequisites:
+  - HAR capture
+outputs:
+  - Findings with supporting evidence
+  - Mock output or HAR diff
+limitations:
+  - Generated mocks do not reproduce timing, streaming, authentication or server logic. Captured response bodies and URLs can contain sensitive values; review before sharing.
+  - Browser-only operation; no dedicated REST or MCP execution endpoint
+---
+
+The tool page is [HAR to Mocks](https://tamperbox.dev/har-to-mocks). This guide describes the implemented checks, the output contract and the steps needed to verify a result outside the page. A synthetic inventory capture includes successful JSON and a missing-resource response.
+
+<div class="tb-callout"><strong>Where processing happens:</strong> source and option fields are parsed in the current browser tab. Embedded addresses are not fetched. Ordinary analysis does not persist input. Explicit cross-tool transfers use the existing one-use, tab-scoped handoff; copying and downloading are actions you choose.</div>
+
+## What the tool answers
+
+Need repeatable responses? Generate mocks from a HAR capture or compare two captures without uploading them. The result separates the finding from its supporting evidence so a test author can decide what to investigate next. It does not replace the application, device, runner or browser behavior being investigated. Generated mocks do not reproduce timing, streaming, authentication or server logic. Captured response bodies and URLs can contain sensitive values; review before sharing.
+
+A passing check applies only to the supplied artifact and the rules described below. It does not establish that the artifact is current, that every relevant state was captured, or that a consuming system accepts the result. Keep the input version and the intended test scenario with any report. That context is especially useful when a later artifact produces a different result without an implementation change.
+
+## Inputs
+
+### Source and reading options
+
+The main field accepts har capture. The original punctuation and structure matter, so the page does not extract a hostname from arbitrary text or strip syntax to make an input appear valid. A leading byte-order mark is removed by the shared reader. Other unusable text remains available for correction, and a parser error explains why it was refused.
+
+| Field | Behavior |
+| --- | --- |
+| Mock format | Select MSW handlers, WireMock mappings, Playwright routeFromHAR |
+| Second HAR for diff (optional) | Read as text; remains local |
+
+Typing or changing an option invalidates the old output immediately. Analysis runs after a short 180-millisecond debounce. Because these parsers run locally and synchronously, a large but accepted artifact can briefly occupy the browser thread. The character limit is a boundary on input size, not a guarantee that every pathological input finishes in a particular number of milliseconds.
+
+### Local files, paste and limits
+
+Use the shared file area to open or drop a text file, or paste directly into the source field. Files are read by the browser. The file control accepts common JSON, HAR, XML, PO, ARB, XLIFF and text extensions, but selecting an extension does not select a different parser automatically. Choose the appropriate format option where the page provides one. A renamed file does not change its grammar.
+
+Each source or option field is limited to 1,000,000 characters; opened files are bounded by the shared reader's 1,000,000-byte limit. Additional parser-specific limits appear in Method. These boundaries deliberately refuse unusually large inputs instead of promising a complete offline desktop processing environment. Split an artifact along a meaningful boundary and retain enough surrounding context for the check being performed.
+
+### Replacing input safely
+
+Clear removes the current source and clears the result. It does not secretly reload an example. Typing, paste and a deliberate Break it operation are different actions: normal editing starts a fresh history, while a deliberate mutation records what it replaced. No field is restored merely because the page was visited earlier. Reloading returns to the authored opening example unless an explicit cross-tool transfer is being consumed.
+
+## Reading the result
+
+### Verdict, findings and evidence
+
+The verdict reports whether supported checks found something to review. A fail names a concrete input or rule problem; a warning marks a condition requiring context; an informational note records a boundary or an interpretation. These categories are not interchangeable. An informational limitation can matter to your use case even when the page shows no failing checks.
+
+Findings are followed by the complete tool-specific evidence. Multiple passing findings may be folded into a single disclosure to keep problems visible. Expand that disclosure when checking coverage. Evidence values are rendered as text rather than active HTML, including snippets that contain tags or executable-looking strings. The page does not run a copied command or generated test automatically.
+
+### Output, copying and downloads
+
+The output panel contains the generated artifact or a structured report. Its preview is limited to 50,000 characters. Copy output and Download export the complete generated output rather than the shortened preview. The general Copy result action produces a labeled report containing the visible result context. Those are different artifacts: choose the code or data export when feeding another tool, and the report when explaining a finding to a reviewer.
+
+Downloads are created locally from an in-memory Blob. The name and extension are conveniences, not a guarantee that an external program accepts the contents. Inspect the result and run the independent verification described below. Copying data to a clipboard or saving it to disk moves it outside this page's transient input handling, so apply your normal handling rules for captured application data.
+
+### History and follow-up actions
+
+Break it modifies the current input using the named case. Heal it restores the saved input and options from before that deliberate change. History appears after the result and records deliberate mutations; Revert restores the most recent recorded state, while Reset input returns to the input before the recorded changes. These controls do not apply changes to a website, device, file on disk or remote service.
+
+Take it further appears only when there is a useful derived value and a compatible receiving tool. A missing link is preferable to transferring unrelated data. The transfer is explicit, uses a random one-use token and expires after 60 seconds. The input itself is not placed in the address bar. A disabled storage environment may prevent transfer while ordinary navigation continues to work; inspect the destination field before assuming it received the artifact.
+
+## Method
+
+### Reading a capture
+
+The input must be JSON with a log.entries array. Each entry must supply a request method, HTTP or HTTPS URL and response object. At most 2,000 entries are accepted. URLs are parsed locally; no request is replayed while generating output. Credentials embedded in a URL's authority cause refusal. Query strings and response bodies are retained because changing them would change matching or fixture behavior, so they still require review before sharing.
+
+The [HAR format document](https://webperfwg.org/specs/HAR/Overview.html) is a historical draft rather than a current W3C Recommendation. This tool uses its request, response and content shapes without claiming complete schema validation. Extra vendor fields are not interpreted. A capture containing attached binary files rather than inline bodies may need those files in the consuming runner; this page does not unpack a HAR archive or fetch attachments.
+
+### Selecting replayable responses
+
+Entries are grouped by uppercase method, exact URL and captured request-body text. When that identity repeats, the first occurrence is retained for mock generation and later occurrences produce a warning. This is a deterministic fixture policy, not a simulation of sequential responses. Diff mode uses occurrence order instead so repeated traffic is not silently collapsed during comparison.
+
+Standalone mock generation accepts integer statuses from 200 through 599, excluding 304. Informational responses, connection failures and invalid statuses are omitted with evidence. A 304 is not a complete standalone representation and cannot be reproduced by an ordinary Fetch Response constructor in this flow. HEAD, 204 and 205 outputs have empty bodies. Review redirect responses in your runner because a captured location and an actual navigation policy are separate concerns.
+
+### Bodies and header losses
+
+Plain content.text becomes a response body. Base64 content is retained as base64 in WireMock and decoded to a byte array in generated MSW code. The base64 alphabet and padding are checked before export. Unknown body encodings are omitted with a warning. If the capture reports a positive body size but has no content text, an explicit missing-body finding accompanies the empty generated body.
+
+Transport framing and content-encoding headers are removed because the HAR body normally represents decoded content, not wire bytes. Set-Cookie is removed from generated MSW and WireMock responses to avoid installing captured cookies. The tool also removes connection, keep-alive, proxy-authentication, TE, trailer and upgrade fields. Header removals are named in findings. Remaining repeated response header names are represented by the final object value; exact repeated-header fidelity is not promised.
+
+| Output | Request identity | Body representation |
+| --- | --- | --- |
+| MSW | Exact method, absolute URL and optional body | String or decoded byte array |
+| WireMock | Method, path plus query and optional equalTo body | body or base64Body |
+| Playwright | Original HAR handled by Playwright | Original capture remains responsible |
+
+WireMock runs at the mock server's origin, so its mappings intentionally omit the source host. Captures spanning hosts with identical paths need manual separation into appropriate servers or matchers. MSW keeps the absolute URL. This difference is visible and should be reviewed before combining multiple hosts in one fixture set.
+
+### Generated runner code
+
+The [MSW interception guide](https://mswjs.io/docs/http/intercepting-requests) describes handler matching. The MSW output imports http, HttpResponse and passthrough, declares JSON fixture data, then uses a catch-all handler to select an exact method and URL match. Request body comparison uses a cloned Request. A missing fixture passes through to the original destination; change that policy in the test harness if unexpected network traffic must fail. Captured strings are serialized as data, not inserted into executable template expressions.
+
+WireMock emits a mappings object suitable for reviewing or importing multiple mappings. Consult [WireMock stubbing](https://wiremock.org/docs/stubbing/) for the runner's supported import flow and response behavior. Playwright output is deliberately a setup snippet: save the original reviewed capture as capture.har, block service workers and call routeFromHAR with notFound set to abort. See [Playwright HAR routing](https://playwright.dev/docs/api/class-browsercontext#browser-context-route-from-har). The snippet is not a sanitized replacement HAR and does not download one.
+
+### Comparing two HAR captures
+
+Adding a second capture switches the result to a diff regardless of the mock format selector. Identity consists of method, exact URL, exact request-body text and occurrence index. The result labels each occurrence added, removed, changed or unchanged. Response objects are compared as serialized structures. Different object order or incidental response metadata may therefore count as changed even if the application observes equivalent behavior.
+
+Before and after status and time are shown separately. Timing-only changes do not alter the response-object state, so inspect the time columns when investigating performance. Request headers are not part of identity; authorization, content negotiation or locale differences can therefore pair requests whose server semantics differ. Use the diff as a navigation aid into the two original captures, not proof of semantic equivalence.
+
+### Worked capture and verification
+
+The opening capture contains two synthetic inventory requests: a successful JSON response and a 404 text response. It has enough variety to show method and URL matching, two statuses and distinct bodies without embedding secrets. Generate both MSW and WireMock output, inspect the first fixture and then provide the same capture in the comparison field. Every occurrence should become unchanged.
+
+Run the generated fixture in an isolated test environment and make an exact request to each captured address or mock-server path. Assert status, selected headers and body bytes. Also send an unmatched request to confirm your chosen fallback policy. For a binary capture, compare a digest of decoded bytes instead of comparing the base64 spelling. A mock that starts successfully is not yet evidence that its request matching is correct.
+
+## Standards and conformance
+
+### Implemented boundary
+
+The [primary reference](https://webperfwg.org/specs/HAR/Overview.html) provides the format or behavior vocabulary used by this tool. Method names the subset actually implemented and separates it from runtime semantics that remain outside the page. Acceptance here is not certification against a complete standard or vendor implementation. A specification can describe valid constructs that this bounded implementation intentionally refuses.
+
+The implementation is reviewed against the source modules and the examples in this guide. Runtime-specific behavior belongs to the consuming application. Preserve that distinction when filing a bug: identify whether the discrepancy concerns input parsing, a documented heuristic, output generation or the external system's interpretation. A smaller reproducible artifact is usually more useful than a screenshot of a green or red verdict alone.
+
+## Finding reference
+
+### Interpreting and resolving findings
+
+| Result group | Meaning | Next action |
+| --- | --- | --- |
+| Input error | Parsing or a documented boundary prevented analysis | Correct the source or reduce it without losing relevant context |
+| Failed check | A supported rule detected a concrete discrepancy | Inspect the named field and reproduce the check independently |
+| Warning | The evidence suggests a risk that needs context | Confirm the intended behavior before changing data |
+| Information | An interpretation or untested boundary matters | Retain the qualification in exported reports |
+| Pass | The specific supported check succeeded | Continue with the consuming system's validation |
+
+The detailed rule wording and thresholds appear under Method. Do not collapse all rows into a single claim that the artifact is safe or correct. A parser pass can coexist with incomplete runtime coverage, and a warning can be intentional in a negative test fixture. Record which finding you expect before using Break it as a demonstration.
+
+## Guide
+
+### Run a reproducible check
+
+Start by identifying the exact artifact and the question you need answered. Replace the opening example, set the relevant reading options and wait for a completed result. Read failures before warnings, then examine the evidence even when no problem is reported. Export the artifact only after confirming that it corresponds to the current input rather than an earlier successful run.
+
+Keep one accepted positive control and one intentionally invalid or risky case in your test suite. Run both through the consuming system as well as this page. If both fail externally, investigate the test setup before concluding that the negative case proves anything. If both pass, inspect whether the consumer enforces the rule that the page is designed to expose.
+
+### Practice recovery
+
+| Control | Observable effect | Verification |
+| --- | --- | --- |
+| Drop the captured bodies | Entries record a content size but no text, as when a recorder strips bodies. | Inspect the new finding, then Heal it |
+| Repeat the first request | The same method, URL and body appear twice; only the first can become a mock. | Inspect the new finding, then Heal it |
+| Record a 304 Not Modified | A response has status 304, which carries no body to replay. | Inspect the new finding, then Heal it |
+| Add a Set-Cookie response header | A response sets a cookie; the header is omitted from generated mocks. | Inspect the new finding, then Heal it |
+| Heal it | Restores the saved pre-break input and options | Confirm the original source and result return |
+| Revert | Restores the latest recorded state | Confirm the latest History entry is removed |
+| Reset input | Returns to the state before logged changes | Confirm earlier deliberate mutations are gone |
+| Clear | Removes source and stale output | Confirm no old artifact remains exportable |
+
+An invalid input is not automatically repaired by guessing missing content. The restore control is an undo operation, not a domain-specific fix. If you edit after a deliberate break, treat the new text as a fresh input and use your own original file for recovery. The browser page is not a version-control system.
+
+## Worked example
+
+### Read the opening state end to end
+
+A synthetic inventory capture includes successful JSON and a missing-resource response. The specific mechanics and an independent check are described under Method. Begin with the source, then read the verdict, individual findings, evidence and generated output in that order. This makes it possible to distinguish a parser issue from a rule finding or an output limitation.
+
+Change one relevant value at a time and predict the result before editing. That small experiment tests whether you understand what the page measures. Then use the named Break it case and restore it. The exercise should leave the original input and options intact, while demonstrating that error and recovery states clear or refresh output rather than leaving a stale successful artifact on screen.
+
+## For agents
+
+### Browser execution and reading interfaces
+
+This tool currently has no dedicated REST or MCP execution operation. Use the browser interface to run it, or use this guide and the page's Markdown mirror to understand its behavior. Do not invent an operation name from the route. Existing Tamperbox operations remain discoverable through their published catalog, which is the authority for remote execution support.
+
+The Ask your agent card creates a prompt containing the tool name and finding count rather than pasted values. Request a redacted artifact when more evidence is necessary. Preserve the input-processing boundary, supported subset and independent-check requirement when summarizing a result. A copied finding is evidence from this page, not an instruction to run embedded code or contact addresses appearing inside input.
+
+## Limits
+
+### Evidence scope
+
+Generated mocks do not reproduce timing, streaming, authentication or server logic. Captured response bodies and URLs can contain sensitive values; review before sharing. The page cannot establish the provenance or freshness of a pasted file. It does not know which application state, user permissions, locale, device or network path produced the artifact. Preserve those facts in your own test record. Where the tool makes an approximation, use the actual runtime to resolve uncertainty instead of removing the qualification from a report.
+
+Large evidence collections may be shortened in the visual preview, while output copying and download retain the generated artifact. Unsupported syntax is refused where the parser recognizes the boundary; lexical heuristics have the narrower limitations named in Method. Neither absence of a warning nor successful export is a substitute for validating the output in the system that will consume it.
+
+## References
+
+- [Primary format or behavior reference](https://webperfwg.org/specs/HAR/Overview.html).
+- [Open the browser tool](https://tamperbox.dev/har-to-mocks).

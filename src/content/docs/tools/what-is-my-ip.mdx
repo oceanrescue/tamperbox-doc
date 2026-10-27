@@ -1,7 +1,7 @@
 ---
 title: What Is My IP Address?
 description: How the What Is My IP page reads the public address your connection uses, why one connection shows only IPv4 or IPv6, how the device test checks both families, and how to read and act on each result.
-updated: 2026-10-24
+updated: 2026-10-26
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and guide for the Tamperbox What Is My IP page, which reads the source address, family, network, AS number and estimated country of the visitor's connection on the Tamperbox server, and on request runs an IPv4-only and an IPv6-only echo request to ipify from the browser.
 prerequisites:
@@ -70,7 +70,7 @@ These links carry values derived from the current result. A link is absent when 
 | [BGP Route Lookup](/tools/bgp-lookup/) | The same observed address |
 | [ASN Lookup for IPv6](/tools/asn-lookup/) | The device test's IPv6 address, when the page connection used IPv4 and the IPv6 test succeeded |
 
-Check the rest opens sibling pages without carrying the address. Take it further is the explicit address transfer. These pages have no editable source, Break it, Heal it or input History; Check again refreshes the connection reading.
+Check the rest opens related pages without carrying the address. Take it further is the explicit address transfer. These pages have no editable source, Break it, Heal it or input History; Check again refreshes the connection reading.
 
 ### What this result means
 
@@ -172,7 +172,7 @@ See [Connect an MCP client](/mcp/connect/) and [Security and privacy](/reference
 
 ### Transfers to another tool
 
-Explicit sibling-tool controls can carry the current input or observed address to another page. The shared navigation stores that value temporarily in tab-scoped `sessionStorage`, accepts a transfer for at most one minute, and puts a random transfer token in the URL fragment. The input itself is not placed in the URL. The receiving page consumes the transfer and applies its own input rules; tools with a manual Run button still require that action for live checks. This is not a saved result, and the destination can send the value to the services it needs. Ordinary edits and lookups do not create a durable report archive.
+Ordinary tool links carry no input. Explicit result actions can carry the domain, address or other value supplied by the displayed result to another page. The shared navigation stores that value temporarily in tab-scoped `sessionStorage`, accepts a transfer for at most one minute, and puts a random transfer token in the URL fragment. The input itself is not placed in the URL. The receiving page consumes the transfer and applies its own input rules; tools with a manual Run button still require that action for live checks. This is not a saved result, and the destination can send the value to the services it needs. Ordinary edits and lookups do not create a durable report archive.
 
 ## Limits
 

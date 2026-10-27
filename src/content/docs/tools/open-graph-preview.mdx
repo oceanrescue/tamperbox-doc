@@ -1,7 +1,7 @@
 ---
 title: Open Graph Preview
 description: How the Open Graph preview reads a page's share tags, the fallback order each platform's card follows, every rule it applies to the image, title, description and X card, and how to fix each finding.
-updated: 2026-10-24
+updated: 2026-10-26
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox Open Graph Preview, which fetches a page and its share image from the Tamperbox server, or reads pasted HTML in the browser, and draws a large card, an X card, a chat unfurl and a search result from its Open Graph, Twitter and HTML tags.
 prerequisites:
@@ -14,7 +14,7 @@ limitations:
 
 The tool page is [tamperbox.dev/open-graph-preview](https://tamperbox.dev/open-graph-preview). It checks `tamperbox.dev` live when opened, says whether the link is ready to share, and draws the cards platforms make from it. This page is the long version: where each card gets its text and image, every rule, what each finding means, and how to fix it.
 
-<div class="tb-callout"><strong>Where processing happens:</strong> pasted HTML is read in your browser. Its share image is fetched only if you press the button that loads it, and then through the Tamperbox server, so your browser never contacts that site. A page address is fetched by the Tamperbox server, with its share image, when you stop typing. Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history. Sample addresses on the reserved <code>.example</code> zone are answered in the browser from a fixture.</div>
+<div class="tb-callout"><strong>Where processing happens:</strong> pasted HTML is read in your browser. Its share image is fetched only if you press the button that loads it, and then through the Tamperbox server, so your browser never contacts that site. A page address is fetched by the Tamperbox server, with its share image, when you stop typing. Explicit result-action transfers use temporary browser storage; diagnostic results are not a monitoring history. Sample addresses on the reserved <code>.example</code> zone are answered in the browser from a fixture.</div>
 
 ## What the tool answers
 
@@ -77,7 +77,7 @@ These follow-ups are hidden for pasted HTML, even when its tags contain addresse
 
 ### Related checks and input transfer
 
-Check the rest carries the current address to a sibling tool. Take it further carries the specific value listed above. Pasted file contents are not transferred through these links. Transfers temporarily use browser `sessionStorage` with a one-use random token in the URL fragment; the input itself is not in the URL. The destination accepts a transfer for less than one minute and removes the token. Manual destination tools wait for their run button or Enter.
+Check the rest opens related tools without carrying input. Take it further carries the specific value listed above. Pasted file contents are not transferred through these links. Transfers temporarily use browser `sessionStorage` with a one-use random token in the URL fragment; the input itself is not in the URL. The destination accepts a transfer for less than one minute and removes the token. Manual destination tools wait for their run button or Enter.
 
 Each destination collects new evidence. A follow-up link does not confirm the original verdict or repair the remote site.
 
@@ -260,7 +260,7 @@ See [Connect an MCP client](/mcp/connect/), [Code mode](/mcp/code-mode/) and [Se
 - Scripts do not run; tags a script adds are not seen.
 - Search cuts are by character count, close to but not the same as pixel widths.
 - Platforms cache cards; this tool cannot refresh them.
-- Live fetches are rate limited. Explicit sibling-tool transfers use temporary browser storage; diagnostic results are not a monitoring history.
+- Live fetches are rate limited. Explicit result-action transfers use temporary browser storage; diagnostic results are not a monitoring history.
 
 ## References
 

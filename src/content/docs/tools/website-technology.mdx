@@ -1,7 +1,7 @@
 ---
 title: Website Technology Detector
 description: How Tamperbox identifies web technologies from bounded HTML and response-header signatures without executing the page.
-updated: 2026-10-25
+updated: 2026-10-26
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox Website Technology Detector.
 prerequisites:
@@ -54,9 +54,9 @@ Evidence sections follow Findings and precede History. They are the audit trail 
 
 History records intentional input replacements, including Break it examples and their repairs. Revert restores the prior input and runs it again, including live requests when applicable; Reset input returns to the value at the beginning of the recorded sequence. History is not monitoring, persistence or an account log.
 
-Check the rest carries the current input to other tools in Domains & hosting. Take it further sends the final hostname to the [CDN and Proxy Detector](/tools/cdn-detector/) or [Website Hosting Checker](/tools/website-hosting/). These links appear only when that hostname differs from the input. A receiving tool runs its own check; agreement is not guaranteed.
+Check the rest opens related tools without carrying input. Take it further sends the final hostname to the [CDN and Proxy Detector](/tools/cdn-detector/) or [Website Hosting Checker](/tools/website-hosting/). These links appear only when that hostname differs from the input. A receiving tool runs its own check; agreement is not guaranteed.
 
-Explicit tool links transfer the input through temporary browser `sessionStorage` and, when needed, a same-origin browser channel. The URL fragment contains a random transfer token, not the input. Transfers are accepted for less than one minute, consumed once, and bound to the destination path. The destination removes the token from its address. Ordinary documentation links and direct visits do not restore a previous input; if transfer storage is unavailable, the link still opens the tool.
+Result actions transfer their explicit derived values through temporary browser `sessionStorage` and, when needed, a same-origin browser channel. The URL fragment contains a random transfer token, not the input. Transfers are accepted for less than one minute, consumed once, and bound to the destination path. The destination removes the token from its address. Ordinary documentation links and direct visits do not restore a previous input; if transfer storage is unavailable, the link still opens the tool.
 
 
 ## Method

@@ -1,7 +1,7 @@
 ---
 title: Naughty Strings List
 description: What is in the Naughty Strings List, how its eleven groups and active payloads are chosen, how search and export work, and how to use the strings in manual and automated tests.
-updated: 2026-10-25
+updated: 2026-10-26
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method and guide for the Tamperbox Naughty Strings List, a built-in set of 158 hostile test strings in eleven groups, each with the reason it tests something, searchable by name, reason or code point, with active payloads hidden by default and export as JSON, JavaScript, Python, CSV or one value per line with invisible characters escaped. Also reachable as the naughty_strings operation.
 prerequisites:
@@ -38,7 +38,7 @@ Which values should I type into this field, send to this API or put in this file
 
 ## Active payloads
 
-A string is marked active when it is built to be acted on if it reaches a parser, interpreter, spreadsheet or file system. They are hidden by default so that a copied list is safe to paste into a shared staging system. None is malware and none needs a network; command payloads only sleep for five seconds. Include them only for systems you own or are allowed to test.
+A string is marked active when it is built to be acted on if it reaches a parser, interpreter, spreadsheet or file system. They are hidden by default to keep deliberate interpreter and spreadsheet cases out of an ordinary data-only selection. None is malware and none needs a network; command payloads only sleep for five seconds. Include them only for systems you own or are allowed to test.
 
 ## Searching and export
 
@@ -52,12 +52,40 @@ Search matches the string's name, its reason, its group and its value written wi
 
 A value that is stored and shown back exactly as sent has passed. A refusal with a clear message is fine where the value is truly invalid. Anything else, such as a changed value, a server error, a value run as code or a value that breaks the page around it, is a finding.
 
+## Inputs and result contract
+
+### Filters compose
+
+The current list is the intersection of the selected categories, the search query and the active-payload option. Search is case-insensitive after trimming the query. It examines the entry identifier, reason, category identifier and the value's revealed representation. A query such as `U+200B` can therefore find a character that is difficult to type or see directly.
+
+A zero-result filter is a valid outcome. It does not mean that the category is safe or that the collection contains every relevant value. Clear the search, check category selection and inspect whether active entries are excluded. When recording a test run, save those settings with the exported fixture; otherwise two people can use the same tool name while actually exercising different subsets.
+
+### What each row means
+
+Each row identifies one fixture and explains the failure it is intended to reveal. Character and byte counts describe the value, while visible tags help inspect hidden characters. The tag representation is for reading. A copied raw value can contain an invisible character even when the screen shows a visible code-point tag in its place.
+
+The current corpus contains 158 entries, of which 129 appear with every category selected and active payloads excluded. These are observed corpus counts, not a promised permanent API size. A future release can add, rename or reclassify fixtures. For reproducible regression tests, commit the exact exported values and the selected settings in your own test repository rather than downloading whatever the current list contains each time.
+
 ## Method
 
 1. The list is a fixed set of 158 strings, each with an identifier, a group, a reason and a flag for active payloads.
 2. A string is active when it is built to be acted on by a parser, interpreter, spreadsheet or file system. Active strings are excluded until included.
 3. Search lowercases the query and matches it against the identifier, the reason, the group and the value with invisible characters written as code point tags.
 4. Exports write each value as a string literal for the chosen language. In JSON, JavaScript and Python every invisible or unprintable character is an escape; CSV quotes values with commas, quotes, line breaks or edge spaces.
+
+## Standards and conformance
+
+### A corpus is not a validator
+
+The collection provides examples for exercising a system. It does not implement a complete Unicode security profile, determine whether an email address is deliverable, validate every calendar convention or certify that an application resists injection. The [Unicode security mechanisms specification](https://www.unicode.org/reports/tr39/#Confusable_Detection) describes broader confusable detection than the few examples in this list. Passing those examples leaves many other inputs untested.
+
+The test author defines the expected result. A person's name with an apostrophe may be valid application data even though it resembles syntax in another context. A string resembling a number may intentionally be stored as text. Rejecting every unusual value is not a universal pass condition. Record the field's contract and distinguish a legitimate validation refusal from an accidental restriction on supported users or scripts.
+
+### Export syntax does not neutralize payloads
+
+The exporter preserves the selected values so they remain useful test cases. JSON and language-literal escaping makes values representable in those formats; it does not make them safe for every destination. CSV quoting protects the CSV structure, but the exporter does not prepend a formula-neutralizing prefix. A formula case is meant to remain a formula case when testing a vulnerable export path.
+
+[OWASP's CSV injection guidance](https://owasp.org/www-community/attacks/CSV_Injection) explains why spreadsheet interpretation and save/reopen behavior matter. Evaluate mitigations in the specific spreadsheet workflow being tested. Do not infer that a quoted cell is inert, or that one escaping strategy protects every spreadsheet version and subsequent export. The library's active flag is a test-selection aid, not a general safety classification for arbitrary applications.
 
 ## Finding reference
 
@@ -68,7 +96,7 @@ A value that is stored and shown back exactly as sent has passed. A refusal with
 | Shown back changed (trimmed, cut, decoded) | check | [OWASP WSTG](https://owasp.org/www-project-web-security-testing-guide/) | Data is lost or altered on the way | Store exactly what was sent, validate explicitly |
 | Server error | fail | [OWASP WSTG](https://owasp.org/www-project-web-security-testing-guide/) | An unhandled case, often a query or encoding bug | Use parameterised queries and UTF-8 throughout |
 | Value run as code or markup | fail | [OWASP WSTG](https://owasp.org/www-project-web-security-testing-guide/) | Injection | Encode output for its context; never build code from input |
-| Formula runs when an export is opened | fail | [OWASP: CSV Injection](https://owasp.org/www-community/attacks/CSV_Injection) | Spreadsheet formula injection | Prefix cells starting with = + - @ with an apostrophe on export |
+| Formula runs when an export is opened | fail | [OWASP: CSV Injection](https://owasp.org/www-community/attacks/CSV_Injection) | Spreadsheet formula injection | Use a tested spreadsheet-specific export policy; quoting or an apostrophe alone is not a universal guarantee |
 
 ## Guide
 
@@ -86,9 +114,38 @@ Choose JSON, JavaScript or Python, Copy all or Download, and use the list as tes
 
 Include active payloads, tick Spreadsheet formulas, put the strings into records, export to CSV and open the file in a spreadsheet. Any cell that calculates is a finding.
 
+## Worked example
+
+### A zero-width character in an identifier
+
+Search for `U+200B` and inspect the matching zero-width-space example. Copy the value into a test account field and separately record its escaped representation. If your application's policy allows the character, assert exact storage and retrieval. If the policy forbids it, assert a clear error identifying the invalid input rather than an unrelated server failure.
+
+Next, compare the submitted value with what appears in an export. A visually identical username is not evidence of equality. Use [Hidden Character Checker](https://tamperbox.dev/hidden-characters) to inspect the actual code points when the two values appear the same but authentication or lookup differs. Record whether the discrepancy first occurs on input, persistence, display or export; those locations imply different repairs.
+
+### An apostrophe in a real name
+
+Select the names group and choose an apostrophe-containing fixture. Before running it, decide whether that name is valid for the field. Submit it through the normal form and read it back from both the interface and a structured response or export. A database error points to a different problem from a field-level rejection, and an encoded display such as a literal entity points to a different problem again.
+
+Keep the fixture as ordinary data in your test runner. Parameterize the input rather than interpolating it into generated code or a query. The test should exercise how the application handles a value, not accidentally introduce an error in the test itself. Store the expected value in an unambiguous literal format and compare the decoded value after export.
+
 ## Use it from an agent
 
 The `naughty_strings` operation takes a search as its input text and returns the matching strings with their reasons. Set `category` to limit the group and `includeActive` to include active payloads. See the [MCP documentation](https://docs.tamperbox.dev/mcp/).
+
+
+## Building a useful regression set
+
+### Minimize a failing case
+
+When a fixture fails, preserve the original and create a smaller case that retains the failure. For example, remove surrounding text while keeping the troublesome combining mark, quote or line separator. Repeat the same action and compare the same observable result. A smaller case makes it easier to determine whether the problem is encoding, length, parsing or business validation.
+
+Do not replace the original corpus entry with the minimized value in your report without explaining the change. They answer different questions: one reproduces the observed failure and the other isolates a suspected cause. Once repaired, test both. Also include a nearby ordinary value so the fix does not simply reject the entire field or every non-ASCII character.
+
+### Separate outcomes from labels
+
+The finding table describes outcomes you observe in the receiving system. The list page does not send requests, execute its strings or automatically discover those outcomes. A count of exported cases is not a count of successful tests. Your runner must submit each case, capture a result and evaluate the expected behavior.
+
+Useful evidence includes fixture identifier, exact value, selected export format, application version, operation, response and read-back value. Store long or invisible values in a fixture attachment rather than relying on a screenshot. If the test fails only in an export or spreadsheet, record the import settings and subsequent save/reopen steps. Those details often explain why the same text appears harmless in a browser but behaves differently later.
 
 ## References
 
