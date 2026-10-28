@@ -10,12 +10,13 @@
     "test": "node --test test/*.test.mjs",
     "dev": "ASTRO_TELEMETRY_DISABLED=1 astro dev",
     "dev:worker": "npm run build && wrangler dev --local --port 8787",
-    "build": "ASTRO_TELEMETRY_DISABLED=1 astro build && npm run check:links",
+    "build": "ASTRO_TELEMETRY_DISABLED=1 astro build && npm run check:links && node scripts/build-indexnow.mjs",
     "check:links": "node scripts/check-links.mjs",
     "check": "ASTRO_TELEMETRY_DISABLED=1 astro check",
     "preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview",
-    "deploy:dry-run": "npm run build && wrangler deploy --env production --dry-run",
-    "deploy:production": "npm run build && wrangler deploy --env production"
+    "deploy:dry-run": "node scripts/deploy-production.mjs deploy --dry-run",
+    "deploy:production": "node scripts/deploy-production.mjs deploy",
+    "indexnow:retry": "node scripts/deploy-production.mjs retry"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.4",
