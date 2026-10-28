@@ -63,6 +63,11 @@ For a manual deployment after authenticating Wrangler:
 npm run deploy:production
 ```
 
+The production command also processes IndexNow after cutover, using content
+fingerprints and a saved pending queue. Retry with `npm run indexnow:retry` or
+workflow dispatch with `notify_only=true`. See [IndexNow operations](INDEXNOW.md)
+for first-deploy behavior and queue persistence.
+
 For GitHub Actions, add these repository secrets:
 
 - `CLOUDFLARE_API_TOKEN`: a scoped token that can edit Workers Scripts and Workers Routes.
