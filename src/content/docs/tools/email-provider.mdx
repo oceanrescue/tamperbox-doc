@@ -1,7 +1,7 @@
 ---
 title: Email Provider Lookup
 description: How Tamperbox attributes public MX hostnames to mailbox services and gateways, handles mixed routes, and preserves uncertainty about the downstream mailbox host.
-updated: 2026-10-24
+updated: 2026-10-29
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, provider-signature reference and investigation guide for the Tamperbox Email Provider Lookup, with explicit gateway and uncertainty boundaries.
 prerequisites:
@@ -44,7 +44,7 @@ Entering `harbor-supply.example` uses a fixed local mail-routing fixture instead
 
 ### Lookup timing and cancellation
 
-The request runs 700 milliseconds after typing stops, immediately on Enter, on field change, after a shared handoff, or through Refresh lookup. Clearing or editing cancels the active request and invalidates its generation. A late response cannot restore stale routes, cards or Copy result.
+The request runs 700 milliseconds after typing stops, immediately on Enter, on field change, after a shared handoff, or through Refresh lookup. Clearing or editing cancels the active request and invalidates its generation. A late response cannot restore stale routes, cards or findings.
 
 ## Reading the result
 
@@ -52,7 +52,7 @@ The request runs 700 milliseconds after typing stops, immediately on Enter, on f
 
 The verdict answers the provider question: likely mailbox service, gateway, mixed route, unknown route, no provider or inconclusive. Chips show mail-routing state and each recognised service. Findings explain the route classification and the provider inference separately, worst first, so valid MX publication cannot hide an uncertain attribution.
 
-The privacy pair states what is local and what leaves the page. Copy result is available only for a completed result. Empty, invalid, loading and failed states hide stale evidence and copying.
+The privacy pair states what is local and what leaves the page. The verdict leads directly into Findings. Empty, invalid, loading and failed states hide the old evidence, so a previous lookup cannot be mistaken for the current one.
 
 ### Inbound routes and DNS evidence
 

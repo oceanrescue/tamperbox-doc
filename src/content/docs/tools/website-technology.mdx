@@ -1,7 +1,7 @@
 ---
 title: Website Technology Detector
 description: How Tamperbox identifies web technologies from bounded HTML and response-header signatures without executing the page.
-updated: 2026-10-26
+updated: 2026-10-29
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox Website Technology Detector.
 prerequisites:
@@ -42,7 +42,7 @@ The opening input uses the same parser and processing path as a replacement. The
 
 The verdict states what the available evidence supports and uses pass, check, fail or informational status consistently. Pass means the bounded rule succeeded. Check means a human should confirm context. Fail means a concrete operational rule was violated. Info describes a limitation, absence or neutral fact and must not be promoted into success or failure by an automated reader.
 
-Two privacy lines distinguish browser-only work from live lookup work. The Checked line names the cleaned input and source mode. Copy result is hidden while work is pending, after an error and when input is empty, preventing a stale report from being exported as current.
+Two privacy lines distinguish browser-only work from live lookup work. The Checked line names the cleaned input and source mode. Pending, error and empty states clear the previous evidence, so the report always belongs to the current completed lookup. The verdict leads directly into the findings; there is no separate whole-report export.
 
 ### Findings and evidence
 
@@ -77,7 +77,7 @@ No confidence percentage is invented. When sources disagree, the disagreement is
 
 The renderer calculates all findings from the current observation before updating the verdict, chips, evidence and landing cards. Status priority is fail, check, info, pass. Stable secondary ordering keeps repeated runs readable without changing severity.
 
-The Markdown mirror and Copy result output preserve input, summary, findings and important evidence in text form. They do not embed secrets, browser state or the expanded educational cards. Agents should cite the observation time and limitation alongside any exported conclusion.
+The Markdown mirror documents the tool’s method, findings and limitations in text form. It does not contain your entered input, live lookup results, browser state or expanded educational cards. Select the evidence you need from the current result when preparing a report. Agents should cite the observation time and limitation alongside any exported conclusion.
 
 ## Standards and conformance
 

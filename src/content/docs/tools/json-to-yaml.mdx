@@ -1,7 +1,7 @@
 ---
 title: JSON to YAML Converter
 description: How Tamperbox converts JSON to YAML live in the browser, which hostile or ambiguous inputs it refuses, and how to verify semantic round trips.
-updated: 2026-10-24
+updated: 2026-10-29
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Convert JSON fixtures to YAML locally, reject duplicate keys and unsafe numbers, and verify the parsed data rather than comparing formatting.
 prerequisites:
@@ -55,7 +55,7 @@ Take it further sends the current YAML output to the YAML to JSON page. The tran
 
 ### Verdict and checks
 
-A successful verdict names both formats and states that the represented data is unchanged. The checks name valid JSON and JSON-model preservation; the validity detail and a chip give the bounded node count. A failed verdict clears the output before showing the reason, so Copy result cannot accidentally return the previous valid conversion. Heal it then offers the newest source that converted successfully.
+A successful verdict names both formats and states that the represented data is unchanged. The checks name valid JSON and JSON-model preservation; the validity detail and a chip give the bounded node count. A failed verdict clears the output before showing the reason, so the output panel cannot accidentally export the previous valid conversion. Heal it then offers the newest source that converted successfully.
 
 ### Findings
 
