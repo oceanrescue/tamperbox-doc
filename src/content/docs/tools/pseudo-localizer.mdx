@@ -1,7 +1,7 @@
 ---
 title: Pseudo-Localizer
 description: Expose clipping with expanded test strings. Understand supported inputs, evidence, limits, deliberate failure cases and independent verification.
-updated: 2026-10-26
+updated: 2026-10-29
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Expose clipping with expanded test strings using the local browser page; preserve its documented limitations and verify the result independently.
 prerequisites:
@@ -57,7 +57,7 @@ Findings are followed by the complete tool-specific evidence. Multiple passing f
 
 ### Output, copying and downloads
 
-The output panel contains the generated artifact or a structured report. Its preview is limited to 50,000 characters. Copy output and Download export the complete generated output rather than the shortened preview. The general Copy result action produces a labeled report containing the visible result context. Those are different artifacts: choose the code or data export when feeding another tool, and the report when explaining a finding to a reviewer.
+The output panel contains the generated artifact or a structured report. Its preview is limited to 50,000 characters. Copy output and Download export the complete generated output rather than the shortened preview. Use the code or data export when feeding another tool. When explaining a finding to a reviewer, include the relevant evidence, the chosen settings and the result’s limitations alongside that exported artifact.
 
 Downloads are created locally from an in-memory Blob. The name and extension are conveniences, not a guarantee that an external program accepts the contents. Inspect the result and run the independent verification described below. Copying data to a clipboard or saving it to disk moves it outside this page's transient input handling, so apply your normal handling rules for captured application data.
 

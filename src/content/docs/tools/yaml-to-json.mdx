@@ -1,7 +1,7 @@
 ---
 title: YAML to JSON Converter
 description: How Tamperbox converts JSON-compatible YAML to JSON live in the browser, exposes presentation loss, and refuses ambiguous aliases, keys and numbers.
-updated: 2026-10-24
+updated: 2026-10-29
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Convert YAML fixtures to JSON locally, disclose presentation loss, reject ambiguous constructs, and verify the resolved data rather than the source spelling.
 prerequisites:
@@ -31,7 +31,7 @@ A successful conversion is evidence about the resolved graph. It is not evidence
 
 Any document accepted by the YAML 1.2 JSON-compatible schema can be the root: mapping, sequence, string, finite number, boolean or null. The input event clears old JSON immediately and starts a 120 millisecond debounce. Conversion then runs in a worker. Each request and response carries a revision. Responses from older requests are ignored after the next request is dispatched; the debounce interval has the timing limitation described below.
 
-Paste replaces the source when performed in the field or on the surrounding page. YAML punctuation and whitespace are not cleaned. Clear moves to a neutral empty state and removes output, Copy result, findings tied to the old source and reverse-conversion actions.
+Paste replaces the source when performed in the field or on the surrounding page. YAML punctuation and whitespace are not cleaned. Clear moves to a neutral empty state and removes output, findings tied to the old source and reverse-conversion actions.
 
 ### Files
 
@@ -74,7 +74,7 @@ Passes establish syntax and JSON-model compatibility. The presentation note name
 
 ### JSON output
 
-The output is pretty-printed with two spaces and a final newline. JavaScript serialization writes negative zero as `0`, so a consumer that distinguishes `-0` needs an explicit representation outside this conversion. Mapping keys become JSON object member names, sequences become arrays, and compatible scalars become their JSON equivalents. The output window wraps long lines so it does not widen the page. Copy result is available only while the current source has a completed result.
+The output is pretty-printed with two spaces and a final newline. JavaScript serialization writes negative zero as `0`, so a consumer that distinguishes `-0` needs an explicit representation outside this conversion. Mapping keys become JSON object member names, sequences become arrays, and compatible scalars become their JSON equivalents. The output window wraps long lines so it does not widen the page. Use the output panel’s copy or download controls only after the current source has converted successfully.
 
 ### History and next step
 

@@ -1,7 +1,7 @@
 ---
 title: Mixed Content & Cookie Checker
 description: How the Mixed Content & Cookie Checker fetches or reads a page, sorts every insecure address by what browsers do with it, judges every Set-Cookie header, and how to fix and verify each finding.
-updated: 2026-10-24
+updated: 2026-10-29
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox Mixed Content & Cookie Checker, which fetches a public page from the Tamperbox server (or reads pasted HTML and headers in the browser), lists every http:// subresource and form on an HTTPS page as blocked, upgraded or warned, and checks every Set-Cookie header for Secure, HttpOnly, SameSite, Domain, lifetime, size and prefix rules.
 prerequisites:
@@ -53,7 +53,7 @@ The shared input cleaner runs on paste, drop and Enter. This is a page tool, so 
 
 ### Verdict and chips
 
-The verdict leads with the count of insecure addresses and what browsers do with them, or "No mixed content on" the host, or "Plain HTTP page." The second line counts the cookies that need attention and how many browsers reject. Copy result copies the verdict and evidence as text.
+The verdict leads with the count of insecure addresses and what browsers do with them, or "No mixed content on" the host, or "Plain HTTP page." The second line counts the cookies that need attention and how many browsers reject. The findings beneath the checks explain each observation and show its evidence.
 
 ### Findings
 

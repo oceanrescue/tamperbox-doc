@@ -1,7 +1,7 @@
 ---
 title: DANE & TLSA Checker
 description: How the checker finds the servers behind a domain, reads their TLSA records through a validating resolver, compares each record with the certificate chain the server presents, every rule it applies, what each finding means for mail in transit, and how to fix and verify each one.
-updated: 2026-10-21
+updated: 2026-10-29
 productVersion: "tamperbox.dev, October 2026"
 agentSummary: Method, finding reference and repair guide for the Tamperbox DANE & TLSA Checker, which resolves a domain's MX hosts, reads the TLSA records at _25._tcp.<host> with the resolver's DNSSEC AD flag, connects to each server (STARTTLS on port 25) and reports which record matches the presented leaf or issuing certificate.
 prerequisites:
@@ -61,7 +61,7 @@ Typing is never rewritten, and Break it cases are loaded exactly as written.
 
 ### Verdict and chips
 
-The verdict names the outcome across all servers and the first server in trouble; one chip per server carries its state. Copy result copies the verdict, findings and server cards as text.
+The verdict names the outcome across all servers and the first server in trouble; one chip per server carries its state. The findings and server cards beneath the checks retain the evidence for each outcome.
 
 ### Findings
 
